@@ -348,4 +348,23 @@ class LocationManagementTest extends TestCase
         $this->assertNull($location->contact_number);
         $response->assertRedirect(route('locations.show', $location));
     }
+
+    public function test_wrapped_longitude_from_multi_world_map_panning_is_automatically_normalized(): void
+    {
+        $response = $this->actingAs($this->admin)->post(route('locations.store'), [
+            'code' => 'ANK',
+            'official_name' => 'ANAKCIANO',
+            'type' => Location::TYPE_FARM,
+            'latitude' => 8.4161577,
+            'longitude' => 1204.8222579, // Multi-world wrapped longitude from Leaflet (124.8222579 + 3 * 360)
+            'address' => 'Sayre Hwy, Manolo Fortich, Bukidnon',
+            'status' => Location::STATUS_ACTIVE,
+        ]);
+
+        $response->assertSessionHasNoErrors();
+        $location = Location::where('code', 'ANK')->first();
+        $this->assertNotNull($location);
+        $this->assertEquals(8.4161577, $location->latitude);
+        $this->assertEquals(124.8222579, $location->longitude);
+    }
 }

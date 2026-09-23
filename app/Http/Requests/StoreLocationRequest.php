@@ -14,6 +14,25 @@ class StoreLocationRequest extends FormRequest
     }
 
     /**
+     * Prepare the data for validation.
+     */
+    protected function prepareForValidation(): void
+    {
+        if ($this->has('longitude') && is_numeric($this->longitude)) {
+            $lng = (float) $this->longitude;
+            // Wrap longitude to [-180, 180] if it was offset by map world panning (e.g. 1204.8222579 -> 124.8222579)
+            if ($lng > 180.0 || $lng < -180.0) {
+                $lng = fmod($lng + 180.0, 360.0);
+                if ($lng < 0) {
+                    $lng += 360.0;
+                }
+                $lng -= 180.0;
+                $this->merge(['longitude' => round($lng, 7)]);
+            }
+        }
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function rules(): array

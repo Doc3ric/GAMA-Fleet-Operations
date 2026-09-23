@@ -565,7 +565,8 @@
                         this.map = L.map('picker-map', {
                             center: [latNum, lngNum],
                             zoom: 14,
-                            layers: [googleHybrid] // Default to Google Satellite / Hybrid
+                            layers: [googleHybrid], // Default to Google Satellite / Hybrid
+                            worldCopyJump: true
                         });
 
                         // Layer Switcher
@@ -582,13 +583,13 @@
                         }).addTo(this.map);
 
                         this.marker.on('dragend', (e) => {
-                            const pos = e.target.getLatLng();
+                            const pos = e.target.getLatLng().wrap();
                             this.lat = pos.lat.toFixed(7);
                             this.lng = pos.lng.toFixed(7);
                         });
 
                         this.map.on('click', (e) => {
-                            const pos = e.latlng;
+                            const pos = e.latlng.wrap();
                             this.lat = pos.lat.toFixed(7);
                             this.lng = pos.lng.toFixed(7);
                             this.marker.setLatLng(pos);
@@ -597,8 +598,12 @@
 
                     updateMarkerFromInput(zoom = null) {
                         const latNum = parseFloat(this.lat);
-                        const lngNum = parseFloat(this.lng);
+                        let lngNum = parseFloat(this.lng);
                         if (!isNaN(latNum) && !isNaN(lngNum) && this.marker && this.map) {
+                            if (lngNum > 180 || lngNum < -180) {
+                                lngNum = ((lngNum + 180) % 360 + 360) % 360 - 180;
+                                this.lng = lngNum.toFixed(7);
+                            }
                             const newPos = [latNum, lngNum];
                             this.marker.setLatLng(newPos);
                             if (zoom) {
