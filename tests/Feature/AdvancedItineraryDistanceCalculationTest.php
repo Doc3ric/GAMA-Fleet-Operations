@@ -77,12 +77,12 @@ class AdvancedItineraryDistanceCalculationTest extends TestCase
         $response->assertForbidden();
     }
 
-    public function test_distance_calculation_endpoint_returns_road_distance_for_valid_locations(): void
+    public function test_distance_calculation_endpoint_returns_road_distance_and_duration_for_valid_locations(): void
     {
         Http::fake([
             'router.project-osrm.org/*' => Http::sequence()
-                ->push(['code' => 'Ok', 'routes' => [['distance' => 15400.0]]], 200) // 15.4 km
-                ->push(['code' => 'Ok', 'routes' => [['distance' => 8700.0]]], 200),  // 8.7 km
+                ->push(['code' => 'Ok', 'routes' => [['distance' => 15400.0, 'duration' => 1800.0]]], 200) // 15.4 km, 30 min
+                ->push(['code' => 'Ok', 'routes' => [['distance' => 8700.0, 'duration' => 1200.0]]], 200),  // 8.7 km, 20 min
         ]);
 
         $response = $this->actingAs($this->admin)->postJson(route('locations.calculateDistance'), [
@@ -97,6 +97,12 @@ class AdvancedItineraryDistanceCalculationTest extends TestCase
                 'origin_to_start' => 15.4,
                 'start_to_dest' => 8.7,
                 'total' => 24.1,
+                'duration_origin_to_start_minutes' => 30,
+                'duration_start_to_dest_minutes' => 20,
+                'total_duration_minutes' => 50,
+                'formatted_origin_to_start_duration' => '30m',
+                'formatted_start_to_dest_duration' => '20m',
+                'formatted_total_duration' => '50m',
                 'source' => 'osrm',
                 'origin' => ['name' => 'Gama Main Office'],
                 'waypoint' => ['name' => 'Anakciamo Depot'],

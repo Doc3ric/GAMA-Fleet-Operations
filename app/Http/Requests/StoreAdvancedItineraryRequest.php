@@ -32,6 +32,9 @@ class StoreAdvancedItineraryRequest extends FormRequest
             'legs.*.distance_origin_to_start' => ['nullable', 'numeric', 'min:0'],
             'legs.*.distance_start_to_dest' => ['nullable', 'numeric', 'min:0'],
             'legs.*.total_distance' => ['nullable', 'numeric', 'min:0'],
+            'legs.*.duration_origin_to_start_minutes' => ['nullable', 'integer', 'min:0'],
+            'legs.*.duration_start_to_dest_minutes' => ['nullable', 'integer', 'min:0'],
+            'legs.*.total_duration_minutes' => ['nullable', 'integer', 'min:0'],
             'legs.*.routing_source' => ['nullable', 'string', 'max:30'],
             'legs.*.purpose' => ['nullable', 'string', 'max:255'],
         ];

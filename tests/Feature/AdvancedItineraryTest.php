@@ -134,6 +134,7 @@ class AdvancedItineraryTest extends TestCase
         $this->assertEquals($locB->id, $leg1->destination_location_id);
         $this->assertEquals(15.50, $leg1->total_distance);
         $this->assertTrue($leg1->isManual());
+        $this->assertNull($leg1->total_duration_minutes);
 
         $leg2 = $itinerary->legs()->where('sort_order', 1)->first();
         $this->assertNotNull($leg2);
@@ -143,6 +144,11 @@ class AdvancedItineraryTest extends TestCase
         $this->assertEquals(12.50, $leg2->distance_start_to_dest);
         $this->assertEquals(25.00, $leg2->total_distance);
         $this->assertTrue($leg2->isAutomatic());
+        $this->assertEquals(10, $leg2->duration_origin_to_start_minutes);
+        $this->assertEquals(10, $leg2->duration_start_to_dest_minutes);
+        $this->assertEquals(20, $leg2->total_duration_minutes);
+
+        $this->assertEquals(20, $itinerary->total_duration_minutes);
     }
 
     public function test_total_distance_is_calculated_correctly(): void
@@ -256,7 +262,13 @@ class AdvancedItineraryTest extends TestCase
         $this->assertEquals(20.0, $leg->distance_origin_to_start);
         $this->assertEquals(20.0, $leg->distance_start_to_dest);
         $this->assertEquals(40.0, $leg->total_distance);
+        $this->assertEquals(20, $leg->duration_origin_to_start_minutes);
+        $this->assertEquals(20, $leg->duration_start_to_dest_minutes);
+        $this->assertEquals(40, $leg->total_duration_minutes);
         $this->assertEquals('osrm', $leg->routing_source);
+
+        $itinerary->refresh();
+        $this->assertEquals(40, $itinerary->total_duration_minutes);
     }
 
     public function test_admin_can_export_pdf(): void
@@ -306,5 +318,120 @@ class AdvancedItineraryTest extends TestCase
         ]);
 
         $response->assertSessionHasErrors(['itinerary_date', 'status', 'legs']);
+    }
+
+    public function test_server_side_routing_is_authoritative_over_frontend_durations(): void
+    {
+        $vehicle = Vehicle::factory()->create();
+        $locA = Location::factory()->create(['latitude' => 14.5995, 'longitude' => 120.9842]);
+        $locB = Location::factory()->create(['latitude' => 14.6500, 'longitude' => 120.9900]);
+
+        Http::fake([
+            'router.project-osrm.org/*' => Http::response([
+                'code' => 'Ok',
+                'routes' => [
+                    ['distance' => 10000.0, 'duration' => 600.0], // 10 km, 10 min
+                ],
+            ], 200),
+        ]);
+
+        $payload = [
+            'vehicle_id' => $vehicle->id,
+            'itinerary_date' => '2026-09-25',
+            'title' => 'Authoritative Routing Test',
+            'status' => AdvancedItinerary::STATUS_DRAFT,
+            'legs' => [
+                [
+                    'sort_order' => 0,
+                    'origin_location_id' => $locA->id,
+                    'starting_point_location_id' => $locA->id,
+                    'destination_location_id' => $locB->id,
+                    'distance_origin_to_start' => 999.0, // Frontend values that should be overridden by server
+                    'distance_start_to_dest' => 999.0,
+                    'total_distance' => 1998.0,
+                    'duration_origin_to_start_minutes' => 999,
+                    'duration_start_to_dest_minutes' => 999,
+                    'total_duration_minutes' => 1998,
+                    'routing_source' => 'osrm',
+                ],
+            ],
+        ];
+
+        $response = $this->actingAs($this->admin)->post(route('advanced-itineraries.store'), $payload);
+        $itinerary = AdvancedItinerary::latest('id')->first();
+        $this->assertNotNull($itinerary);
+        $response->assertRedirect(route('advanced-itineraries.show', $itinerary));
+
+        $leg = $itinerary->legs()->first();
+        $this->assertNotNull($leg);
+        $this->assertEquals(10.0, $leg->distance_origin_to_start);
+        $this->assertEquals(10.0, $leg->distance_start_to_dest);
+        $this->assertEquals(20.0, $leg->total_distance);
+        $this->assertEquals(10, $leg->duration_origin_to_start_minutes);
+        $this->assertEquals(10, $leg->duration_start_to_dest_minutes);
+        $this->assertEquals(20, $leg->total_duration_minutes);
+        $this->assertEquals(20, $itinerary->total_duration_minutes);
+    }
+
+    public function test_manual_distance_does_not_fabricate_eta(): void
+    {
+        $vehicle = Vehicle::factory()->create();
+        $locA = Location::factory()->create(['latitude' => 14.5995, 'longitude' => 120.9842]);
+        $locB = Location::factory()->create(['latitude' => 14.6500, 'longitude' => 120.9900]);
+
+        $payload = [
+            'vehicle_id' => $vehicle->id,
+            'itinerary_date' => '2026-09-25',
+            'title' => 'Manual Distance No ETA Test',
+            'status' => AdvancedItinerary::STATUS_DRAFT,
+            'legs' => [
+                [
+                    'sort_order' => 0,
+                    'origin_location_id' => $locA->id,
+                    'starting_point_location_id' => $locA->id,
+                    'destination_location_id' => $locB->id,
+                    'distance_origin_to_start' => 5.0,
+                    'distance_start_to_dest' => 10.0,
+                    'total_distance' => 15.0,
+                    'duration_origin_to_start_minutes' => 30, // Attempted fabricated values
+                    'duration_start_to_dest_minutes' => 45,
+                    'total_duration_minutes' => 75,
+                    'routing_source' => 'manual',
+                ],
+            ],
+        ];
+
+        $response = $this->actingAs($this->admin)->post(route('advanced-itineraries.store'), $payload);
+        $itinerary = AdvancedItinerary::latest('id')->first();
+        $this->assertNotNull($itinerary);
+        $response->assertRedirect(route('advanced-itineraries.show', $itinerary));
+
+        $leg = $itinerary->legs()->first();
+        $this->assertNotNull($leg);
+        $this->assertTrue($leg->isManual());
+        $this->assertEquals(15.0, $leg->total_distance);
+        $this->assertNull($leg->duration_origin_to_start_minutes);
+        $this->assertNull($leg->duration_start_to_dest_minutes);
+        $this->assertNull($leg->total_duration_minutes);
+        $this->assertNull($itinerary->total_duration_minutes);
+    }
+
+    public function test_create_view_passes_active_locations_with_aliases_for_combobox(): void
+    {
+        $activeLocation = Location::factory()->create(['status' => Location::STATUS_ACTIVE, 'official_name' => 'Active Hub']);
+        $activeLocation->aliases()->create(['alias' => 'Hub Alias One']);
+
+        $inactiveLocation = Location::factory()->create(['status' => Location::STATUS_INACTIVE, 'official_name' => 'Inactive Silo']);
+
+        $response = $this->actingAs($this->admin)->get(route('advanced-itineraries.create'));
+        $response->assertOk();
+
+        $response->assertViewHas('locations', function ($locations) use ($activeLocation, $inactiveLocation) {
+            $containsActive = $locations->contains('id', $activeLocation->id);
+            $excludesInactive = ! $locations->contains('id', $inactiveLocation->id);
+            $aliasesLoaded = $locations->firstWhere('id', $activeLocation->id)->relationLoaded('aliases');
+
+            return $containsActive && $excludesInactive && $aliasesLoaded;
+        });
     }
 }

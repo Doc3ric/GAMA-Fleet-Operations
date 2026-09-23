@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\RoutingService;
 use Database\Factories\AdvancedItineraryLegFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -22,6 +23,9 @@ class AdvancedItineraryLeg extends Model
         'distance_origin_to_start',
         'distance_start_to_dest',
         'total_distance',
+        'duration_origin_to_start_minutes',
+        'duration_start_to_dest_minutes',
+        'total_duration_minutes',
         'routing_source',
         'purpose',
     ];
@@ -31,6 +35,9 @@ class AdvancedItineraryLeg extends Model
         'distance_origin_to_start' => 'float',
         'distance_start_to_dest' => 'float',
         'total_distance' => 'float',
+        'duration_origin_to_start_minutes' => 'integer',
+        'duration_start_to_dest_minutes' => 'integer',
+        'total_duration_minutes' => 'integer',
         'sort_order' => 'integer',
     ];
 
@@ -62,5 +69,20 @@ class AdvancedItineraryLeg extends Model
     public function isManual(): bool
     {
         return $this->routing_source === 'manual';
+    }
+
+    public function getFormattedTotalDurationAttribute(): string
+    {
+        return RoutingService::formatDuration($this->total_duration_minutes);
+    }
+
+    public function getFormattedOriginToStartDurationAttribute(): string
+    {
+        return RoutingService::formatDuration($this->duration_origin_to_start_minutes);
+    }
+
+    public function getFormattedStartToDestDurationAttribute(): string
+    {
+        return RoutingService::formatDuration($this->duration_start_to_dest_minutes);
     }
 }

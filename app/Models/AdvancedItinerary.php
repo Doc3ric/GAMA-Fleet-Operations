@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\RoutingService;
 use Database\Factories\AdvancedItineraryFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -30,6 +31,7 @@ class AdvancedItinerary extends Model
         'title',
         'notes',
         'status',
+        'total_duration_minutes',
         'created_by',
         'updated_by',
     ];
@@ -37,6 +39,7 @@ class AdvancedItinerary extends Model
     /** @var array<string, string> */
     protected $casts = [
         'itinerary_date' => 'date',
+        'total_duration_minutes' => 'integer',
     ];
 
     public function legs(): HasMany
@@ -76,6 +79,28 @@ class AdvancedItinerary extends Model
         }
 
         return (float) ($this->legs()->sum('total_distance') ?? 0.0);
+    }
+
+    public function getTotalDurationMinutesAttribute(): ?int
+    {
+        if (isset($this->attributes['total_duration_minutes']) && $this->attributes['total_duration_minutes'] !== null) {
+            return (int) $this->attributes['total_duration_minutes'];
+        }
+
+        if ($this->relationLoaded('legs')) {
+            $sum = $this->legs->sum('total_duration_minutes');
+
+            return $sum > 0 ? (int) $sum : null;
+        }
+
+        $sum = $this->legs()->sum('total_duration_minutes');
+
+        return $sum > 0 ? (int) $sum : null;
+    }
+
+    public function getFormattedTotalDurationAttribute(): string
+    {
+        return RoutingService::formatDuration($this->total_duration_minutes);
     }
 
     /**

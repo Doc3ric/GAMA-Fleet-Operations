@@ -162,8 +162,14 @@
                     <span style="color: #94a3b8;">Unassigned</span>
                 @endif
             </td>
+            <td class="meta-label">Total Est. Driving Time:</td>
+            <td class="meta-value font-bold" style="color: #1e3a8a;">{{ $advancedItinerary->formatted_total_duration }}</td>
+        </tr>
+        <tr>
             <td class="meta-label">Created By:</td>
             <td class="meta-value">{{ $advancedItinerary->creator?->name ?? 'System' }}</td>
+            <td class="meta-label">Total Road Distance:</td>
+            <td class="meta-value font-bold" style="color: #1e3a8a;">{{ number_format($advancedItinerary->total_distance, 2) }} km</td>
         </tr>
         @if($advancedItinerary->title)
         <tr>
@@ -211,14 +217,23 @@
                         @endif
                     </td>
                     <td class="text-right">
-                        {{ $leg->distance_origin_to_start !== null ? number_format($leg->distance_origin_to_start, 2).' km' : '-' }}
+                        <div>{{ $leg->distance_origin_to_start !== null ? number_format($leg->distance_origin_to_start, 2).' km' : '-' }}</div>
+                        @if($leg->duration_origin_to_start_minutes)
+                            <div style="color: #64748b; font-size: 7.5px;">{{ $leg->formatted_origin_to_start_duration }}</div>
+                        @endif
                     </td>
                     <td class="text-right">
-                        {{ $leg->distance_start_to_dest !== null ? number_format($leg->distance_start_to_dest, 2).' km' : '-' }}
+                        <div>{{ $leg->distance_start_to_dest !== null ? number_format($leg->distance_start_to_dest, 2).' km' : '-' }}</div>
+                        @if($leg->duration_start_to_dest_minutes)
+                            <div style="color: #64748b; font-size: 7.5px;">{{ $leg->formatted_start_to_dest_duration }}</div>
+                        @endif
                     </td>
                     <td class="text-right font-bold">
-                        {{ $leg->total_distance !== null ? number_format($leg->total_distance, 2).' km' : '-' }}
-                        <div style="font-size: 7px; color: #64748b;">({{ strtoupper($leg->routing_source ?? 'N/A') }})</div>
+                        <div>{{ $leg->total_distance !== null ? number_format($leg->total_distance, 2).' km' : '-' }}</div>
+                        @if($leg->total_duration_minutes)
+                            <div style="color: #1e3a8a; font-size: 7.5px;">{{ $leg->formatted_total_duration }}</div>
+                        @endif
+                        <div style="font-size: 7px; color: #64748b; font-weight: normal;">({{ strtoupper($leg->routing_source ?? 'N/A') }})</div>
                     </td>
                 </tr>
             @empty
@@ -232,7 +247,17 @@
     </table>
 
     <div class="summary-box">
-        <span class="summary-total">Total Calculated Itinerary Distance: {{ number_format($advancedItinerary->total_distance, 2) }} km</span>
+        <table style="width: 100%;">
+            <tr>
+                <td style="text-align: left; font-size: 8.5px; color: #475569;">
+                    Total Legs: <strong>{{ $advancedItinerary->legs->count() }}</strong>
+                </td>
+                <td style="text-align: right;">
+                    <span class="summary-total">Total Road Distance: {{ number_format($advancedItinerary->total_distance, 2) }} km</span>
+                    <span class="summary-total" style="display: inline-block; margin-left: 20px;">Total Est. Driving Time: {{ $advancedItinerary->formatted_total_duration }}</span>
+                </td>
+            </tr>
+        </table>
     </div>
 </body>
 </html>

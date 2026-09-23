@@ -82,7 +82,7 @@
         {{-- Itinerary Overview Card --}}
         <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
             <h2 class="text-sm font-bold text-slate-800 uppercase tracking-wider mb-4">Overview</h2>
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 text-xs">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 text-xs">
                 <div>
                     <span class="block text-slate-400 font-semibold mb-1">Itinerary Date</span>
                     <span class="font-bold text-slate-900 text-sm">{{ $advancedItinerary->itinerary_date->format('F d, Y') }}</span>
@@ -99,6 +99,10 @@
                 <div>
                     <span class="block text-slate-400 font-semibold mb-1">Total Distance</span>
                     <span class="font-mono font-bold text-blue-600 text-base">{{ number_format($advancedItinerary->total_distance, 2) }} km</span>
+                </div>
+                <div>
+                    <span class="block text-slate-400 font-semibold mb-1">Est. Driving Time</span>
+                    <span class="font-mono font-bold text-slate-900 text-base">{{ $advancedItinerary->formatted_total_duration }}</span>
                 </div>
                 <div>
                     <span class="block text-slate-400 font-semibold mb-1">Created / Updated By</span>
@@ -166,13 +170,22 @@
                                     @endif
                                 </td>
                                 <td class="px-4 py-3 text-right font-mono">
-                                    {{ $leg->distance_origin_to_start !== null ? number_format($leg->distance_origin_to_start, 2).' km' : '-' }}
+                                    <div>{{ $leg->distance_origin_to_start !== null ? number_format($leg->distance_origin_to_start, 2).' km' : '-' }}</div>
+                                    @if($leg->duration_origin_to_start_minutes)
+                                        <div class="text-[10px] text-slate-500 font-sans">⏱ {{ $leg->formatted_origin_to_start_duration }}</div>
+                                    @endif
                                 </td>
                                 <td class="px-4 py-3 text-right font-mono">
-                                    {{ $leg->distance_start_to_dest !== null ? number_format($leg->distance_start_to_dest, 2).' km' : '-' }}
+                                    <div>{{ $leg->distance_start_to_dest !== null ? number_format($leg->distance_start_to_dest, 2).' km' : '-' }}</div>
+                                    @if($leg->duration_start_to_dest_minutes)
+                                        <div class="text-[10px] text-slate-500 font-sans">⏱ {{ $leg->formatted_start_to_dest_duration }}</div>
+                                    @endif
                                 </td>
                                 <td class="px-4 py-3 text-right font-mono font-bold text-slate-900">
-                                    {{ $leg->total_distance !== null ? number_format($leg->total_distance, 2).' km' : '-' }}
+                                    <div>{{ $leg->total_distance !== null ? number_format($leg->total_distance, 2).' km' : '-' }}</div>
+                                    @if($leg->total_duration_minutes)
+                                        <div class="text-[11px] text-blue-700 font-sans font-semibold">⏱ {{ $leg->formatted_total_duration }}</div>
+                                    @endif
                                 </td>
                                 <td class="px-4 py-3 text-center">
                                     @if($leg->isAutomatic() || $leg->routing_source === 'osrm')

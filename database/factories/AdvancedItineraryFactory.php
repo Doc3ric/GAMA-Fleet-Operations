@@ -25,6 +25,7 @@ class AdvancedItineraryFactory extends Factory
             'title' => 'Itinerary '.fake()->words(3, true),
             'notes' => fake()->optional()->sentence(),
             'status' => AdvancedItinerary::STATUS_DRAFT,
+            'total_duration_minutes' => null,
             'created_by' => User::factory(),
             'updated_by' => null,
         ];

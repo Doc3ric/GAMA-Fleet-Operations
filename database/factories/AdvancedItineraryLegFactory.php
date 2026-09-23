@@ -31,6 +31,9 @@ class AdvancedItineraryLegFactory extends Factory
             'distance_origin_to_start' => $d1,
             'distance_start_to_dest' => $d2,
             'total_distance' => round($d1 + $d2, 2),
+            'duration_origin_to_start_minutes' => null,
+            'duration_start_to_dest_minutes' => null,
+            'total_duration_minutes' => null,
             'routing_source' => 'osrm',
             'purpose' => fake()->words(3, true),
         ];

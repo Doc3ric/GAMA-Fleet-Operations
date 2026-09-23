@@ -67,7 +67,7 @@ class AdvancedItineraryController extends Controller
     {
         Gate::authorize('create', AdvancedItinerary::class);
 
-        $locations = Location::where('status', Location::STATUS_ACTIVE)->orderBy('official_name')->get();
+        $locations = Location::where('status', Location::STATUS_ACTIVE)->with('aliases')->orderBy('official_name')->get();
         $vehicles = Vehicle::orderBy('equipment_code')->get();
 
         return view('advanced-itineraries.create', compact('locations', 'vehicles'));
@@ -94,6 +94,11 @@ class AdvancedItineraryController extends Controller
             foreach ($request->input('legs', []) as $index => $legData) {
                 $this->createLeg($itinerary, $legData, $index);
             }
+
+            $totalDuration = $itinerary->legs()->sum('total_duration_minutes');
+            $itinerary->update([
+                'total_duration_minutes' => $totalDuration > 0 ? (int) $totalDuration : null,
+            ]);
 
             return $itinerary;
         });
@@ -127,7 +132,7 @@ class AdvancedItineraryController extends Controller
     {
         Gate::authorize('update', $advancedItinerary);
 
-        $locations = Location::where('status', Location::STATUS_ACTIVE)->orderBy('official_name')->get();
+        $locations = Location::where('status', Location::STATUS_ACTIVE)->with('aliases')->orderBy('official_name')->get();
         $vehicles = Vehicle::orderBy('equipment_code')->get();
         $advancedItinerary->load([
             'vehicle',
@@ -161,6 +166,11 @@ class AdvancedItineraryController extends Controller
             foreach ($request->input('legs', []) as $index => $legData) {
                 $this->createLeg($advancedItinerary, $legData, $index);
             }
+
+            $totalDuration = $advancedItinerary->legs()->sum('total_duration_minutes');
+            $advancedItinerary->update([
+                'total_duration_minutes' => $totalDuration > 0 ? (int) $totalDuration : null,
+            ]);
         });
 
         return redirect()->route('advanced-itineraries.show', $advancedItinerary)->with('success', 'Advanced itinerary updated successfully.');
@@ -199,12 +209,20 @@ class AdvancedItineraryController extends Controller
                     'distance_origin_to_start' => $calc['origin_to_start'],
                     'distance_start_to_dest' => $calc['start_to_dest'],
                     'total_distance' => $calc['total'],
+                    'duration_origin_to_start_minutes' => $calc['duration_origin_to_start_minutes'],
+                    'duration_start_to_dest_minutes' => $calc['duration_start_to_dest_minutes'],
+                    'total_duration_minutes' => $calc['total_duration_minutes'],
                     'routing_source' => $calc['source'],
                 ]);
             }
         }
 
-        return back()->with('success', 'Itinerary leg distances recalculated successfully.');
+        $totalDuration = $advancedItinerary->legs()->sum('total_duration_minutes');
+        $advancedItinerary->update([
+            'total_duration_minutes' => $totalDuration > 0 ? (int) $totalDuration : null,
+        ]);
+
+        return back()->with('success', 'Itinerary leg distances and estimated driving times recalculated successfully.');
     }
 
     /**
@@ -245,40 +263,72 @@ class AdvancedItineraryController extends Controller
         $startingPointId = $legData['starting_point_location_id'];
         $destId = $legData['destination_location_id'];
 
-        $d1 = isset($legData['distance_origin_to_start']) && $legData['distance_origin_to_start'] !== ''
+        $submittedD1 = isset($legData['distance_origin_to_start']) && $legData['distance_origin_to_start'] !== ''
             ? (float) $legData['distance_origin_to_start']
             : null;
 
-        $d2 = isset($legData['distance_start_to_dest']) && $legData['distance_start_to_dest'] !== ''
+        $submittedD2 = isset($legData['distance_start_to_dest']) && $legData['distance_start_to_dest'] !== ''
             ? (float) $legData['distance_start_to_dest']
             : null;
 
-        $total = isset($legData['total_distance']) && $legData['total_distance'] !== ''
+        $submittedTotal = isset($legData['total_distance']) && $legData['total_distance'] !== ''
             ? (float) $legData['total_distance']
             : null;
 
-        $source = $legData['routing_source'] ?? null;
+        $submittedSource = $legData['routing_source'] ?? null;
 
-        // If distances are missing/empty, calculate automatically via RoutingService
-        if ($d1 === null || $d2 === null) {
-            $origin = Location::find($originId);
-            $startingPoint = Location::find($startingPointId);
-            $destination = Location::find($destId);
+        $d1 = $submittedD1;
+        $d2 = $submittedD2;
+        $total = $submittedTotal;
+        $dur1 = null;
+        $dur2 = null;
+        $totalDur = null;
+        $source = $submittedSource;
 
-            if ($origin && $startingPoint && $destination) {
-                $calc = $this->routingService->calculateLegDistances($origin, $startingPoint, $destination);
+        $origin = Location::find($originId);
+        $startingPoint = Location::find($startingPointId);
+        $destination = Location::find($destId);
+
+        $hasCoordinates = $origin && $startingPoint && $destination
+            && $origin->latitude && $origin->longitude
+            && $startingPoint->latitude && $startingPoint->longitude
+            && $destination->latitude && $destination->longitude;
+
+        if ($hasCoordinates) {
+            $calc = $this->routingService->calculateLegDistances($origin, $startingPoint, $destination);
+
+            if ($submittedSource === RoutingService::SOURCE_MANUAL && ($submittedD1 !== null || $submittedD2 !== null)) {
+                // Preserve manual distance behavior, but never fabricate a manual ETA
+                $d1 = $submittedD1;
+                $d2 = $submittedD2;
+                $total = $submittedTotal ?? ($d1 !== null && $d2 !== null ? round($d1 + $d2, 2) : null);
+                $dur1 = null;
+                $dur2 = null;
+                $totalDur = null;
+                $source = RoutingService::SOURCE_MANUAL;
+            } else {
+                // Server-side authoritative OSRM calculation for distance and duration
                 $d1 = $calc['origin_to_start'];
                 $d2 = $calc['start_to_dest'];
                 $total = $calc['total'];
+                $dur1 = $calc['duration_origin_to_start_minutes'];
+                $dur2 = $calc['duration_start_to_dest_minutes'];
+                $totalDur = $calc['total_duration_minutes'];
                 $source = $calc['source'];
             }
         } else {
-            if ($total === null) {
-                $total = round($d1 + $d2, 2);
-            }
-            if (empty($source)) {
+            // Coordinates unavailable: manual distance or failed
+            if ($submittedD1 !== null || $submittedD2 !== null) {
+                $d1 = $submittedD1;
+                $d2 = $submittedD2;
+                $total = $submittedTotal ?? ($d1 !== null && $d2 !== null ? round($d1 + $d2, 2) : null);
                 $source = RoutingService::SOURCE_MANUAL;
+            } else {
+                $source = RoutingService::SOURCE_FAILED;
             }
+            $dur1 = null;
+            $dur2 = null;
+            $totalDur = null;
         }
 
         return $itinerary->legs()->create([
@@ -289,6 +339,9 @@ class AdvancedItineraryController extends Controller
             'distance_origin_to_start' => $d1,
             'distance_start_to_dest' => $d2,
             'total_distance' => $total,
+            'duration_origin_to_start_minutes' => $dur1,
+            'duration_start_to_dest_minutes' => $dur2,
+            'total_duration_minutes' => $totalDur,
             'routing_source' => $source,
             'purpose' => $legData['purpose'] ?? null,
         ]);
