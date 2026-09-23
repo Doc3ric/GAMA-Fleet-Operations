@@ -12,7 +12,10 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
-        $user = User::firstOrCreate(['email' => 'admin@gama.com'], ['name' => 'GPS Monitoring Specialist', 'password' => Hash::make('password')]);
+        $user = User::firstOrCreate(
+            ['email' => 'admin@gama.com'],
+            ['name' => 'GPS Monitoring Specialist', 'role' => User::ROLE_ADMIN, 'password' => Hash::make('password')]
+        );
         $devices = [
             ['name' => 'GAMA-001', 'imei' => '123456789012301', 'model' => 'Hikvision DS-MH2111'],
             ['name' => 'GAMA-002', 'imei' => '123456789012302', 'model' => 'Hikvision DS-MH2111'],

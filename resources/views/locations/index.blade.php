@@ -280,7 +280,7 @@
                                             $linkedTrips = $loc->trips()->count();
                                         @endphp
                                         <button type="button"
-                                                @click="confirmDelete({{ $loc->id }}, '{{ addslashes($loc->official_name) }}', {{ $linkedTrips }})"
+                                                @click.stop="confirmDelete({{ $loc->id }}, {{ json_encode($loc->official_name) }}, {{ $linkedTrips }})"
                                                 class="inline-flex items-center rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-100 transition-colors shadow-xs cursor-pointer"
                                                 title="{{ $linkedTrips > 0 ? 'Deactivate Location' : 'Delete Location' }}">
                                             {{ $linkedTrips > 0 ? 'Deactivate' : 'Delete' }}
@@ -353,8 +353,8 @@
         </div>
 
         {{-- Deactivate / Delete Confirmation Modal --}}
-        <div x-show="deleteId !== null" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-            <div @click.away="deleteId = null" class="w-full max-w-md rounded-2xl bg-white shadow-2xl border border-slate-200 p-6 space-y-4">
+        <div x-show="deleteId !== null" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs" @click.self="deleteId = null">
+            <div class="w-full max-w-md rounded-2xl bg-white shadow-2xl border border-slate-200 p-6 space-y-4">
                 <div class="flex items-center gap-3">
                     <div class="flex h-10 w-10 items-center justify-center rounded-full bg-rose-100 text-rose-600">
                         <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -363,7 +363,7 @@
                     </div>
                     <div>
                         <h3 class="text-sm font-bold text-slate-900" x-text="deleteTripCount > 0 ? 'Deactivate Location' : 'Confirm Delete'"></h3>
-                        <p class="text-xs text-slate-500" x-text="deleteName"></p>
+                        <p class="text-xs text-slate-500 font-medium" x-text="deleteName"></p>
                     </div>
                 </div>
 
@@ -378,15 +378,15 @@
                     </template>
                 </div>
 
-                <form :action="'{{ url('locations') }}/' + deleteId" method="POST" class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <form :action="deleteId ? '{{ url('locations') }}/' + deleteId : '#'" method="POST" class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
                     @csrf
                     @method('DELETE')
                     <button type="button" @click="deleteId = null"
-                            class="rounded-xl bg-slate-100 px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-200">
+                            class="rounded-xl bg-slate-100 px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-200 cursor-pointer">
                         Cancel
                     </button>
                     <button type="submit"
-                            class="rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white hover:bg-rose-700 shadow-sm"
+                            class="rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white hover:bg-rose-700 shadow-sm cursor-pointer"
                             x-text="deleteTripCount > 0 ? 'Deactivate Location' : 'Delete Permanently'">
                     </button>
                 </form>

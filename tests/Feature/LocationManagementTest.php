@@ -367,4 +367,40 @@ class LocationManagementTest extends TestCase
         $this->assertEquals(8.4161577, $location->latitude);
         $this->assertEquals(124.8222579, $location->longitude);
     }
+
+    public function test_operator_can_delete_unreferenced_location(): void
+    {
+        $location = Location::create([
+            'code' => 'DEL-OP',
+            'official_name' => 'LOCATION TO DELETE BY OPERATOR',
+            'type' => Location::TYPE_WAREHOUSE,
+            'latitude' => 8.12,
+            'longitude' => 124.75,
+            'address' => 'Test Address, Bukidnon',
+            'status' => Location::STATUS_ACTIVE,
+            'created_by' => $this->operator->id,
+        ]);
+
+        $response = $this->actingAs($this->operator)->delete(route('locations.destroy', $location));
+        $response->assertRedirect(route('locations.index'));
+        $this->assertDatabaseMissing('locations', ['id' => $location->id]);
+    }
+
+    public function test_driver_cannot_delete_location(): void
+    {
+        $location = Location::create([
+            'code' => 'DEL-DRV',
+            'official_name' => 'LOCATION ATTEMPT BY DRIVER',
+            'type' => Location::TYPE_WAREHOUSE,
+            'latitude' => 8.12,
+            'longitude' => 124.75,
+            'address' => 'Test Address, Bukidnon',
+            'status' => Location::STATUS_ACTIVE,
+            'created_by' => $this->admin->id,
+        ]);
+
+        $response = $this->actingAs($this->driver)->delete(route('locations.destroy', $location));
+        $response->assertForbidden();
+        $this->assertDatabaseHas('locations', ['id' => $location->id]);
+    }
 }
