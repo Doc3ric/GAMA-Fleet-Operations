@@ -276,4 +276,76 @@ class LocationManagementTest extends TestCase
         $response = $this->actingAs($this->admin)->get(route('locations.downloadTemplate'));
         $response->assertOk();
     }
+
+    public function test_can_create_location_with_area_consultant_and_contact_number(): void
+    {
+        $response = $this->actingAs($this->admin)->post(route('locations.store'), [
+            'code' => 'TESTLOC',
+            'official_name' => 'TEST LOCATION WITH CONSULTANT',
+            'type' => Location::TYPE_OFFICE,
+            'latitude' => 8.1500000,
+            'longitude' => 124.8500000,
+            'address' => 'Test Address, Bukidnon',
+            'status' => Location::STATUS_ACTIVE,
+            'area_consultant' => 'Juan Dela Cruz',
+            'contact_number' => '09171234567',
+        ]);
+
+        $location = Location::where('code', 'TESTLOC')->first();
+        $this->assertNotNull($location);
+        $this->assertEquals('Juan Dela Cruz', $location->area_consultant);
+        $this->assertEquals('09171234567', $location->contact_number);
+        $response->assertRedirect(route('locations.show', $location));
+    }
+
+    public function test_can_update_location_area_consultant_and_contact_number(): void
+    {
+        $location = Location::create([
+            'code' => 'UPD1',
+            'official_name' => 'UPDATE TEST LOCATION',
+            'type' => Location::TYPE_OFFICE,
+            'latitude' => 8.15,
+            'longitude' => 124.85,
+            'address' => 'Initial Address',
+            'status' => Location::STATUS_ACTIVE,
+            'created_by' => $this->admin->id,
+        ]);
+
+        $response = $this->actingAs($this->admin)->put(route('locations.update', $location), [
+            'code' => 'UPD1',
+            'official_name' => 'UPDATE TEST LOCATION',
+            'type' => Location::TYPE_OFFICE,
+            'latitude' => 8.15,
+            'longitude' => 124.85,
+            'address' => 'Initial Address',
+            'status' => Location::STATUS_ACTIVE,
+            'area_consultant' => 'Maria Santos',
+            'contact_number' => '09181234567',
+        ]);
+
+        $response->assertRedirect(route('locations.show', $location));
+        $location->refresh();
+        $this->assertEquals('Maria Santos', $location->area_consultant);
+        $this->assertEquals('09181234567', $location->contact_number);
+    }
+
+    public function test_area_consultant_and_contact_number_are_optional(): void
+    {
+        $response = $this->actingAs($this->admin)->post(route('locations.store'), [
+            'code' => 'NOCONTACT',
+            'official_name' => 'LOCATION WITHOUT CONSULTANT',
+            'type' => Location::TYPE_FARM,
+            'latitude' => 8.10,
+            'longitude' => 124.80,
+            'address' => 'Remote Farm, Bukidnon',
+            'status' => Location::STATUS_ACTIVE,
+            // area_consultant and contact_number intentionally omitted
+        ]);
+
+        $location = Location::where('code', 'NOCONTACT')->first();
+        $this->assertNotNull($location);
+        $this->assertNull($location->area_consultant);
+        $this->assertNull($location->contact_number);
+        $response->assertRedirect(route('locations.show', $location));
+    }
 }

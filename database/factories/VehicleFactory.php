@@ -21,7 +21,7 @@ class VehicleFactory extends Factory
     {
         $type = VehicleType::inRandomOrder()->first();
         $prefix = $type?->code ?? 'VH';
-        $num = str_pad($this->faker->numberBetween(1, 20), 2, '0', STR_PAD_LEFT);
+        $num = str_pad((string) $this->faker->unique()->numberBetween(1, 9999), 2, '0', STR_PAD_LEFT);
 
         return [
             'equipment_code' => "{$prefix} {$num}",

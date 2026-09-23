@@ -11,6 +11,7 @@ use App\Models\LocationAlias;
 use App\Services\GeocodingService;
 use App\Services\LocationImportService;
 use App\Services\LocationRecognitionService;
+use App\Services\RoutingService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -26,7 +27,8 @@ class LocationController extends Controller
     public function __construct(
         protected LocationRecognitionService $recognitionService,
         protected LocationImportService $importService,
-        protected GeocodingService $geocodingService
+        protected GeocodingService $geocodingService,
+        protected RoutingService $routingService
     ) {}
 
     /**
@@ -406,6 +408,52 @@ class LocationController extends Controller
         }
 
         return back()->with('success', "Alias '{$name}' removed.");
+    }
+
+    /**
+     * Calculate road distances between three locations: Origin → Starting Point → Destination.
+     * Used by the Advanced Itinerary create/edit form to auto-populate distances.
+     */
+    public function calculateDistance(Request $request): JsonResponse
+    {
+        Gate::authorize('viewAny', Location::class);
+
+        $request->validate([
+            'origin_id' => ['required', 'exists:locations,id'],
+            'waypoint_id' => ['required', 'exists:locations,id'],
+            'destination_id' => ['required', 'exists:locations,id'],
+        ]);
+
+        $origin = Location::findOrFail((int) $request->input('origin_id'));
+        $waypoint = Location::findOrFail((int) $request->input('waypoint_id'));
+        $destination = Location::findOrFail((int) $request->input('destination_id'));
+
+        // Validate that all three locations have stored coordinates
+        foreach ([
+            [$origin, 'Origin'],
+            [$waypoint, 'Starting Point'],
+            [$destination, 'Destination'],
+        ] as [$loc, $label]) {
+            if (! $loc->latitude || ! $loc->longitude) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "Location '{$loc->official_name}' ({$label}) does not have coordinates stored. Please update the location record first.",
+                ], 422);
+            }
+        }
+
+        $result = $this->routingService->calculateLegDistances($origin, $waypoint, $destination);
+
+        return response()->json([
+            'success' => true,
+            'origin_to_start' => $result['origin_to_start'],
+            'start_to_dest' => $result['start_to_dest'],
+            'total' => $result['total'],
+            'source' => $result['source'],
+            'origin' => ['name' => $origin->official_name],
+            'waypoint' => ['name' => $waypoint->official_name],
+            'destination' => ['name' => $destination->official_name],
+        ]);
     }
 
     /**

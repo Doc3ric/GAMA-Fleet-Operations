@@ -33,6 +33,8 @@ class LocationFactory extends Factory
             'notes' => $this->faker->sentence(),
             'created_by' => User::factory(),
             'updated_by' => null,
+            'area_consultant' => null,
+            'contact_number' => null,
         ];
     }
 

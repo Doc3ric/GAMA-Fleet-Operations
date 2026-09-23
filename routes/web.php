@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AdvancedItineraryController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DeviceController;
 use App\Http\Controllers\DriverItineraryController;
@@ -55,6 +56,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('locations/template/download', [LocationController::class, 'downloadTemplate'])->name('locations.downloadTemplate');
     Route::get('locations/export/excel', [LocationController::class, 'exportExcel'])->name('locations.exportExcel');
     Route::post('locations/import', [LocationController::class, 'importData'])->name('locations.importData');
+    Route::post('locations/calculate-distance', [LocationController::class, 'calculateDistance'])->name('locations.calculateDistance');
     Route::post('locations/{location}/aliases', [LocationController::class, 'storeAlias'])->name('locations.aliases.store');
     Route::delete('locations/{location}/aliases/{alias}', [LocationController::class, 'destroyAlias'])->name('locations.aliases.destroy');
     Route::resource('locations', LocationController::class);
@@ -76,6 +78,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Excel Viewer
     Route::get('excel-viewer', [ExcelViewerController::class, 'index'])->name('excel-viewer.index');
     Route::get('excel-viewer/download/{fileId}', [ExcelViewerController::class, 'download'])->name('excel-viewer.download');
+
+    // Advanced Itinerary
+    Route::post('advanced-itineraries/{advanced_itinerary}/recalculate', [AdvancedItineraryController::class, 'recalculate'])->name('advanced-itineraries.recalculate');
+    Route::get('advanced-itineraries/{advanced_itinerary}/pdf', [AdvancedItineraryController::class, 'exportPdf'])->name('advanced-itineraries.exportPdf');
+    Route::resource('advanced-itineraries', AdvancedItineraryController::class);
 
 });
 

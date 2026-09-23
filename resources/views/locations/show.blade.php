@@ -123,6 +123,19 @@
                                 <p class="text-slate-700 mt-0.5 leading-relaxed">{{ $location->notes }}</p>
                             </div>
                         @endif
+
+                        @if($location->area_consultant || $location->contact_number)
+                            <div class="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
+                                <div>
+                                    <span class="text-slate-400 block text-[10px] font-bold uppercase">Area Consultant</span>
+                                    <span class="text-slate-700 font-semibold">{{ $location->area_consultant ?: '—' }}</span>
+                                </div>
+                                <div>
+                                    <span class="text-slate-400 block text-[10px] font-bold uppercase">Contact Number</span>
+                                    <span class="text-slate-700 font-semibold">{{ $location->contact_number ?: '—' }}</span>
+                                </div>
+                            </div>
+                        @endif
                     </div>
                 </div>
 

@@ -44,6 +44,8 @@ class UpdateLocationRequest extends FormRequest
             'image' => ['nullable', 'image', 'max:5120'],
             'aliases' => ['nullable', 'array'],
             'aliases.*' => ['nullable', 'string', 'max:255'],
+            'area_consultant' => ['nullable', 'string', 'max:255'],
+            'contact_number' => ['nullable', 'string', 'max:30'],
         ];
     }
 

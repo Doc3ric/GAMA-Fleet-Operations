@@ -68,6 +68,8 @@ class Location extends Model
         'status',
         'image_path',
         'notes',
+        'area_consultant',
+        'contact_number',
         'created_by',
         'updated_by',
     ];

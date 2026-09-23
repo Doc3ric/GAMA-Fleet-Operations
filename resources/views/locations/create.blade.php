@@ -188,6 +188,22 @@
                                    class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-800 focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none">
                         </div>
                     </div>
+
+                    {{-- Area Consultant & Contact Number --}}
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-slate-100">
+                        <div>
+                            <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1">Area Consultant</label>
+                            <input type="text" name="area_consultant" value="{{ old('area_consultant') }}" placeholder="e.g. Juan Dela Cruz"
+                                   class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-800 focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none">
+                            <p class="text-[10px] text-slate-400 mt-1">Sales or area consultant responsible for this location (optional)</p>
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1">Contact Number</label>
+                            <input type="text" name="contact_number" value="{{ old('contact_number') }}" placeholder="e.g. 09XX-XXX-XXXX"
+                                   class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-800 focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none">
+                            <p class="text-[10px] text-slate-400 mt-1">Primary contact number for this location (optional)</p>
+                        </div>
+                    </div>
                 </div>
 
                 {{-- Media & Notes Card --}}
