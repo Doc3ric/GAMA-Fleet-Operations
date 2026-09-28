@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
-    <title>Long Idling Report - {{ $report->report_date->format('F j, Y') }}</title>
+    <title>Long Idling Report - {{ $dateRangeLabel ?? $report->report_date->format('F j, Y') }}</title>
     <style>
         * { box-sizing: border-box; }
         @page {
@@ -251,15 +251,24 @@
     {{-- Header --}}
     <div class="header">
         <div class="report-title">Long Idling Report</div>
-        <div class="report-date">{{ $report->report_date->format('l, F j, Y') }}</div>
+        <div class="report-date">{{ $dateRangeSubtitle ?? $report->report_date->format('l, F j, Y') }}</div>
+        @if(!empty($filterLabel))
+        <div style="font-size: 8px; color: #dc2626; margin-top: 2px; font-weight: bold;">
+            Filtered by: &ldquo;{{ $filterLabel }}&rdquo; &mdash; {{ $report->longIdlingRecords->count() }} {{ \Illuminate\Support\Str::plural('record', $report->longIdlingRecords->count()) }} shown
+        </div>
+        @elseif(!empty($searchFilter))
+        <div style="font-size: 8px; color: #dc2626; margin-top: 2px; font-weight: bold;">
+            Filtered by: &ldquo;{{ $searchFilter }}&rdquo; &mdash; {{ $report->longIdlingRecords->count() }} {{ \Illuminate\Support\Str::plural('record', $report->longIdlingRecords->count()) }} shown
+        </div>
+        @endif
     </div>
 
     {{-- Summary Bar --}}
     <table class="summary-table">
         <tr>
             <td style="width: {{ $report->remarks ? '25%' : '33%' }};">
-                <div class="summary-label">Report Date</div>
-                <div class="summary-value">{{ $report->report_date->format('M j, Y') }}</div>
+                <div class="summary-label">{{ !empty($isMultiDate) ? 'Date Range' : 'Report Date' }}</div>
+                <div class="summary-value">{{ $dateRangeLabel ?? $report->report_date->format('M j, Y') }}</div>
             </td>
             <td style="width: {{ $report->remarks ? '25%' : '33%' }};">
                 <div class="summary-label">Total Vehicles</div>
@@ -292,7 +301,13 @@
                     Record #{{ $index + 1 }} &mdash; {{ $record->device_name }}
                 </div>
                 <table class="record-table">
+                    @if(!empty($isMultiDate) && $record->report?->report_date)
+                    <tr><td>Date</td><td><strong>{{ $record->report->report_date->format('M j, Y') }}</strong></td></tr>
+                    @endif
                     <tr><td>Device Name</td><td>{{ $record->device_name ?: '-' }}</td></tr>
+                    @if($record->driver_name)
+                    <tr><td>Driver Name</td><td>{{ $record->driver_name }}</td></tr>
+                    @endif
                     <tr><td>IMEI</td><td>{{ $record->imei ?: '-' }}</td></tr>
                     <tr><td>Model</td><td>{{ $record->model ?: '-' }}</td></tr>
                     @if($record->state)
@@ -328,15 +343,19 @@
         <table class="data-table">
             <thead>
                 <tr>
-                    <th style="width: 22px;" class="text-center">#</th>
-                    <th style="width: 65px;">Device Name</th>
-                    <th style="width: 75px;">IMEI</th>
-                    <th style="width: 42px;">Model</th>
-                    <th style="width: 42px;">State</th>
-                    <th style="width: 48px;">Start</th>
-                    <th style="width: 48px;">End</th>
-                    <th style="width: 48px;">Stay Time</th>
-                    <th style="width: 78px;">Coordinates</th>
+                    <th style="width: 20px;" class="text-center">#</th>
+                    @if(!empty($isMultiDate))
+                    <th style="width: 50px;">Date</th>
+                    @endif
+                    <th style="width: {{ !empty($isMultiDate) ? '55px' : '60px' }};">Device Name</th>
+                    <th style="width: {{ !empty($isMultiDate) ? '60px' : '65px' }};">Driver Name</th>
+                    <th style="width: {{ !empty($isMultiDate) ? '65px' : '70px' }};">IMEI</th>
+                    <th style="width: 35px;">Model</th>
+                    <th style="width: 35px;">State</th>
+                    <th style="width: 42px;">Start</th>
+                    <th style="width: 42px;">End</th>
+                    <th style="width: 42px;">Stay Time</th>
+                    <th style="width: 68px;">Coordinates</th>
                     <th>Address</th>
                 </tr>
             </thead>
@@ -344,12 +363,16 @@
                 @foreach($report->longIdlingRecords as $index => $record)
                     <tr>
                         <td class="text-center">{{ $index + 1 }}</td>
+                        @if(!empty($isMultiDate))
+                        <td style="font-weight: bold; color: #475569;">{{ $record->report?->report_date?->format('M j, Y') ?? '-' }}</td>
+                        @endif
                         <td>
                             <strong>{{ $record->device_name ?: '-' }}</strong>
                             @if($record->remarks)
                                 <div class="row-remarks">{{ $record->remarks }}</div>
                             @endif
                         </td>
+                        <td>{{ $record->driver_name ?: '-' }}</td>
                         <td>{{ $record->imei ?: '-' }}</td>
                         <td>{{ $record->model ?: '-' }}</td>
                         <td>{{ $record->state ?: '-' }}</td>
@@ -377,7 +400,13 @@
                         Record #{{ $index + 1 }} &mdash; {{ $record->device_name }}
                     </div>
                     <table class="record-table">
+                        @if(!empty($isMultiDate) && $record->report?->report_date)
+                        <tr><td>Date</td><td><strong>{{ $record->report->report_date->format('M j, Y') }}</strong></td></tr>
+                        @endif
                         <tr><td>Device Name</td><td>{{ $record->device_name ?: '-' }}</td></tr>
+                        @if($record->driver_name)
+                        <tr><td>Driver Name</td><td>{{ $record->driver_name }}</td></tr>
+                        @endif
                         <tr><td>IMEI</td><td>{{ $record->imei ?: '-' }}</td></tr>
                         <tr><td>Model</td><td>{{ $record->model ?: '-' }}</td></tr>
                         @if($record->state)

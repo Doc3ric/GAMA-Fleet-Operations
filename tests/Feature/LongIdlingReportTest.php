@@ -692,4 +692,332 @@ class LongIdlingReportTest extends TestCase
         $excelResponse = $this->actingAs($this->user)->get(route('reports.exportExcel', [$report, 'sort' => 'device_asc']));
         $excelResponse->assertOk();
     }
+
+    public function test_can_generate_pdf_for_selected_ids_only(): void
+    {
+        $report = Report::create([
+            'report_type' => 'long_idling',
+            'report_date' => now()->toDateString(),
+            'status' => 'completed',
+            'created_by' => $this->user->id,
+        ]);
+
+        $rec1 = LongIdlingRecord::create([
+            'report_id' => $report->id,
+            'device_name' => 'BT-01',
+            'imei' => '111111111111111',
+            'model' => 'Model-1',
+            'stay_time' => '00:30:00',
+        ]);
+
+        $rec2 = LongIdlingRecord::create([
+            'report_id' => $report->id,
+            'device_name' => 'BT-06',
+            'imei' => '222222222222222',
+            'model' => 'Model-2',
+            'stay_time' => '02:30:00',
+        ]);
+
+        $rec3 = LongIdlingRecord::create([
+            'report_id' => $report->id,
+            'device_name' => 'BT-07',
+            'imei' => '333333333333333',
+            'model' => 'Model-3',
+            'stay_time' => '01:00:00',
+        ]);
+
+        $response = $this->actingAs($this->user)->get(route('reports.generatePdf', [
+            'report' => $report,
+            'ids' => "{$rec2->id},{$rec3->id}",
+        ]));
+
+        $response->assertOk();
+        $this->assertEquals('application/pdf', $response->headers->get('content-type'));
+        $this->assertStringContainsString('Long-Idling-Report-'.$report->report_date->format('Y-m-d').'-Selected-2.pdf', (string) $response->headers->get('content-disposition'));
+    }
+
+    public function test_can_generate_pdf_for_specific_device_only(): void
+    {
+        $report = Report::create([
+            'report_type' => 'long_idling',
+            'report_date' => now()->toDateString(),
+            'status' => 'completed',
+            'created_by' => $this->user->id,
+        ]);
+
+        LongIdlingRecord::create([
+            'report_id' => $report->id,
+            'device_name' => 'BT-01',
+            'imei' => '111111111111111',
+            'model' => 'Model-1',
+            'stay_time' => '00:30:00',
+        ]);
+
+        LongIdlingRecord::create([
+            'report_id' => $report->id,
+            'device_name' => 'BT-06',
+            'imei' => '222222222222222',
+            'model' => 'Model-2',
+            'stay_time' => '02:30:00',
+        ]);
+
+        $response = $this->actingAs($this->user)->get(route('reports.generatePdf', [
+            'report' => $report,
+            'device' => 'BT-06',
+        ]));
+
+        $response->assertOk();
+        $this->assertEquals('application/pdf', $response->headers->get('content-type'));
+        $this->assertStringContainsString('BT-06', (string) $response->headers->get('content-disposition'));
+    }
+
+    public function test_livewire_can_filter_by_device_name_dropdown(): void
+    {
+        $report = Report::create([
+            'report_type' => 'long_idling',
+            'report_date' => now()->toDateString(),
+            'status' => 'draft',
+            'created_by' => $this->user->id,
+        ]);
+
+        LongIdlingRecord::create([
+            'report_id' => $report->id,
+            'device_name' => 'BT-01',
+            'imei' => '111111111111111',
+            'model' => 'Model-1',
+        ]);
+
+        LongIdlingRecord::create([
+            'report_id' => $report->id,
+            'device_name' => 'BT-06',
+            'imei' => '222222222222222',
+            'model' => 'Model-2',
+        ]);
+
+        LongIdlingRecord::create([
+            'report_id' => $report->id,
+            'device_name' => 'BT-06',
+            'imei' => '333333333333333',
+            'model' => 'Model-2',
+        ]);
+
+        $test = Livewire::actingAs($this->user)
+            ->test(LongIdlingTable::class, ['reportId' => $report->id]);
+
+        $this->assertCount(3, $test->viewData('filteredRows'));
+        $this->assertEquals(['BT-01' => 1, 'BT-06' => 2], $test->get('deviceList'));
+
+        $test->set('filterDevice', 'BT-06');
+        $this->assertCount(2, $test->viewData('filteredRows'));
+        $this->assertSame('BT-06', $test->viewData('filteredRows')[0]['device_name']);
+        $this->assertSame('BT-06', $test->viewData('filteredRows')[1]['device_name']);
+    }
+
+    public function test_livewire_can_select_checklist_and_build_pdf_url(): void
+    {
+        $report = Report::create([
+            'report_type' => 'long_idling',
+            'report_date' => now()->toDateString(),
+            'status' => 'draft',
+            'created_by' => $this->user->id,
+        ]);
+
+        $rec1 = LongIdlingRecord::create([
+            'report_id' => $report->id,
+            'device_name' => 'BT-01',
+            'imei' => '111111111111111',
+            'model' => 'Model-1',
+        ]);
+
+        $rec2 = LongIdlingRecord::create([
+            'report_id' => $report->id,
+            'device_name' => 'BT-06',
+            'imei' => '222222222222222',
+            'model' => 'Model-2',
+        ]);
+
+        $test = Livewire::actingAs($this->user)
+            ->test(LongIdlingTable::class, ['reportId' => $report->id]);
+
+        // Default pdfUrl has no ids
+        $this->assertStringNotContainsString('ids=', $test->get('pdfUrl'));
+
+        // Select row 2
+        $test->set('selectedIds', [$rec2->id]);
+        $this->assertStringContainsString('ids='.$rec2->id, $test->get('pdfUrl'));
+
+        // Select all filtered
+        $test->call('selectAllFiltered');
+        $this->assertEquals([$rec1->id, $rec2->id], $test->get('selectedIds'));
+        $this->assertTrue($test->get('selectAll'));
+        $this->assertStringContainsString('ids='.$rec1->id.'%2C'.$rec2->id, $test->get('pdfUrl'));
+
+        // Clear selection
+        $test->call('clearSelection');
+        $this->assertEmpty($test->get('selectedIds'));
+        $this->assertFalse($test->get('selectAll'));
+    }
+
+    public function test_authenticated_user_can_view_reports_range(): void
+    {
+        Report::create([
+            'report_type' => 'long_idling',
+            'report_date' => '2026-09-22',
+            'status' => 'completed',
+            'created_by' => $this->user->id,
+        ]);
+
+        Report::create([
+            'report_type' => 'long_idling',
+            'report_date' => '2026-09-24',
+            'status' => 'completed',
+            'created_by' => $this->user->id,
+        ]);
+
+        $response = $this->actingAs($this->user)->get(route('reports.range', [
+            'start_date' => '2026-09-22',
+            'end_date' => '2026-09-24',
+        ]));
+
+        $response->assertOk();
+        $response->assertSee('Long Idling Multi-Date Explorer');
+    }
+
+    public function test_livewire_can_load_records_across_multiple_dates_in_range_mode(): void
+    {
+        $report1 = Report::create([
+            'report_type' => 'long_idling',
+            'report_date' => '2026-09-22',
+            'status' => 'completed',
+            'created_by' => $this->user->id,
+        ]);
+
+        $rec1 = LongIdlingRecord::create([
+            'report_id' => $report1->id,
+            'device_name' => 'BT-06',
+            'imei' => '111111111111111',
+            'model' => 'Model-1',
+            'driver_name' => 'Driver John',
+            'stay_time' => '01:30:00',
+        ]);
+
+        $report2 = Report::create([
+            'report_type' => 'long_idling',
+            'report_date' => '2026-09-24',
+            'status' => 'completed',
+            'created_by' => $this->user->id,
+        ]);
+
+        $rec2 = LongIdlingRecord::create([
+            'report_id' => $report2->id,
+            'device_name' => 'BT-08',
+            'imei' => '222222222222222',
+            'model' => 'Model-2',
+            'driver_name' => 'Driver Alex',
+            'stay_time' => '02:00:00',
+        ]);
+
+        $test = Livewire::actingAs($this->user)
+            ->test(LongIdlingTable::class, [
+                'startDate' => '2026-09-22',
+                'endDate' => '2026-09-24',
+                'dateMode' => 'range',
+            ]);
+
+        $test->assertCount('rows', 2);
+        $this->assertTrue($test->get('hasMultipleDates'));
+
+        // Checklist selection across different dates
+        $test->set('selectedIds', [$rec1->id, $rec2->id]);
+        $this->assertStringContainsString('across 2 dates', $test->get('selectedDatesSummary'));
+        $this->assertStringContainsString('ids='.$rec1->id.'%2C'.$rec2->id, $test->get('pdfUrl'));
+    }
+
+    public function test_can_generate_pdf_with_selected_ids_across_different_dates(): void
+    {
+        $report1 = Report::create([
+            'report_type' => 'long_idling',
+            'report_date' => '2026-09-22',
+            'status' => 'completed',
+            'created_by' => $this->user->id,
+        ]);
+
+        $rec1 = LongIdlingRecord::create([
+            'report_id' => $report1->id,
+            'device_name' => 'BT-06',
+            'imei' => '111111111111111',
+            'model' => 'Model-1',
+            'driver_name' => 'Driver John',
+            'stay_time' => '01:30:00',
+        ]);
+
+        $report2 = Report::create([
+            'report_type' => 'long_idling',
+            'report_date' => '2026-09-24',
+            'status' => 'completed',
+            'created_by' => $this->user->id,
+        ]);
+
+        $rec2 = LongIdlingRecord::create([
+            'report_id' => $report2->id,
+            'device_name' => 'BT-08',
+            'imei' => '222222222222222',
+            'model' => 'Model-2',
+            'driver_name' => 'Driver Alex',
+            'stay_time' => '02:00:00',
+        ]);
+
+        $response = $this->actingAs($this->user)->get(route('reports.generateRangePdf', [
+            'ids' => "{$rec1->id},{$rec2->id}",
+        ]));
+
+        $response->assertOk();
+        $this->assertEquals('application/pdf', $response->headers->get('content-type'));
+        $this->assertStringContainsString('Long-Idling-Report-2026-09-22-to-2026-09-24-Selected-2.pdf', (string) $response->headers->get('content-disposition'));
+    }
+
+    public function test_can_generate_pdf_for_date_range(): void
+    {
+        $report1 = Report::create([
+            'report_type' => 'long_idling',
+            'report_date' => '2026-09-22',
+            'status' => 'completed',
+            'created_by' => $this->user->id,
+        ]);
+
+        LongIdlingRecord::create([
+            'report_id' => $report1->id,
+            'device_name' => 'BT-06',
+            'imei' => '111111111111111',
+            'model' => 'Model-1',
+            'driver_name' => 'Driver John',
+            'stay_time' => '01:30:00',
+        ]);
+
+        $report2 = Report::create([
+            'report_type' => 'long_idling',
+            'report_date' => '2026-09-24',
+            'status' => 'completed',
+            'created_by' => $this->user->id,
+        ]);
+
+        LongIdlingRecord::create([
+            'report_id' => $report2->id,
+            'device_name' => 'BT-08',
+            'imei' => '222222222222222',
+            'model' => 'Model-2',
+            'driver_name' => 'Driver Alex',
+            'stay_time' => '02:00:00',
+        ]);
+
+        $response = $this->actingAs($this->user)->get(route('reports.generateRangePdf', [
+            'start_date' => '2026-09-22',
+            'end_date' => '2026-09-24',
+            'device' => 'BT-06',
+        ]));
+
+        $response->assertOk();
+        $this->assertEquals('application/pdf', $response->headers->get('content-type'));
+        $this->assertStringContainsString('Long-Idling-Report-2026-09-22-to-2026-09-24-BT-06.pdf', (string) $response->headers->get('content-disposition'));
+    }
 }

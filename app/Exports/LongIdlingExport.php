@@ -34,6 +34,7 @@ class LongIdlingExport implements FromCollection, WithColumnWidths, WithHeadings
         return $query->get()->map(fn ($r, $i) => [
             'no' => $i + 1,
             'device_name' => $r->device_name,
+            'driver_name' => $r->driver_name,
             'imei' => $r->imei,
             'model' => $r->model,
             'state' => $r->state,
@@ -52,6 +53,7 @@ class LongIdlingExport implements FromCollection, WithColumnWidths, WithHeadings
         return [
             '#',
             'Device Name',
+            'Driver Name',
             'IMEI',
             'Model',
             'State',
@@ -80,16 +82,17 @@ class LongIdlingExport implements FromCollection, WithColumnWidths, WithHeadings
         return [
             'A' => 5,
             'B' => 25,
-            'C' => 20,
-            'D' => 16,
-            'E' => 14,
-            'F' => 12,
+            'C' => 25,
+            'D' => 20,
+            'E' => 16,
+            'F' => 14,
             'G' => 12,
             'H' => 12,
-            'I' => 14,
+            'I' => 12,
             'J' => 14,
-            'K' => 40,
-            'L' => 30,
+            'K' => 14,
+            'L' => 40,
+            'M' => 30,
         ];
     }
 

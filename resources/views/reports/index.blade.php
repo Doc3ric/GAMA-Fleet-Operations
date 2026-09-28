@@ -10,11 +10,53 @@
                 <h2 class="text-lg font-bold text-slate-800">Long Idling Reports</h2>
                 <p class="text-xs text-slate-500 mt-0.5">All your daily long idling monitoring reports</p>
             </div>
-            <a href="{{ route('reports.create') }}"
+            <a href="{{ route('reports.range') }}"
+                   class="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-xs">
+                    <svg class="h-4 w-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.253M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 9v7.5" /></svg>
+                    Multi-Date Explorer
+                </a>
+                <a href="{{ route('reports.create') }}"
                class="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 transition-colors shadow-sm">
                 <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
                 New Report
             </a>
+        </div>
+
+        {{-- Multi-Date Range Quick Explorer --}}
+        <div class="rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950 to-blue-950 text-white p-4 sm:p-5 shadow-sm border border-slate-800 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+                <div class="flex items-center gap-2">
+                    <span class="inline-flex items-center justify-center h-7 w-7 rounded-lg bg-blue-600/30 text-blue-400 border border-blue-500/30">
+                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.253M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 9v7.5" />
+                        </svg>
+                    </span>
+                    <h3 class="font-bold text-sm text-white">Multi-Date Long Idling Explorer</h3>
+                    <span class="inline-flex items-center rounded-full bg-blue-500/20 px-2 py-0.5 text-[10px] font-bold text-blue-300 border border-blue-400/30">
+                        Cross-Date Checklist
+                    </span>
+                </div>
+                <p class="text-xs text-slate-300 mt-1 max-w-xl">
+                    View, search, and checklist records across different dates (e.g. September 22&ndash;24) in one unified list with selective PDF download.
+                </p>
+            </div>
+
+            <form method="GET" action="{{ route('reports.range') }}" class="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                <div class="flex items-center gap-1.5 bg-slate-800/90 px-3 py-1.5 rounded-xl border border-slate-700 text-xs">
+                    <span class="text-slate-400 font-semibold">From:</span>
+                    <input type="date" name="start_date" required
+                           value="{{ request('start_date', $reports->first()?->report_date?->copy()->subDays(2)->format('Y-m-d') ?? now()->subDays(2)->format('Y-m-d')) }}"
+                           class="bg-slate-900 border border-slate-700 rounded-lg text-xs text-white px-2 py-1 outline-none focus:border-blue-500">
+                    <span class="text-slate-400 font-semibold ml-1">To:</span>
+                    <input type="date" name="end_date" required
+                           value="{{ request('end_date', $reports->first()?->report_date?->format('Y-m-d') ?? now()->format('Y-m-d')) }}"
+                           class="bg-slate-900 border border-slate-700 rounded-lg text-xs text-white px-2 py-1 outline-none focus:border-blue-500">
+                </div>
+                <button type="submit"
+                        class="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 text-xs font-bold transition-all shadow-sm cursor-pointer whitespace-nowrap">
+                    <span>Explore Dates &rarr;</span>
+                </button>
+            </form>
         </div>
 
         {{-- Filter Bar --}}
@@ -62,7 +104,7 @@
                                     <span class="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800">Draft</span>
                                 @endif
                             </td>
-                            <td class="px-6 py-4 text-sm text-slate-500 max-w-xs truncate">{{ $report->remarks ?? '—' }}</td>
+                            <td class="px-6 py-4 text-sm text-slate-500 max-w-xs truncate">{{ $report->remarks ?? 'â€”' }}</td>
                             <td class="px-6 py-4 text-xs text-slate-400">{{ $report->created_at->format('M j, Y') }}</td>
                             <td class="px-6 py-4 text-right">
                                 <div class="flex items-center justify-end gap-2">
@@ -100,7 +142,12 @@
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
                                     </svg>
                                     <p class="text-sm font-medium text-slate-400">No reports found</p>
-                                    <a href="{{ route('reports.create') }}" class="text-sm text-blue-600 hover:underline">Create your first report &rarr;</a>
+                                    <a href="{{ route('reports.range') }}"
+                   class="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-xs">
+                    <svg class="h-4 w-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.253M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 9v7.5" /></svg>
+                    Multi-Date Explorer
+                </a>
+                <a href="{{ route('reports.create') }}" class="text-sm text-blue-600 hover:underline">Create your first report &rarr;</a>
                                 </div>
                             </td>
                         </tr>

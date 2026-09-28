@@ -11,6 +11,8 @@ use App\Http\Controllers\LongIdlingRecordController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\VehicleController;
+use App\Http\Controllers\WorkNoteController;
+use App\Http\Controllers\WorkTaskController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', fn () => redirect()->route('dashboard'));
@@ -23,14 +25,17 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
+    Route::get('reports/range', [ReportController::class, 'rangeView'])->name('reports.range');
+    Route::match(['get', 'post'], 'reports-pdf/range', [ReportController::class, 'generateRangePdf'])->name('reports.generateRangePdf');
     Route::get('reports/template/download', [ReportController::class, 'downloadTemplate'])->name('reports.downloadTemplate');
     Route::resource('reports', ReportController::class);
     Route::patch('reports/{report}/complete', [ReportController::class, 'markComplete'])->name('reports.markComplete');
     Route::patch('reports/{report}/draft', [ReportController::class, 'markDraft'])->name('reports.markDraft');
-    Route::get('reports/{report}/pdf', [ReportController::class, 'generatePdf'])->name('reports.generatePdf');
+    Route::match(['get', 'post'], 'reports/{report}/pdf', [ReportController::class, 'generatePdf'])->name('reports.generatePdf');
     Route::get('reports/{report}/excel', [ReportController::class, 'exportExcel'])->name('reports.exportExcel');
     Route::post('reports/{report}/import', [ReportController::class, 'importData'])->name('reports.importData');
 
+    Route::post('reports-screenshots/upload', [LongIdlingRecordController::class, 'uploadGenericScreenshot'])->name('reports.uploadGenericScreenshot');
     Route::post('reports/{report}/screenshots', [LongIdlingRecordController::class, 'uploadScreenshot'])->name('reports.uploadScreenshot');
     Route::post('long-idling-records/{record}/image', [LongIdlingRecordController::class, 'uploadImage'])->name('records.uploadImage');
     Route::delete('long-idling-records/{record}', [LongIdlingRecordController::class, 'destroy'])->name('records.destroy');
@@ -83,6 +88,17 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('advanced-itineraries/{advanced_itinerary}/recalculate', [AdvancedItineraryController::class, 'recalculate'])->name('advanced-itineraries.recalculate');
     Route::get('advanced-itineraries/{advanced_itinerary}/pdf', [AdvancedItineraryController::class, 'exportPdf'])->name('advanced-itineraries.exportPdf');
     Route::resource('advanced-itineraries', AdvancedItineraryController::class);
+
+    // My Work — Personal Work Workflow Assistant
+    Route::get('work-tasks/calendar', [WorkTaskController::class, 'calendar'])->name('work-tasks.calendar');
+    Route::get('work-tasks/accomplishments', [WorkTaskController::class, 'accomplishments'])->name('work-tasks.accomplishments');
+    Route::patch('work-tasks/{work_task}/complete', [WorkTaskController::class, 'complete'])->name('work-tasks.complete');
+    Route::patch('work-tasks/{work_task}/reopen', [WorkTaskController::class, 'reopen'])->name('work-tasks.reopen');
+    Route::resource('work-tasks', WorkTaskController::class);
+
+    // My Work — Operational Notes & Reminders
+    Route::patch('work-notes/{work_note}/toggle-pin', [WorkNoteController::class, 'togglePin'])->name('work-notes.toggle-pin');
+    Route::resource('work-notes', WorkNoteController::class)->only(['index', 'store', 'update', 'destroy']);
 
 });
 

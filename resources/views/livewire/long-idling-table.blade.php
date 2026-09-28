@@ -24,6 +24,44 @@
                        class="pl-9 pr-4 py-2 text-sm border border-slate-300 rounded-lg w-56 sm:w-64 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none">
             </div>
 
+            {{-- Date Range Controls --}}
+            @if($dateMode === 'range')
+                <div class="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1">
+                    <span class="text-xs font-bold text-slate-600 flex items-center gap-1">
+                        <svg class="h-3.5 w-3.5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+                        </svg>
+                        Dates:
+                    </span>
+                    <input type="date" wire:model.live="startDate"
+                           class="py-1 px-1.5 text-xs font-semibold rounded-md border border-slate-300 bg-white text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 cursor-pointer">
+                    <span class="text-xs text-slate-400 font-bold">&rarr;</span>
+                    <input type="date" wire:model.live="endDate"
+                           class="py-1 px-1.5 text-xs font-semibold rounded-md border border-slate-300 bg-white text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 cursor-pointer">
+                </div>
+            @else
+                <a href="{{ route('reports.range', ['start_date' => $startDate, 'end_date' => $endDate]) }}"
+                   class="inline-flex items-center gap-1.5 py-2 px-2.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 text-xs font-semibold text-slate-600 transition-colors"
+                   title="View multiple dates together and checklist across dates">
+                    <svg class="h-3.5 w-3.5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+                    </svg>
+                    <span>Multi-Date Range</span>
+                </a>
+            @endif
+
+            {{-- Device Name Dropdown --}}
+            <div class="flex items-center gap-1.5">
+                <label for="device-select" class="text-xs font-semibold text-slate-500 whitespace-nowrap">Device:</label>
+                <select id="device-select" wire:model.live="filterDevice"
+                        class="py-2 pl-2.5 pr-8 text-xs font-semibold rounded-lg border border-slate-300 bg-white text-slate-700 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none cursor-pointer">
+                    <option value="all">All Devices ({{ count($rows) }})</option>
+                    @foreach($this->deviceList as $deviceName => $count)
+                        <option value="{{ $deviceName }}">{{ $deviceName }} ({{ $count }})</option>
+                    @endforeach
+                </select>
+            </div>
+
             {{-- Sort Dropdown --}}
             <div class="flex items-center gap-1.5">
                 <label for="sort-select" class="text-xs font-semibold text-slate-500 whitespace-nowrap">Sort:</label>
@@ -52,7 +90,7 @@
             {{-- Quick Filter Pills --}}
             <div class="hidden xl:flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
                 <button type="button" wire:click="setSort('default')"
-                        class="px-2.5 py-1 text-xs font-bold rounded-md transition-colors {{ $sortBy === 'default' && $filterDuration === 'all' ? 'bg-white text-slate-800 shadow-2xs' : 'text-slate-500 hover:text-slate-800' }}">
+                        class="px-2.5 py-1 text-xs font-bold rounded-md transition-colors {{ $sortBy === 'default' && $filterDuration === 'all' && $filterDevice === 'all' ? 'bg-white text-slate-800 shadow-2xs' : 'text-slate-500 hover:text-slate-800' }}">
                     All
                 </button>
                 <button type="button" wire:click="setSort('stay_time_desc')"
@@ -73,14 +111,38 @@
             </div>
         </div>
 
-        <div class="flex items-center gap-2 self-end lg:self-auto">
-            <button type="button" @click="$dispatch('open-import-modal')"
-                class="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-xs cursor-pointer">
-                <svg class="h-4 w-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+        <div class="flex items-center gap-2 self-end lg:self-auto flex-wrap">
+            {{-- Download PDF Button --}}
+            <a href="{{ $this->pdfUrl }}" target="_blank"
+                class="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3.5 py-2 text-sm font-semibold text-white hover:bg-red-700 transition-colors shadow-xs cursor-pointer"
+                title="{{ count($selectedIds) > 0 ? 'Download PDF for '.count($selectedIds).' selected records' : ($filterDevice !== 'all' ? 'Download PDF for device '.$filterDevice : ($search ? 'Download PDF for &ldquo;'.$search.'&rdquo;' : 'Download PDF Report')) }}">
+                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m.75 12 3 3m0 0 3-3m-3 3v-6m-1.5-9H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
                 </svg>
-                Import Data
-            </button>
+                <span>
+                    @if(count($selectedIds) > 0)
+                        PDF ({{ count($selectedIds) }})
+                    @elseif($filterDevice !== 'all')
+                        PDF ({{ $filterDevice }})
+                    @elseif($search)
+                        PDF ({{ $search }})
+                    @elseif($dateMode === 'range')
+                        PDF (Range)
+                    @else
+                        PDF
+                    @endif
+                </span>
+            </a>
+
+            @if(!empty($reportId))
+                <button type="button" @click="$dispatch('open-import-modal')"
+                    class="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-xs cursor-pointer">
+                    <svg class="h-4 w-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+                    </svg>
+                    Import Data
+                </button>
+            @endif
             <button type="button" wire:click="saveAll" wire:loading.attr="disabled" wire:target="saveAll"
                 class="inline-flex items-center gap-2 rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700 disabled:opacity-60 transition-colors shadow-sm cursor-pointer">
                 <span wire:loading.remove wire:target="saveAll" class="inline-flex items-center gap-2">
@@ -104,10 +166,15 @@
     </div>
 
     {{-- Active Sort / Filter Banner --}}
-    @if($sortBy !== 'default' || $filterDuration !== 'all' || $search !== '')
+    @if($sortBy !== 'default' || $filterDuration !== 'all' || $filterDevice !== 'all' || $search !== '' || $dateMode === 'range')
         <div class="flex items-center justify-between bg-blue-50/70 border border-blue-200 rounded-xl px-4 py-2 text-xs text-blue-900">
             <div class="flex items-center gap-2 flex-wrap">
                 <span class="font-bold">Active View:</span>
+                @if($dateMode === 'range')
+                    <span class="inline-flex items-center gap-1 bg-indigo-100 text-indigo-900 font-bold px-2 py-0.5 rounded-md border border-indigo-300">
+                        📅 Range: {{ date('M j, Y', strtotime($startDate)) }} &ndash; {{ date('M j, Y', strtotime($endDate)) }}
+                    </span>
+                @endif
                 @if($sortBy === 'stay_time_desc')
                     <span class="inline-flex items-center gap-1 bg-amber-100 text-amber-900 font-bold px-2 py-0.5 rounded-md border border-amber-300">
                         ⏱ Most Stay Time (Highest to Lowest)
@@ -123,6 +190,20 @@
                 @elseif($sortBy === 'device_desc')
                     <span class="inline-flex items-center gap-1 bg-blue-100 text-blue-900 font-bold px-2 py-0.5 rounded-md border border-blue-300">
                         🔤 Device Name (Z &rarr; A)
+                    </span>
+                @elseif($sortBy === 'date_desc')
+                    <span class="inline-flex items-center gap-1 bg-blue-100 text-blue-900 font-bold px-2 py-0.5 rounded-md border border-blue-300">
+                        📅 Newest Dates First
+                    </span>
+                @elseif($sortBy === 'date_asc')
+                    <span class="inline-flex items-center gap-1 bg-blue-100 text-blue-900 font-bold px-2 py-0.5 rounded-md border border-blue-300">
+                        📅 Oldest Dates First
+                    </span>
+                @endif
+
+                @if($filterDevice !== 'all')
+                    <span class="inline-flex items-center gap-1 bg-cyan-100 text-cyan-900 font-bold px-2 py-0.5 rounded-md border border-cyan-300">
+                        📱 Device: {{ $filterDevice }}
                     </span>
                 @endif
 
@@ -141,10 +222,53 @@
                 <span class="text-slate-500 font-normal">({{ count($filteredRows) }} of {{ count($rows) }} records shown)</span>
             </div>
 
-            <button type="button" wire:click="$set('sortBy', 'default'); $set('filterDuration', 'all'); $set('search', '')"
+            <button type="button" wire:click="$set('sortBy', 'default'); $set('filterDuration', 'all'); $set('filterDevice', 'all'); $set('search', ''); clearSelection()"
                     class="text-blue-700 hover:text-blue-900 font-bold underline hover:no-underline ml-2 whitespace-nowrap cursor-pointer">
                 Reset Filters
             </button>
+        </div>
+    @endif
+
+    {{-- Active Selection Bar (Checklist Banner) --}}
+    @if(count($selectedIds) > 0)
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-gradient-to-r from-blue-700 via-indigo-700 to-blue-800 text-white rounded-xl px-4 py-3 shadow-md border border-blue-600">
+            <div class="flex items-center gap-3 flex-wrap">
+                <span class="inline-flex items-center justify-center gap-1.5 h-7 px-3 rounded-full bg-white text-blue-800 font-bold text-xs shadow-xs">
+                    <svg class="h-3.5 w-3.5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                    </svg>
+                    {{ count($selectedIds) }} Selected
+                </span>
+                <span class="text-xs font-medium text-blue-100">
+                    {{ count($selectedIds) }} of {{ count($filteredRows) }} records selected from checklist
+                </span>
+                @if($selectedDatesSummary)
+                    <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-900/60 text-blue-200 border border-blue-400/40">
+                        <svg class="h-3 w-3 text-blue-300" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" /></svg>
+                        {{ $selectedDatesSummary }}
+                    </span>
+                @endif
+                <span class="text-blue-300 text-xs hidden sm:inline">&bull;</span>
+                <button type="button" wire:click="selectAllFiltered"
+                        class="text-xs font-semibold text-white hover:text-blue-100 underline decoration-blue-300 underline-offset-2 cursor-pointer transition-colors">
+                    Select All Visible ({{ count($filteredRows) }})
+                </button>
+                <span class="text-blue-300 text-xs hidden sm:inline">&bull;</span>
+                <button type="button" wire:click="clearSelection"
+                        class="text-xs font-semibold text-blue-200 hover:text-white cursor-pointer transition-colors">
+                    Clear Selection
+                </button>
+            </div>
+
+            <div class="flex items-center gap-2 shrink-0">
+                <a href="{{ $this->pdfUrl }}" target="_blank"
+                   class="inline-flex items-center gap-1.5 rounded-lg bg-red-600 hover:bg-red-700 px-3.5 py-1.5 text-xs font-bold text-white transition-all shadow-xs hover:shadow cursor-pointer">
+                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m.75 12 3 3m0 0 3-3m-3 3v-6m-1.5-9H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                    </svg>
+                    Download Selected PDF ({{ count($selectedIds) }})
+                </a>
+            </div>
         </div>
     @endif
 
@@ -154,7 +278,30 @@
             <table class="w-full text-left text-xs border-collapse">
                 <thead class="bg-slate-50/95 text-slate-500 font-bold uppercase tracking-wider text-[10px] border-b border-slate-200 sticky top-0 z-10 backdrop-blur-xs">
                     <tr>
-                        <th class="py-3 px-3 text-center w-10 text-slate-400">#</th>
+                        <th class="py-3 px-2 text-center w-9">
+                            <input type="checkbox" wire:model.live="selectAll"
+                                   class="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5 cursor-pointer"
+                                   title="Select or deselect all visible records">
+                        </th>
+                        <th class="py-3 px-2 text-center w-10 text-slate-400">#</th>
+                        @if($hasMultipleDates)
+                            <th wire:click="toggleSort('date')"
+                                class="py-3 px-3 min-w-[100px] text-center cursor-pointer hover:bg-slate-100/80 hover:text-slate-800 transition-colors select-none group"
+                                title="Click to sort by Report Date">
+                                <div class="inline-flex items-center justify-center gap-1.5">
+                                    <span>Date</span>
+                                    @if($sortBy === 'date_desc')
+                                        <span class="inline-flex items-center text-[10px] text-blue-700 font-bold bg-blue-100 px-1 py-0.5 rounded">&darr; New</span>
+                                    @elseif($sortBy === 'date_asc')
+                                        <span class="inline-flex items-center text-[10px] text-blue-700 font-bold bg-blue-100 px-1 py-0.5 rounded">&uarr; Old</span>
+                                    @else
+                                        <svg class="h-3 w-3 text-slate-400 group-hover:text-slate-600 opacity-60 group-hover:opacity-100 transition-opacity" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 15 12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" />
+                                        </svg>
+                                    @endif
+                                </div>
+                            </th>
+                        @endif
                         <th wire:click="toggleSort('device_name')"
                             class="py-3 px-3 min-w-[150px] cursor-pointer hover:bg-slate-100/80 hover:text-slate-800 transition-colors select-none group"
                             title="Click to sort alphabetically by Device Name">
@@ -172,6 +319,7 @@
                             </div>
                         </th>
                         <th class="py-3 px-3 min-w-[140px]">IMEI</th>
+                        <th class="py-3 px-3 min-w-[130px]">Driver Name</th>
                         <th class="py-3 px-3 min-w-[110px]">Model</th>
                         <th class="py-3 px-3 min-w-[95px]">State</th>
                         <th class="py-3 px-3 min-w-[105px] text-center">Start Time</th>
@@ -202,17 +350,43 @@
                 <tbody class="divide-y divide-slate-100">
                     @forelse($filteredRows as $index => $row)
                         @php
-                            $origIndex = $row['_orig_index'] ?? $index;
-                            $rowKey = $row['_key'] ?? ('row-' . ($row['id'] ?? 'new-' . $origIndex));
+                            $origIndex  = $row['_orig_index'] ?? $index;
+                            $rowId      = $row['id'] ?? null;
+                            $rowIsNew   = $row['is_new'] ?? ($rowId === null);
+                            $rowKey     = $row['_key'] ?? ('row-' . ($rowId ?? 'new-' . $origIndex));
+                            $isSelected = $rowId && in_array((int) $rowId, array_map('intval', $selectedIds), true);
                         @endphp
-                        <tr class="{{ $row['dirty'] ? 'bg-amber-50/40 border-l-4 border-l-amber-400' : 'bg-white hover:bg-blue-50/20 border-l-4 border-l-transparent' }} transition-colors"
+                        <tr class="{{ $isSelected ? 'bg-blue-50/80 border-l-4 border-l-blue-600' : (($row['dirty'] ?? false) ? 'bg-amber-50/40 border-l-4 border-l-amber-400' : 'bg-white hover:bg-blue-50/20 border-l-4 border-l-transparent') }} transition-colors"
                             wire:key="{{ $rowKey }}"
-                            @paste="handleRowPaste($event, {{ $origIndex }}, {{ $row['id'] ? $row['id'] : 'null' }})">
+                            @paste="handleRowPaste($event, {{ $origIndex }}, {{ $rowId ?? 'null' }})">
+
+                            {{-- Select Checklist Checkbox --}}
+                            <td class="py-2.5 px-2 text-center">
+                                @if($rowId)
+                                    <input type="checkbox" wire:model.live="selectedIds" value="{{ $rowId }}"
+                                           class="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5 cursor-pointer"
+                                           title="Select this record for PDF download">
+                                @else
+                                    <input type="checkbox" disabled class="rounded border-slate-200 text-slate-300 h-3.5 w-3.5 cursor-not-allowed opacity-40" title="Save row first">
+                                @endif
+                            </td>
 
                             {{-- # --}}
-                            <td class="py-2.5 px-3 text-center text-[11px] text-slate-400 font-mono font-bold">
+                            <td class="py-2.5 px-2 text-center text-[11px] text-slate-400 font-mono font-bold">
                                 {{ $index + 1 }}
                             </td>
+
+                            {{-- Date --}}
+                            @if($hasMultipleDates)
+                                <td class="py-2 px-2.5 text-center whitespace-nowrap">
+                                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200" title="{{ $row['formatted_date'] }}">
+                                        <svg class="h-3 w-3 text-slate-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+                                        </svg>
+                                        {{ $row['formatted_date'] ?: '—' }}
+                                    </span>
+                                </td>
+                            @endif
 
                             {{-- Device Name --}}
                             <td class="py-2 px-2.5">
@@ -226,6 +400,13 @@
                                 <input type="text" wire:model="rows.{{ $origIndex }}.imei"
                                        placeholder="IMEI"
                                        class="w-full rounded-lg border border-slate-200/90 bg-white/80 hover:bg-white hover:border-slate-300 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 text-[11px] font-mono text-slate-700 py-1.5 px-2 outline-none transition-all placeholder:text-slate-300">
+                            </td>
+
+                            {{-- Driver Name --}}
+                            <td class="py-2 px-2.5">
+                                <input type="text" wire:model="rows.{{ $origIndex }}.driver_name"
+                                       placeholder="Driver name"
+                                       class="w-full rounded-lg border border-slate-200/90 bg-white/80 hover:bg-white hover:border-slate-300 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 text-xs text-slate-700 py-1.5 px-2.5 outline-none transition-all placeholder:text-slate-300">
                             </td>
 
                             {{-- Model --}}
@@ -316,7 +497,7 @@
                                            const f = $event.target.files[0];
                                            if (!f) return;
                                            uploading = true;
-                                           uploadScreenshotFile(f, {{ $origIndex }}, {{ $row['id'] ? $row['id'] : 'null' }})
+                                           uploadScreenshotFile(f, {{ $origIndex }}, {{ $rowId ?? 'null' }})
                                                .finally(() => {
                                                    uploading = false;
                                                    $event.target.value = '';
@@ -371,7 +552,7 @@
                                                 <button type="button"
                                                     @click="
                                                         uploading = true;
-                                                        pasteScreenshotFromClipboard({{ $origIndex }}, {{ $row['id'] ? $row['id'] : 'null' }})
+                                                        pasteScreenshotFromClipboard({{ $origIndex }}, {{ $rowId ?? 'null' }})
                                                             .finally(() => uploading = false);
                                                     "
                                                     class="inline-flex items-center gap-0.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 hover:text-slate-900 px-1.5 py-1 text-[11px] font-medium text-slate-500 shadow-2xs transition-all cursor-pointer"
@@ -387,8 +568,8 @@
 
                             {{-- Delete --}}
                             <td class="py-2 px-2 text-center">
-                                @if(($deleteConfirmId !== null && $deleteConfirmId === $row['id']) ||
-                                    ($deleteConfirmIndex !== null && $deleteConfirmIndex === $origIndex && $row['is_new']))
+                                @if(($deleteConfirmId !== null && $deleteConfirmId === $rowId) ||
+                                    ($deleteConfirmIndex !== null && $deleteConfirmIndex === $origIndex && $rowIsNew))
                                     <div class="flex items-center justify-center gap-1">
                                         <button type="button" wire:click="deleteRow"
                                             class="rounded-lg bg-red-600 px-2 py-1 text-[10px] font-bold text-white hover:bg-red-700 shadow-2xs cursor-pointer">Yes</button>
@@ -396,8 +577,8 @@
                                             class="rounded-lg bg-slate-200 px-2 py-1 text-[10px] font-semibold text-slate-700 hover:bg-slate-300 cursor-pointer">No</button>
                                     </div>
                                 @else
-                                    @if($row['id'])
-                                        <button type="button" wire:click="confirmDelete({{ $row['id'] }})"
+                                    @if($rowId)
+                                        <button type="button" wire:click="confirmDelete({{ $rowId }})"
                                             class="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer" title="Delete record">
                                             <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" /></svg>
                                         </button>
@@ -412,7 +593,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="13" class="px-6 py-16 text-center">
+                            <td colspan="{{ $hasMultipleDates ? 16 : 15 }}" class="px-6 py-16 text-center">
                                 <div class="flex flex-col items-center max-w-sm mx-auto">
                                     <div class="h-12 w-12 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 mb-3">
                                         <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
@@ -421,14 +602,14 @@
                                     </div>
                                     <p class="text-sm font-bold text-slate-700">No records found</p>
                                     <p class="text-xs text-slate-400 mt-1">
-                                        @if($search || $sortBy !== 'default' || $filterDuration !== 'all')
+                                        @if($search || $sortBy !== 'default' || $filterDuration !== 'all' || $filterDevice !== 'all')
                                             No idling records matched your current filters or search term.
                                         @else
                                             No long idling incidents recorded for this date yet.
                                         @endif
                                     </p>
-                                    @if($search || $sortBy !== 'default' || $filterDuration !== 'all')
-                                        <button type="button" wire:click="$set('sortBy', 'default'); $set('filterDuration', 'all'); $set('search', '')"
+                                    @if($search || $sortBy !== 'default' || $filterDuration !== 'all' || $filterDevice !== 'all')
+                                        <button type="button" wire:click="$set('sortBy', 'default'); $set('filterDuration', 'all'); $set('filterDevice', 'all'); $set('search', ''); clearSelection()"
                                             class="mt-3 inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer">
                                             Reset Filters
                                         </button>
@@ -458,6 +639,12 @@
                 <span class="text-slate-500 font-medium">
                     Showing <strong class="text-slate-800">{{ count($filteredRows) }}</strong> of {{ count($rows) }} records
                 </span>
+                @if(count($selectedIds) > 0)
+                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 shadow-2xs">
+                        <span class="inline-block h-2 w-2 rounded-full bg-blue-600"></span>
+                        {{ count($selectedIds) }} selected
+                    </span>
+                @endif
             </div>
             <div class="flex items-center gap-3">
                 @if($this->hasDirty)
@@ -516,11 +703,14 @@ async function uploadScreenshotFile(file, rowIndex, recordId = null) {
     if (recordId && recordId !== 'null') {
         fd.append('record_id', recordId);
     }
+    @if(!empty($reportId))
+    fd.append('report_id', {{ $reportId }});
+    @endif
     const token = document.querySelector('meta[name=csrf-token]') ? document.querySelector('meta[name=csrf-token]').content : '{{ csrf_token() }}';
     fd.append('_token', token);
 
     try {
-        const res = await fetch('{{ route('reports.uploadScreenshot', $reportId) }}', {
+        const res = await fetch('{{ route('reports.uploadGenericScreenshot') }}', {
             method: 'POST',
             body: fd
         });

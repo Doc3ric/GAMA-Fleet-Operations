@@ -3,7 +3,9 @@
 namespace App\Providers;
 
 use App\Models\AdvancedItinerary;
+use App\Models\WorkTask;
 use App\Policies\AdvancedItineraryPolicy;
+use App\Policies\WorkTaskPolicy;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 
@@ -23,5 +25,6 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Gate::policy(AdvancedItinerary::class, AdvancedItineraryPolicy::class);
+        Gate::policy(WorkTask::class, WorkTaskPolicy::class);
     }
 }

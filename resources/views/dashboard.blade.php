@@ -102,6 +102,204 @@
 
         </div>
 
+        {{-- ===== MY WORK ===== --}}
+        <div class="rounded-xl bg-white shadow-sm border border-slate-200 overflow-hidden"
+             x-data="{
+                showQuickTask: false,
+                qtTitle: '',
+                qtDue: '',
+                submitting: false
+             }">
+
+            {{-- Section Header --}}
+            <div class="flex items-center justify-between px-5 py-3.5 border-b border-slate-100">
+                <div class="flex items-center gap-2.5">
+                    <div class="h-7 w-7 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600">
+                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25ZM6.75 12h.008v.008H6.75V12Zm0 3h.008v.008H6.75V15Zm0 3h.008v.008H6.75V18Z" />
+                        </svg>
+                    </div>
+                    <h2 class="text-sm font-bold text-slate-800">My Work</h2>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button type="button" @click="showQuickTask = true"
+                            class="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-xs cursor-pointer">
+                        <svg class="h-3.5 w-3.5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                        </svg>
+                        Quick Task
+                    </button>
+                    <a href="{{ route('work-tasks.calendar') }}" class="text-xs font-semibold text-slate-600 hover:text-slate-900 transition-colors">Calendar</a>
+                    <span class="text-slate-300">|</span>
+                    <a href="{{ route('work-tasks.accomplishments') }}" class="text-xs font-semibold text-emerald-600 hover:text-emerald-700 transition-colors">Accomplishments</a>
+                    <span class="text-slate-300">|</span>
+                    <a href="{{ route('work-notes.index') }}" class="text-xs font-semibold text-amber-600 hover:text-amber-700 transition-colors">Notes</a>
+                    <span class="text-slate-300">|</span>
+                    <a href="{{ route('work-tasks.index') }}" class="text-xs font-semibold text-blue-600 hover:text-blue-700 transition-colors">View all &rarr;</a>
+                </div>
+            </div>
+
+            {{-- Summary Badges --}}
+            <div class="flex flex-wrap gap-2.5 px-5 py-2.5 border-b border-slate-100 bg-slate-50/50">
+                <a href="{{ route('work-tasks.index', ['status' => 'overdue']) }}" class="flex items-center gap-1.5 hover:opacity-80">
+                    <span class="inline-flex items-center gap-1 rounded-full bg-red-50 border border-red-200 px-2.5 py-0.5 text-xs font-semibold text-red-700">
+                        <span class="h-1.5 w-1.5 rounded-full bg-red-500"></span>
+                        Overdue: {{ $workOverdueCount }}
+                    </span>
+                </a>
+                <a href="{{ route('work-tasks.index', ['status' => 'due_today']) }}" class="flex items-center gap-1.5 hover:opacity-80">
+                    <span class="inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 px-2.5 py-0.5 text-xs font-semibold text-amber-700">
+                        <span class="h-1.5 w-1.5 rounded-full bg-amber-400"></span>
+                        Due Today: {{ $workDueTodayCount }}
+                    </span>
+                </a>
+                <a href="{{ route('work-tasks.index', ['status' => 'in_progress']) }}" class="flex items-center gap-1.5 hover:opacity-80">
+                    <span class="inline-flex items-center gap-1 rounded-full bg-blue-50 border border-blue-200 px-2.5 py-0.5 text-xs font-semibold text-blue-700">
+                        <span class="h-1.5 w-1.5 rounded-full bg-blue-500"></span>
+                        In Progress: {{ $workInProgressCount }}
+                    </span>
+                </a>
+                <a href="{{ route('work-tasks.index') }}" class="flex items-center gap-1.5 hover:opacity-80">
+                    <span class="inline-flex items-center gap-1 rounded-full bg-slate-100 border border-slate-200 px-2.5 py-0.5 text-xs font-semibold text-slate-600">
+                        <span class="h-1.5 w-1.5 rounded-full bg-slate-400"></span>
+                        Upcoming: {{ $workUpcomingCount }}
+                    </span>
+                </a>
+            </div>
+
+            {{-- Task List --}}
+            <div class="divide-y divide-slate-100">
+                @forelse($dashboardTasks as $dashTask)
+                    <div class="flex items-start justify-between gap-4 px-5 py-3 hover:bg-slate-50/70 transition-colors {{ $dashTask->is_overdue ? 'bg-red-50/15' : '' }}">
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <a href="{{ route('work-tasks.show', $dashTask) }}" class="text-xs font-bold text-slate-800 hover:text-blue-600">
+                                    {{ $dashTask->title }}
+                                </a>
+                                @if($dashTask->is_overdue)
+                                    <span class="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-bold bg-red-100 text-red-800">
+                                        OVERDUE
+                                    </span>
+                                @elseif($dashTask->is_due_today)
+                                    <span class="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-100 text-amber-800">
+                                        DUE TODAY
+                                    </span>
+                                @endif
+                                @if($dashTask->category)
+                                    <span class="text-[10px] text-slate-400">
+                                        &bull; {{ $dashTask->category }}
+                                    </span>
+                                @endif
+                            </div>
+                            <div class="mt-1 flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                                @if($dashTask->due_date)
+                                    <span class="{{ $dashTask->is_overdue ? 'text-red-600 font-semibold' : '' }}">
+                                        Due: {{ $dashTask->due_date->format('M d, Y') }}
+                                    </span>
+                                @endif
+                                @if($dashTask->next_action)
+                                    <span class="flex items-center gap-1 text-slate-700">
+                                        <svg class="h-3 w-3 text-blue-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
+                                        </svg>
+                                        <span class="font-medium truncate max-w-xs">{{ $dashTask->next_action }}</span>
+                                    </span>
+                                @endif
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-1.5 shrink-0">
+                            <a href="{{ route('work-tasks.show', $dashTask) }}"
+                               class="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs">
+                                <svg class="h-3 w-3 text-slate-400" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                                </svg>
+                                <span>Open</span>
+                            </a>
+                            @if(!$dashTask->isCompleted())
+                                <form method="POST" action="{{ route('work-tasks.complete', $dashTask) }}">
+                                    @csrf
+                                    @method('PATCH')
+                                    <button type="submit"
+                                            class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-600 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors shadow-2xs cursor-pointer">
+                                        <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                                        </svg>
+                                        <span>Done</span>
+                                    </button>
+                                </form>
+                            @endif
+                        </div>
+                    </div>
+                @empty
+                    <div class="px-5 py-8 text-center">
+                        <p class="text-xs font-semibold text-slate-600">All caught up!</p>
+                        <p class="text-[11px] text-slate-400 mt-0.5">No pending work tasks at this time.</p>
+                        <a href="{{ route('work-tasks.create') }}"
+                           class="mt-2.5 inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 transition-colors shadow-xs">
+                            + Add Task
+                        </a>
+                    </div>
+                @endforelse
+            </div>
+
+            {{-- Quick Task Modal --}}
+            <div x-show="showQuickTask"
+                 x-transition:enter="ease-out duration-150"
+                 x-transition:enter-start="opacity-0"
+                 x-transition:enter-end="opacity-100"
+                 x-transition:leave="ease-in duration-100"
+                 x-transition:leave-start="opacity-100"
+                 x-transition:leave-end="opacity-0"
+                 class="fixed inset-0 z-50 flex items-center justify-center px-4"
+                 style="display: none;">
+                <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-2xs" @click="showQuickTask = false"></div>
+                <div class="relative bg-white rounded-xl shadow-lg w-full max-w-sm border border-slate-200" @click.stop>
+                    <div class="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+                        <h3 class="text-xs font-bold text-slate-800 uppercase tracking-wider">Quick Task</h3>
+                        <button type="button" @click="showQuickTask = false" class="text-slate-400 hover:text-slate-600 text-sm">✕</button>
+                    </div>
+                    <form method="POST" action="{{ route('work-tasks.store') }}" @submit="submitting = true">
+                        @csrf
+                        <input type="hidden" name="status" value="pending">
+                        <input type="hidden" name="priority" value="normal">
+                        <input type="hidden" name="sort_order" value="0">
+                        <div class="p-4 space-y-3">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">
+                                    Task Title <span class="text-red-500">*</span>
+                                </label>
+                                <input type="text" name="title" x-model="qtTitle" required
+                                       placeholder="e.g. Check CV-05 GPS signal..."
+                                       class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">
+                                    Due Date <span class="text-slate-400 font-normal normal-case">(optional)</span>
+                                </label>
+                                <input type="date" name="due_date" x-model="qtDue"
+                                       class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-end gap-2 px-4 py-3 border-t border-slate-100 bg-slate-50">
+                            <button type="button" @click="showQuickTask = false; qtTitle = ''; qtDue = ''"
+                                    class="px-3 py-1.5 bg-white border border-slate-300 text-slate-700 text-xs font-semibold rounded-lg hover:bg-slate-50">
+                                Cancel
+                            </button>
+                            <button type="submit" :disabled="submitting || !qtTitle.trim()"
+                                    :class="(submitting || !qtTitle.trim()) ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-700'"
+                                    class="px-4 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg shadow-xs cursor-pointer">
+                                <span x-show="!submitting">Save</span>
+                                <span x-show="submitting">Saving...</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+        </div>
+        {{-- ===== END MY WORK ===== --}}
+
         {{-- Fuel Consumption Benchmark Banner --}}
         <div class="rounded-2xl bg-white border border-slate-200 p-5 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
             <div class="flex items-center gap-3.5">

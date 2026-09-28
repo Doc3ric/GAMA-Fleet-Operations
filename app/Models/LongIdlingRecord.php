@@ -12,6 +12,7 @@ class LongIdlingRecord extends Model
     protected $fillable = [
         'report_id',
         'device_name',
+        'driver_name',
         'imei',
         'model',
         'state',

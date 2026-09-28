@@ -10,7 +10,15 @@ use Livewire\Component;
 
 class LongIdlingTable extends Component
 {
-    public int $reportId;
+    public ?int $reportId = null;
+
+    public ?string $startDate = null;
+
+    public ?string $endDate = null;
+
+    public string $dateMode = 'single'; // 'single' or 'range'
+
+    public array $availableDates = [];
 
     public array $rows = [];
 
@@ -23,6 +31,12 @@ class LongIdlingTable extends Component
     public string $sortBy = 'default';
 
     public string $filterDuration = 'all';
+
+    public string $filterDevice = 'all';
+
+    public array $selectedIds = [];
+
+    public bool $selectAll = false;
 
     public ?string $savedMessage = null;
 
@@ -37,38 +51,103 @@ class LongIdlingTable extends Component
         return false;
     }
 
-    public function mount(int $reportId): void
-    {
+    public function mount(
+        ?int $reportId = null,
+        ?string $startDate = null,
+        ?string $endDate = null,
+        string $dateMode = 'single'
+    ): void {
         $this->reportId = $reportId;
+        $this->startDate = $startDate;
+        $this->endDate = $endDate;
+        $this->dateMode = $dateMode;
+
+        $this->loadAvailableDates();
+
+        if ($this->reportId && $this->dateMode === 'single') {
+            $report = Report::find($this->reportId);
+            if ($report) {
+                $this->startDate = $report->report_date->format('Y-m-d');
+                $this->endDate = $report->report_date->format('Y-m-d');
+            }
+        }
+
+        if (empty($this->startDate) || empty($this->endDate)) {
+            if (! empty($this->availableDates)) {
+                $this->endDate = $this->availableDates[0];
+                $this->startDate = count($this->availableDates) > 1 ? end($this->availableDates) : $this->availableDates[0];
+            } else {
+                $this->startDate = now()->subDays(7)->format('Y-m-d');
+                $this->endDate = now()->format('Y-m-d');
+            }
+        }
+
         $this->loadRows();
+    }
+
+    public function loadAvailableDates(): void
+    {
+        $this->availableDates = Report::where('created_by', auth()->id())
+            ->where('report_type', 'long_idling')
+            ->orderByDesc('report_date')
+            ->pluck('report_date')
+            ->map(fn ($d) => $d->format('Y-m-d'))
+            ->unique()
+            ->values()
+            ->toArray();
     }
 
     public function loadRows(): void
     {
-        $this->rows = LongIdlingRecord::where('report_id', $this->reportId)
-            ->orderBy('sort_order')
-            ->orderBy('id')
-            ->get()
-            ->map(fn ($r) => [
-                'id' => $r->id,
-                'device_name' => $r->device_name ?? '',
-                'imei' => $r->imei ?? '',
-                'model' => $r->model ?? '',
-                'state' => $r->state ?? '',
-                'start_time' => $r->start_time ? substr($r->start_time, 0, 8) : '',
-                'end_time' => $r->end_time ? substr($r->end_time, 0, 8) : '',
-                'stay_time' => $r->stay_time ?? '',
-                'latitude' => $r->latitude ?? '',
-                'longitude' => $r->longitude ?? '',
-                'coordinates' => ($r->latitude !== null && $r->longitude !== null) ? "{$r->latitude}, {$r->longitude}" : '',
-                'address' => $r->address ?? '',
-                'remarks' => $r->remarks ?? '',
-                'image' => $r->image,
-                'image_url' => $r->image_url,
-                'is_new' => false,
-                'dirty' => false,
-                '_key' => 'rec-'.$r->id,
-            ])
+        $userId = auth()->id();
+
+        if ($this->dateMode === 'range' || empty($this->reportId)) {
+            $start = min($this->startDate ?? now()->toDateString(), $this->endDate ?? now()->toDateString());
+            $end = max($this->startDate ?? now()->toDateString(), $this->endDate ?? now()->toDateString());
+
+            $records = LongIdlingRecord::select('long_idling_records.*')
+                ->join('reports', 'long_idling_records.report_id', '=', 'reports.id')
+                ->where('reports.created_by', $userId)
+                ->where('reports.report_type', 'long_idling')
+                ->whereDate('reports.report_date', '>=', $start)
+                ->whereDate('reports.report_date', '<=', $end)
+                ->with('report')
+                ->orderByDesc('reports.report_date')
+                ->orderBy('long_idling_records.sort_order')
+                ->orderBy('long_idling_records.id')
+                ->get();
+        } else {
+            $records = LongIdlingRecord::where('report_id', $this->reportId)
+                ->with('report')
+                ->orderBy('sort_order')
+                ->orderBy('id')
+                ->get();
+        }
+
+        $this->rows = $records->map(fn ($r) => [
+            'id' => $r->id,
+            'report_id' => $r->report_id,
+            'report_date' => $r->report?->report_date?->format('Y-m-d') ?? '',
+            'formatted_date' => $r->report?->report_date?->format('M j, Y') ?? '',
+            'device_name' => $r->device_name ?? '',
+            'driver_name' => $r->driver_name ?? '',
+            'imei' => $r->imei ?? '',
+            'model' => $r->model ?? '',
+            'state' => $r->state ?? '',
+            'start_time' => $r->start_time ? substr($r->start_time, 0, 8) : '',
+            'end_time' => $r->end_time ? substr($r->end_time, 0, 8) : '',
+            'stay_time' => $r->stay_time ?? '',
+            'latitude' => $r->latitude ?? '',
+            'longitude' => $r->longitude ?? '',
+            'coordinates' => ($r->latitude !== null && $r->longitude !== null) ? "{$r->latitude}, {$r->longitude}" : '',
+            'address' => $r->address ?? '',
+            'remarks' => $r->remarks ?? '',
+            'image' => $r->image,
+            'image_url' => $r->image_url,
+            'is_new' => false,
+            'dirty' => false,
+            '_key' => 'rec-'.$r->id,
+        ])
             ->toArray();
     }
 
@@ -77,9 +156,16 @@ class LongIdlingTable extends Component
         $this->search = '';
         $this->savedMessage = null;
 
+        $targetDate = $this->endDate ?? now()->toDateString();
+        $targetReportId = $this->reportId;
+
         $this->rows[] = [
             'id' => null,
+            'report_id' => $targetReportId,
+            'report_date' => $targetDate,
+            'formatted_date' => date('M j, Y', strtotime($targetDate)),
             'device_name' => '',
+            'driver_name' => '',
             'imei' => '',
             'model' => '',
             'state' => '',
@@ -101,7 +187,13 @@ class LongIdlingTable extends Component
 
     public function updatedRows($value, $key): void
     {
-        [$index, $field] = explode('.', $key, 2);
+        $parts = explode('.', $key, 2);
+
+        if (count($parts) < 2) {
+            return;
+        }
+
+        [$index, $field] = $parts;
         $index = (int) $index;
 
         $this->rows[$index]['dirty'] = true;
@@ -121,6 +213,200 @@ class LongIdlingTable extends Component
         }
     }
 
+    public function updatedSearch(): void
+    {
+        $this->selectAll = false;
+        $this->notifyFiltersUpdated();
+    }
+
+    public function updatedFilterDevice(): void
+    {
+        $this->selectAll = false;
+        $this->notifyFiltersUpdated();
+    }
+
+    public function updatedFilterDuration(): void
+    {
+        $this->selectAll = false;
+        $this->notifyFiltersUpdated();
+    }
+
+    public function updatedStartDate(): void
+    {
+        if ($this->startDate && $this->endDate && $this->startDate > $this->endDate) {
+            $this->endDate = $this->startDate;
+        }
+        $this->dateMode = 'range';
+        $this->selectedIds = [];
+        $this->selectAll = false;
+        $this->loadRows();
+        $this->notifyFiltersUpdated();
+    }
+
+    public function updatedEndDate(): void
+    {
+        if ($this->startDate && $this->endDate && $this->startDate > $this->endDate) {
+            $this->startDate = $this->endDate;
+        }
+        $this->dateMode = 'range';
+        $this->selectedIds = [];
+        $this->selectAll = false;
+        $this->loadRows();
+        $this->notifyFiltersUpdated();
+    }
+
+    public function setDateRange(string $start, string $end): void
+    {
+        $this->startDate = min($start, $end);
+        $this->endDate = max($start, $end);
+        $this->dateMode = 'range';
+        $this->selectedIds = [];
+        $this->selectAll = false;
+        $this->loadRows();
+        $this->notifyFiltersUpdated();
+    }
+
+    public function setDateMode(string $mode): void
+    {
+        $this->dateMode = $mode;
+        $this->selectedIds = [];
+        $this->selectAll = false;
+        $this->loadRows();
+        $this->notifyFiltersUpdated();
+    }
+
+    public function updatedSelectAll(bool $value): void
+    {
+        if ($value) {
+            $filtered = $this->getFilteredRows();
+            $this->selectedIds = array_values(array_filter(
+                array_map(fn ($r) => (int) ($r['id'] ?? 0), $filtered),
+                fn ($id) => $id > 0
+            ));
+        } else {
+            $this->selectedIds = [];
+        }
+
+        $this->notifyFiltersUpdated();
+    }
+
+    public function updatedSelectedIds(): void
+    {
+        $this->selectedIds = array_values(array_filter(array_map('intval', (array) $this->selectedIds)));
+        $filtered = $this->getFilteredRows();
+        $filteredIds = array_values(array_filter(
+            array_map(fn ($r) => (int) ($r['id'] ?? 0), $filtered),
+            fn ($id) => $id > 0
+        ));
+
+        if (! empty($filteredIds) && count(array_intersect($filteredIds, $this->selectedIds)) === count($filteredIds)) {
+            $this->selectAll = true;
+        } else {
+            $this->selectAll = false;
+        }
+
+        $this->notifyFiltersUpdated();
+    }
+
+    public function selectAllFiltered(): void
+    {
+        $filtered = $this->getFilteredRows();
+        $this->selectedIds = array_values(array_filter(
+            array_map(fn ($r) => (int) ($r['id'] ?? 0), $filtered),
+            fn ($id) => $id > 0
+        ));
+        $this->selectAll = true;
+        $this->notifyFiltersUpdated();
+    }
+
+    public function clearSelection(): void
+    {
+        $this->selectedIds = [];
+        $this->selectAll = false;
+        $this->notifyFiltersUpdated();
+    }
+
+    public function notifyFiltersUpdated(): void
+    {
+        $this->dispatch('filters-updated', search: $this->search, device: $this->filterDevice, selectedIds: $this->selectedIds);
+        $this->dispatch('search-updated', search: $this->search);
+    }
+
+    public function getDeviceListProperty(): array
+    {
+        $devices = [];
+        foreach ($this->rows as $row) {
+            $name = trim($row['device_name'] ?? '');
+            if ($name !== '') {
+                $devices[$name] = ($devices[$name] ?? 0) + 1;
+            }
+        }
+        ksort($devices, SORT_NATURAL | SORT_FLAG_CASE);
+
+        return $devices;
+    }
+
+    public function getHasMultipleDatesProperty(): bool
+    {
+        $dates = array_unique(array_filter(array_column($this->rows, 'report_date')));
+
+        return count($dates) > 1 || $this->dateMode === 'range';
+    }
+
+    public function getSelectedDatesSummaryProperty(): string
+    {
+        if (empty($this->selectedIds)) {
+            return '';
+        }
+
+        $dates = [];
+        foreach ($this->rows as $r) {
+            if (in_array((int) ($r['id'] ?? 0), $this->selectedIds, true) && ! empty($r['formatted_date'])) {
+                $dates[$r['formatted_date']] = true;
+            }
+        }
+
+        $uniqueCount = count($dates);
+        if ($uniqueCount <= 1) {
+            return '';
+        }
+
+        return "across {$uniqueCount} dates (".implode(', ', array_keys($dates)).')';
+    }
+
+    public function getPdfUrlProperty(): string
+    {
+        $params = [];
+
+        if (! empty($this->selectedIds)) {
+            $params['ids'] = implode(',', $this->selectedIds);
+        } else {
+            if ($this->filterDevice !== 'all' && ! empty($this->filterDevice)) {
+                $params['device'] = $this->filterDevice;
+            }
+            if (! empty($this->search)) {
+                $params['search'] = $this->search;
+            }
+        }
+
+        if ($this->sortBy !== 'default') {
+            $params['sort'] = $this->sortBy;
+        }
+
+        if ($this->dateMode === 'range' || empty($this->reportId)) {
+            if (empty($this->selectedIds)) {
+                $params['start_date'] = $this->startDate;
+                $params['end_date'] = $this->endDate;
+            }
+
+            return route('reports.generateRangePdf', $params);
+        }
+
+        $params['report'] = $this->reportId;
+
+        return route('reports.generatePdf', $params);
+    }
+
     private function recalcStayTime(int $index): void
     {
         $start = $this->rows[$index]['start_time'] ?? '';
@@ -130,11 +416,10 @@ class LongIdlingTable extends Component
 
     public function saveAll(): void
     {
-        $report = Report::findOrFail($this->reportId);
         $savedCount = 0;
 
         foreach ($this->rows as $index => &$row) {
-            if (! $row['dirty']) {
+            if (! ($row['dirty'] ?? false)) {
                 continue;
             }
 
@@ -168,6 +453,7 @@ class LongIdlingTable extends Component
 
             $data = [
                 'device_name' => $row['device_name'],
+                'driver_name' => $row['driver_name'] ?? null,
                 'imei' => $row['imei'],
                 'model' => $row['model'],
                 'state' => $row['state'] ?: null,
@@ -182,11 +468,35 @@ class LongIdlingTable extends Component
                 'sort_order' => $index,
             ];
 
-            if ($row['id']) {
+            if (! empty($row['id'])) {
                 LongIdlingRecord::where('id', $row['id'])->update($data);
             } else {
-                $record = $report->longIdlingRecords()->create($data);
+                $targetReport = null;
+                if (! empty($row['report_id'])) {
+                    $targetReport = Report::find($row['report_id']);
+                } elseif (! empty($this->reportId)) {
+                    $targetReport = Report::find($this->reportId);
+                }
+
+                if (! $targetReport) {
+                    $targetDate = ! empty($row['report_date']) ? $row['report_date'] : ($this->endDate ?? now()->toDateString());
+                    $targetReport = Report::firstOrCreate(
+                        [
+                            'report_type' => 'long_idling',
+                            'report_date' => $targetDate,
+                            'created_by' => auth()->id(),
+                        ],
+                        [
+                            'status' => 'draft',
+                        ]
+                    );
+                }
+
+                $record = $targetReport->longIdlingRecords()->create($data);
                 $row['id'] = $record->id;
+                $row['report_id'] = $targetReport->id;
+                $row['report_date'] = $targetReport->report_date->format('Y-m-d');
+                $row['formatted_date'] = $targetReport->report_date->format('M j, Y');
                 $row['is_new'] = false;
             }
 
@@ -248,6 +558,7 @@ class LongIdlingTable extends Component
     public function deleteRow(): void
     {
         if ($this->deleteConfirmId) {
+            $this->selectedIds = array_values(array_diff($this->selectedIds, [$this->deleteConfirmId]));
             $record = LongIdlingRecord::find($this->deleteConfirmId);
             if ($record) {
                 if ($record->image) {
@@ -264,6 +575,7 @@ class LongIdlingTable extends Component
 
         $this->deleteConfirmId = null;
         $this->deleteConfirmIndex = null;
+        $this->notifyFiltersUpdated();
     }
 
     public function setSort(string $sort): void
@@ -274,6 +586,15 @@ class LongIdlingTable extends Component
     public function setFilterDuration(string $duration): void
     {
         $this->filterDuration = $duration;
+        $this->selectAll = false;
+        $this->notifyFiltersUpdated();
+    }
+
+    public function setFilterDevice(string $device): void
+    {
+        $this->filterDevice = $device;
+        $this->selectAll = false;
+        $this->notifyFiltersUpdated();
     }
 
     public function toggleSort(string $field): void
@@ -289,6 +610,12 @@ class LongIdlingTable extends Component
                 'device_asc' => 'device_desc',
                 'device_desc' => 'default',
                 default => 'device_asc',
+            };
+        } elseif ($field === 'report_date' || $field === 'date') {
+            $this->sortBy = match ($this->sortBy) {
+                'date_desc' => 'date_asc',
+                'date_asc' => 'default',
+                default => 'date_desc',
             };
         }
     }
@@ -320,11 +647,21 @@ class LongIdlingTable extends Component
             if ($this->search) {
                 $q = strtolower($this->search);
                 $matches = str_contains(strtolower($row['device_name'] ?? ''), $q) ||
+                    str_contains(strtolower($row['driver_name'] ?? ''), $q) ||
                     str_contains(strtolower($row['imei'] ?? ''), $q) ||
                     str_contains(strtolower($row['address'] ?? ''), $q) ||
-                    str_contains(strtolower($row['model'] ?? ''), $q);
+                    str_contains(strtolower($row['model'] ?? ''), $q) ||
+                    str_contains(strtolower($row['formatted_date'] ?? ''), $q) ||
+                    str_contains(strtolower($row['report_date'] ?? ''), $q);
 
                 if (! $matches) {
+                    continue;
+                }
+            }
+
+            // Device filter
+            if ($this->filterDevice !== 'all' && $this->filterDevice !== '') {
+                if (($row['device_name'] ?? '') !== $this->filterDevice) {
                     continue;
                 }
             }
@@ -395,6 +732,24 @@ class LongIdlingTable extends Component
 
                 return $cmp; // Alphabetical Z-A
             });
+        } elseif ($this->sortBy === 'date_desc') {
+            usort($result, function ($a, $b) {
+                $cmp = strcmp($b['report_date'] ?? '', $a['report_date'] ?? '');
+                if ($cmp === 0) {
+                    return ($a['_orig_index'] ?? 0) <=> ($b['_orig_index'] ?? 0);
+                }
+
+                return $cmp;
+            });
+        } elseif ($this->sortBy === 'date_asc') {
+            usort($result, function ($a, $b) {
+                $cmp = strcmp($a['report_date'] ?? '', $b['report_date'] ?? '');
+                if ($cmp === 0) {
+                    return ($a['_orig_index'] ?? 0) <=> ($b['_orig_index'] ?? 0);
+                }
+
+                return $cmp;
+            });
         }
 
         return $result;
@@ -404,6 +759,8 @@ class LongIdlingTable extends Component
     {
         return view('livewire.long-idling-table', [
             'filteredRows' => $this->getFilteredRows(),
+            'hasMultipleDates' => $this->hasMultipleDates,
+            'selectedDatesSummary' => $this->selectedDatesSummary,
         ]);
     }
 }

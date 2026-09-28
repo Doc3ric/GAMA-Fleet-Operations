@@ -10,9 +10,11 @@ use App\Models\LongIdlingRecord;
 use App\Models\Report;
 use App\Services\LongIdlingImportService;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 use Maatwebsite\Excel\Facades\Excel;
 
@@ -139,15 +141,132 @@ class ReportController extends Controller
         return back()->with('success', 'Report reverted to draft.');
     }
 
-    public function generatePdf(Report $report)
+    public function rangeView(Request $request): View
     {
-        $this->authorizeReport($report);
+        $userId = auth()->id();
+        $reports = Report::where('created_by', $userId)
+            ->where('report_type', 'long_idling')
+            ->orderByDesc('report_date')
+            ->get();
+
+        $latestDate = $reports->first()?->report_date?->format('Y-m-d') ?? now()->toDateString();
+        $earliestDate = $reports->count() > 1 ? $reports->slice(0, 3)->last()?->report_date?->format('Y-m-d') : $latestDate;
+
+        $startDate = $request->query('start_date', $earliestDate);
+        $endDate = $request->query('end_date', $latestDate);
+
+        if ($startDate > $endDate) {
+            [$startDate, $endDate] = [$endDate, $startDate];
+        }
+
+        return view('reports.range', compact('startDate', 'endDate', 'reports'));
+    }
+
+    public function generateRangePdf(Request $request)
+    {
+        return $this->generatePdf(null);
+    }
+
+    public function generatePdf(?Report $report = null)
+    {
+        if ($report) {
+            $this->authorizeReport($report);
+        }
 
         ini_set('memory_limit', '512M');
         set_time_limit(180);
 
-        $sort = request()->query('sort');
-        $recordsQuery = $report->longIdlingRecords();
+        $userId = auth()->id();
+        $sort = request()->input('sort');
+        $search = trim((string) request()->input('search', ''));
+        $device = trim((string) request()->input('device', ''));
+        $idsInput = request()->input('ids');
+        $startDate = request()->input('start_date');
+        $endDate = request()->input('end_date');
+
+        $ids = [];
+        if (! empty($idsInput)) {
+            if (is_string($idsInput)) {
+                $ids = array_filter(array_map('intval', explode(',', $idsInput)));
+            } elseif (is_array($idsInput)) {
+                $ids = array_filter(array_map('intval', $idsInput));
+            }
+        }
+
+        $filterLabel = null;
+        $suffix = '';
+
+        if (! empty($ids)) {
+            $recordsQuery = LongIdlingRecord::whereIn('id', $ids)
+                ->whereHas('report', fn ($q) => $q->where('created_by', $userId))
+                ->with('report');
+
+            $count = count($ids);
+            $filterLabel = "Selected ({$count} ".Str::plural('record', $count).')';
+            $suffix = "-Selected-{$count}";
+        } elseif ($startDate && $endDate) {
+            $start = min($startDate, $endDate);
+            $end = max($startDate, $endDate);
+
+            $recordsQuery = LongIdlingRecord::whereHas('report', function ($q) use ($userId, $start, $end) {
+                $q->where('created_by', $userId)
+                    ->where('report_type', 'long_idling')
+                    ->whereDate('report_date', '>=', $start)
+                    ->whereDate('report_date', '<=', $end);
+            })->with('report');
+
+            if ($device && $device !== 'all') {
+                $recordsQuery->where('device_name', $device);
+                $filterLabel = "Device: {$device}";
+                $cleanDevice = preg_replace('/[^A-Za-z0-9\-]/', '', str_replace(' ', '-', $device));
+                $suffix = "-{$cleanDevice}";
+            }
+
+            if ($search) {
+                $q = $search;
+                $recordsQuery->where(function ($query) use ($q) {
+                    $query->where('device_name', 'like', "%{$q}%")
+                        ->orWhere('imei', 'like', "%{$q}%")
+                        ->orWhere('address', 'like', "%{$q}%")
+                        ->orWhere('model', 'like', "%{$q}%")
+                        ->orWhere('driver_name', 'like', "%{$q}%");
+                });
+
+                $filterLabel = $filterLabel ? "{$filterLabel}, Search: \"{$search}\"" : "Search: \"{$search}\"";
+                if (empty($suffix)) {
+                    $cleanSearch = preg_replace('/[^A-Za-z0-9\-]/', '', str_replace(' ', '-', $search));
+                    $suffix = "-{$cleanSearch}";
+                }
+            }
+        } elseif ($report) {
+            $recordsQuery = $report->longIdlingRecords()->with('report');
+
+            if ($device && $device !== 'all') {
+                $recordsQuery->where('device_name', $device);
+                $filterLabel = "Device: {$device}";
+                $cleanDevice = preg_replace('/[^A-Za-z0-9\-]/', '', str_replace(' ', '-', $device));
+                $suffix = "-{$cleanDevice}";
+            }
+
+            if ($search) {
+                $q = $search;
+                $recordsQuery->where(function ($query) use ($q) {
+                    $query->where('device_name', 'like', "%{$q}%")
+                        ->orWhere('imei', 'like', "%{$q}%")
+                        ->orWhere('address', 'like', "%{$q}%")
+                        ->orWhere('model', 'like', "%{$q}%")
+                        ->orWhere('driver_name', 'like', "%{$q}%");
+                });
+
+                $filterLabel = $filterLabel ? "{$filterLabel}, Search: \"{$search}\"" : "Search: \"{$search}\"";
+                if (empty($suffix)) {
+                    $cleanSearch = preg_replace('/[^A-Za-z0-9\-]/', '', str_replace(' ', '-', $search));
+                    $suffix = "-{$cleanSearch}";
+                }
+            }
+        } else {
+            abort(404, 'No report or date range specified.');
+        }
 
         if ($sort === 'stay_time_desc') {
             $recordsQuery->orderByDesc('stay_time');
@@ -161,21 +280,62 @@ class ReportController extends Controller
             $recordsQuery->orderBy('sort_order')->orderBy('id');
         }
 
-        $report->setRelation('longIdlingRecords', $recordsQuery->get());
-        $report->load('creator');
+        $records = $recordsQuery->get();
+
+        $dates = $records->map(fn ($r) => $r->report?->report_date)->filter()->unique()->sort();
+        $isDateRangeRequested = ($startDate && $endDate && $startDate !== $endDate);
+        $isMultiDate = $dates->count() > 1 || $isDateRangeRequested;
+
+        if ($isDateRangeRequested) {
+            $firstDate = Carbon::parse(min($startDate, $endDate));
+            $lastDate = Carbon::parse(max($startDate, $endDate));
+            $dateRangeLabel = $firstDate->format('M j, Y').' – '.$lastDate->format('M j, Y');
+            $dateRangeSubtitle = $firstDate->format('F j, Y').' &mdash; '.$lastDate->format('F j, Y');
+            $fileDatePrefix = $firstDate->format('Y-m-d').'-to-'.$lastDate->format('Y-m-d');
+        } elseif ($dates->count() > 1) {
+            $firstDate = $dates->first();
+            $lastDate = $dates->last();
+            $dateRangeLabel = $firstDate->format('M j, Y').' – '.$lastDate->format('M j, Y');
+            $dateRangeSubtitle = $firstDate->format('F j, Y').' &mdash; '.$lastDate->format('F j, Y');
+            $fileDatePrefix = $firstDate->format('Y-m-d').'-to-'.$lastDate->format('Y-m-d');
+        } elseif ($dates->isNotEmpty()) {
+            $singleDate = $dates->first();
+            $dateRangeLabel = $singleDate->format('M j, Y');
+            $dateRangeSubtitle = $singleDate->format('l, F j, Y');
+            $fileDatePrefix = $singleDate->format('Y-m-d');
+        } else {
+            $fallback = $report?->report_date ?? now();
+            $dateRangeLabel = $fallback->format('M j, Y');
+            $dateRangeSubtitle = $fallback->format('l, F j, Y');
+            $fileDatePrefix = $fallback->format('Y-m-d');
+        }
+
+        $reportModel = $report ?? new Report([
+            'report_type' => 'long_idling',
+            'report_date' => $dates->first() ?? now(),
+            'status' => 'completed',
+            'created_by' => $userId,
+        ]);
+        $reportModel->setRelation('longIdlingRecords', $records);
 
         $pdf = Pdf::loadView('pdf.long-idling-report', [
-            'report' => $report,
+            'report' => $reportModel,
             'company' => config('foms.company_name'),
             'tagline' => config('foms.company_tagline'),
             'preparedBy' => config('foms.prepared_by'),
+            'searchFilter' => $search,
+            'filterLabel' => $filterLabel,
+            'deviceFilter' => $device,
+            'isMultiDate' => $isMultiDate,
+            'dateRangeLabel' => $dateRangeLabel,
+            'dateRangeSubtitle' => $dateRangeSubtitle,
         ])
             ->setPaper('a4', 'portrait')
             ->setOption('isRemoteEnabled', false)
             ->setOption('isHtml5ParserEnabled', true)
             ->setOption('isFontSubsettingEnabled', true);
 
-        $filename = 'Long-Idling-Report-'.$report->report_date->format('Y-m-d').'.pdf';
+        $filename = 'Long-Idling-Report-'.$fileDatePrefix.$suffix.'.pdf';
 
         return $pdf->download($filename);
     }
