@@ -32,10 +32,10 @@
             </div>
         </div>
 
-        <form id="vehicle-form" method="POST" action="{{ route('vehicles.update', $vehicle) }}" enctype="multipart/form-data">
+        <form id="vehicle-form" method="POST" action="{{ route('vehicles.update', $vehicle) }}">
             @csrf
             @method('PUT')
-            @include('vehicles._form', ['vehicleTypes' => $vehicleTypes, 'vehicle' => $vehicle])
+            @include('vehicles._form', ['vehicle' => $vehicle])
 
             {{-- Bottom Save Bar --}}
             <div class="flex items-center justify-between bg-white rounded-xl border border-slate-200 shadow-sm p-4 mt-6">

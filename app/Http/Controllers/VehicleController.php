@@ -11,6 +11,7 @@ use App\Services\VehicleImportService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 use Maatwebsite\Excel\Facades\Excel;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -27,10 +28,9 @@ class VehicleController extends Controller
                 $q->where('equipment_code', 'like', "%{$search}%")
                     ->orWhere('model', 'like', "%{$search}%")
                     ->orWhere('plate_number', 'like', "%{$search}%")
-                    ->orWhere('location', 'like', "%{$search}%")
-                    ->orWhere('project_code', 'like', "%{$search}%")
                     ->orWhere('operator_driver', 'like', "%{$search}%")
-                    ->orWhereHas('vehicleType', fn ($q) => $q->where('name', 'like', "%{$search}%"));
+                    ->orWhere('user', 'like', "%{$search}%")
+                    ->orWhere('project_code', 'like', "%{$search}%");
             });
         }
 
@@ -55,6 +55,7 @@ class VehicleController extends Controller
         }
 
         $vehicles = $query->paginate(20)->withQueryString();
+        $archivedCount = Vehicle::onlyTrashed()->count();
 
         $vehicleTypes = VehicleType::orderBy('name')->get();
         $locations = Vehicle::whereNotNull('location')->distinct()->orderBy('location')->pluck('location');
@@ -62,7 +63,7 @@ class VehicleController extends Controller
         $statusLabels = Vehicle::whereNotNull('status_label')->distinct()->orderBy('status_label')->pluck('status_label');
 
         return view('vehicles.index', compact(
-            'vehicles', 'vehicleTypes', 'locations', 'projectCodes', 'statusLabels'
+            'vehicles', 'vehicleTypes', 'locations', 'projectCodes', 'statusLabels', 'archivedCount'
         ));
     }
 
@@ -132,16 +133,84 @@ class VehicleController extends Controller
 
     public function destroy(Vehicle $vehicle): RedirectResponse
     {
+        $code = $vehicle->equipment_code;
+        $vehicle->delete(); // Soft deletes (moved to Archive Bin)
+
+        return redirect()
+            ->route('vehicles.index')
+            ->with('success', "Vehicle {$code} moved to Archive Bin.");
+    }
+
+    public function archive(Request $request): View
+    {
+        $query = Vehicle::onlyTrashed()->orderByDesc('deleted_at');
+
+        if ($search = $request->input('search')) {
+            $query->where(function ($q) use ($search) {
+                $q->where('equipment_code', 'like', "%{$search}%")
+                    ->orWhere('model', 'like', "%{$search}%")
+                    ->orWhere('plate_number', 'like', "%{$search}%")
+                    ->orWhere('operator_driver', 'like', "%{$search}%")
+                    ->orWhere('user', 'like', "%{$search}%")
+                    ->orWhere('project_code', 'like', "%{$search}%");
+            });
+        }
+
+        $vehicles = $query->paginate(20)->withQueryString();
+        $archivedCount = Vehicle::onlyTrashed()->count();
+
+        return view('vehicles.archive', compact('vehicles', 'archivedCount'));
+    }
+
+    public function restore(int|string $id): RedirectResponse
+    {
+        $vehicle = Vehicle::onlyTrashed()->findOrFail($id);
+        $vehicle->restore();
+
+        return redirect()
+            ->back()
+            ->with('success', "Vehicle {$vehicle->equipment_code} restored from Archive Bin successfully.");
+    }
+
+    public function forceDelete(int|string $id): RedirectResponse
+    {
+        $vehicle = Vehicle::onlyTrashed()->findOrFail($id);
+        $code = $vehicle->equipment_code;
+
         if ($vehicle->image) {
             Storage::disk('public')->delete($vehicle->image);
         }
 
-        $code = $vehicle->equipment_code;
-        $vehicle->delete();
+        $vehicle->forceDelete();
+
+        return redirect()
+            ->back()
+            ->with('success', "Vehicle {$code} permanently deleted.");
+    }
+
+    public function restoreAll(): RedirectResponse
+    {
+        $count = Vehicle::onlyTrashed()->count();
+        Vehicle::onlyTrashed()->restore();
 
         return redirect()
             ->route('vehicles.index')
-            ->with('success', "Vehicle {$code} deleted successfully.");
+            ->with('success', "Restored {$count} ".Str::plural('vehicle', $count).' from Archive Bin.');
+    }
+
+    public function emptyBin(): RedirectResponse
+    {
+        $trashed = Vehicle::onlyTrashed()->get();
+        foreach ($trashed as $vehicle) {
+            if ($vehicle->image) {
+                Storage::disk('public')->delete($vehicle->image);
+            }
+            $vehicle->forceDelete();
+        }
+
+        return redirect()
+            ->route('vehicles.archive')
+            ->with('success', 'Archive bin emptied successfully.');
     }
 
     public function uploadImage(Request $request, Vehicle $vehicle): RedirectResponse

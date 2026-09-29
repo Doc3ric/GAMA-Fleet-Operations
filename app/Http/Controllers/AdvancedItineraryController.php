@@ -99,6 +99,8 @@ class AdvancedItineraryController extends Controller
             $itinerary->update([
                 'total_duration_minutes' => $totalDuration > 0 ? (int) $totalDuration : null,
             ]);
+            $itinerary->recalculateFuelLiters();
+            $itinerary->save();
 
             return $itinerary;
         });
@@ -171,6 +173,8 @@ class AdvancedItineraryController extends Controller
             $advancedItinerary->update([
                 'total_duration_minutes' => $totalDuration > 0 ? (int) $totalDuration : null,
             ]);
+            $advancedItinerary->recalculateFuelLiters();
+            $advancedItinerary->save();
         });
 
         return redirect()->route('advanced-itineraries.show', $advancedItinerary)->with('success', 'Advanced itinerary updated successfully.');

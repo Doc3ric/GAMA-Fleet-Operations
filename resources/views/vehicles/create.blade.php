@@ -32,9 +32,9 @@
             </div>
         </div>
 
-        <form id="vehicle-form" method="POST" action="{{ route('vehicles.store') }}" enctype="multipart/form-data">
+        <form id="vehicle-form" method="POST" action="{{ route('vehicles.store') }}">
             @csrf
-            @include('vehicles._form', ['vehicleTypes' => $vehicleTypes])
+            @include('vehicles._form')
 
             {{-- Bottom Save Bar --}}
             <div class="flex items-center justify-between bg-white rounded-xl border border-slate-200 shadow-sm p-4 mt-6">

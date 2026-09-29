@@ -1,0 +1,420 @@
+<x-app-layout>
+    @section('page-title', 'Add Itinerary &bull; Fuel PO')
+    @section('breadcrumb')
+        <a href="{{ route('fuel-po.index') }}" class="hover:underline">Fuel PO Checklist</a> &bull; Add Itinerary
+    @endsection
+
+    @php
+        $locationsList = $locations->map(fn($loc) => [
+            'id' => (string) $loc->id,
+            'official_name' => $loc->official_name,
+            'code' => $loc->code ?? '',
+            'municipality' => $loc->municipality ?? '',
+        ])->values()->all();
+
+        $vehiclesList = $vehicles->map(fn($v) => [
+            'id' => (string) $v->id,
+            'equipment_code' => $v->equipment_code ?? '—',
+            'plate_number' => $v->plate_number ?? '—',
+            'model' => $v->model ?? '—',
+            'driver_name' => $v->operator_driver ?? '—',
+            'user' => $v->user ?? '—',
+            'project_code' => $v->project_code ?? '—',
+            'average_consumption' => ($v->average_fuel_consumption ?? $v->average_consumption) ? (float) ($v->average_fuel_consumption ?? $v->average_consumption) : null,
+        ])->values()->all();
+
+        $oldDestinations = old('destinations');
+        $initialRows = [];
+        if (is_array($oldDestinations) && count($oldDestinations) > 0) {
+            foreach ($oldDestinations as $row) {
+                $initialRows[] = [
+                    'destination' => $row['name'] ?? $row['destination'] ?? '',
+                    'distance' => $row['distance'] ?? '',
+                    'purpose' => $row['purpose'] ?? '',
+                ];
+            }
+        } elseif (old('destination') || old('total_distance')) {
+            $initialRows[] = [
+                'destination' => old('destination', ''),
+                'distance' => old('total_distance', ''),
+                'purpose' => '',
+            ];
+        }
+    @endphp
+
+    <div class="max-w-4xl mx-auto space-y-6" x-data="addItineraryWorkflow({
+        vehiclesList: {{ json_encode($vehiclesList) }},
+        locationsList: {{ json_encode($locationsList) }},
+        initialVehicleId: '{{ old('vehicle_id', '') }}',
+        initialRows: {{ json_encode($initialRows) }},
+        initialDestination: '{{ old('destination', '') }}',
+        initialDistance: '{{ old('total_distance', '') }}'
+    })">
+        {{-- Header --}}
+        <div class="flex items-center justify-between border-b border-slate-200 pb-4">
+            <div>
+                <h1 class="text-xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
+                    <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500 text-white font-bold text-sm">
+                        PO
+                    </span>
+                    Add Itinerary (Fuel PO Processing)
+                </h1>
+                <p class="text-xs text-slate-500 mt-1">
+                    Select registered vehicle, enter one or more destination rows with distances to compute fuel required for PO.
+                </p>
+            </div>
+            <a href="{{ route('fuel-po.index') }}"
+               class="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition shadow-2xs">
+                &larr; Back to Checklist
+            </a>
+        </div>
+
+        {{-- Errors --}}
+        @if ($errors->any())
+            <div class="rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-800 text-xs font-medium space-y-1">
+                <div class="font-bold flex items-center gap-1.5 text-rose-900">
+                    <svg class="h-4 w-4 text-rose-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
+                    </svg>
+                    Please fix the following validation errors:
+                </div>
+                <ul class="list-disc list-inside space-y-0.5 pl-2">
+                    @foreach ($errors->all() as $error)
+                        <li>{{ $error }}</li>
+                    @endforeach
+                </ul>
+            </div>
+        @endif
+
+        <form method="POST" action="{{ route('fuel-po.store') }}" class="space-y-6">
+            @csrf
+
+            {{-- Hidden computed overall inputs --}}
+            <input type="hidden" name="destination" :value="combinedDestination">
+            <input type="hidden" name="total_distance" :value="totalCalculatedDistance">
+
+            {{-- MAIN FORM CARD --}}
+            <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs space-y-6">
+                {{-- TOP ROW: VEHICLE SELECTION & ITINERARY DATE/STATUS --}}
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    {{-- 1. EQT CODE (Dropdown Selection of Registered Vehicle) --}}
+                    <div>
+                        <label class="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-1.5">
+                            EQT Code (Select Registered Vehicle) <span class="text-rose-500">*</span>
+                        </label>
+                        <select name="vehicle_id" x-model="selectedVehicleId" required
+                                class="w-full rounded-xl border border-slate-300 bg-slate-50/50 px-3 py-2.5 text-xs font-semibold text-slate-900 focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none">
+                            <option value="">-- Choose Equipment Code --</option>
+                            @foreach($vehicles as $vehicle)
+                                <option value="{{ $vehicle->id }}" {{ old('vehicle_id') == $vehicle->id ? 'selected' : '' }}>
+                                    {{ $vehicle->equipment_code }} &bull; {{ $vehicle->model ?: 'No Model' }} ({{ $vehicle->plate_number ?: 'No Plate' }})
+                                </option>
+                            @endforeach
+                        </select>
+                        <p class="text-[11px] text-slate-500 mt-1">
+                            Automatically loads Average Consumption, Model, Driver, Plate, User, and Project.
+                        </p>
+                    </div>
+
+                    {{-- 2. Itinerary Date & Status --}}
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-1.5">
+                                Itinerary Date <span class="text-rose-500">*</span>
+                            </label>
+                            <input type="date" name="itinerary_date" value="{{ old('itinerary_date', date('Y-m-d')) }}" required
+                                   class="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-900 focus:border-blue-500 outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-1.5">
+                                Status <span class="text-rose-500">*</span>
+                            </label>
+                            <select name="status" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-900 focus:border-blue-500 outline-none">
+                                <option value="FINALIZED" {{ old('status', 'FINALIZED') === 'FINALIZED' ? 'selected' : '' }}>FINALIZED</option>
+                                <option value="DRAFT" {{ old('status') === 'DRAFT' ? 'selected' : '' }}>DRAFT</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- AUTO-LOADED VEHICLE PROFILE CARD --}}
+                <div x-show="selectedVehicle" x-cloak class="rounded-xl border border-blue-200 bg-blue-50/60 p-4 space-y-2">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold text-blue-900 uppercase tracking-wider flex items-center gap-1.5">
+                            <svg class="h-3.5 w-3.5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 18.75a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 0 1-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h1.125c.621 0 1.125-.504 1.125-1.125V14.25m-18 0h18M3.375 14.25l1.5-6A1.125 1.125 0 0 1 5.97 7.5h12.06a1.125 1.125 0 0 1 1.095.75l1.5 6" />
+                            </svg>
+                            Auto-Loaded Vehicle Master Information
+                        </span>
+                        <span class="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-semibold">No Re-entry</span>
+                    </div>
+
+                    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 text-xs">
+                        <div class="bg-white rounded-lg p-2 border border-blue-100">
+                            <span class="block text-[10px] text-slate-400 uppercase font-semibold">EQPT Code</span>
+                            <span class="font-mono font-bold text-slate-900" x-text="selectedVehicle?.equipment_code || '—'"></span>
+                        </div>
+                        <div class="bg-white rounded-lg p-2 border border-blue-100">
+                            <span class="block text-[10px] text-slate-400 uppercase font-semibold">Model</span>
+                            <span class="font-semibold text-slate-900" x-text="selectedVehicle?.model || '—'"></span>
+                        </div>
+                        <div class="bg-white rounded-lg p-2 border border-blue-100">
+                            <span class="block text-[10px] text-slate-400 uppercase font-semibold">Driver Name</span>
+                            <span class="font-semibold text-slate-900" x-text="selectedVehicle?.driver_name || '—'"></span>
+                        </div>
+                        <div class="bg-white rounded-lg p-2 border border-blue-100">
+                            <span class="block text-[10px] text-slate-400 uppercase font-semibold">Plate Number</span>
+                            <span class="font-mono font-bold text-slate-900" x-text="selectedVehicle?.plate_number || '—'"></span>
+                        </div>
+                        <div class="bg-white rounded-lg p-2 border border-blue-100">
+                            <span class="block text-[10px] text-slate-400 uppercase font-semibold">User</span>
+                            <span class="font-semibold text-slate-900" x-text="selectedVehicle?.user || '—'"></span>
+                        </div>
+                        <div class="bg-white rounded-lg p-2 border border-blue-100">
+                            <span class="block text-[10px] text-slate-400 uppercase font-semibold">Project Code</span>
+                            <span class="font-mono font-semibold text-slate-900" x-text="selectedVehicle?.project_code || '—'"></span>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- DYNAMIC DESTINATIONS & DISTANCES (WITH ADD ROW FUNCTION) --}}
+                <div class="space-y-3 border-t border-slate-100 pt-5">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h3 class="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                                <svg class="h-4 w-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
+                                </svg>
+                                Destinations & Distance Breakdown
+                            </h3>
+                            <p class="text-[11px] text-slate-500 mt-0.5">
+                                Enter destination and distance. Use <strong>+ Add Row</strong> to add multiple stops — distances automatically sum up.
+                            </p>
+                        </div>
+
+                        <button type="button" @click="addRow()"
+                                class="inline-flex items-center gap-1.5 rounded-xl border border-blue-300 bg-blue-50 px-3.5 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-100 shadow-2xs transition cursor-pointer">
+                            <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                            </svg>
+                            <span>Add Row</span>
+                        </button>
+                    </div>
+
+                    {{-- Dynamic Rows Table --}}
+                    <div class="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                        <table class="min-w-full divide-y divide-slate-200 text-left text-xs">
+                            <thead class="bg-slate-50 font-bold uppercase tracking-wider text-slate-500">
+                                <tr>
+                                    <th class="px-3.5 py-2.5 w-10 text-center">#</th>
+                                    <th class="px-3.5 py-2.5">Destination (Manual or Select) <span class="text-rose-500">*</span></th>
+                                    <th class="px-3.5 py-2.5 w-44">Distance (KM) <span class="text-rose-500">*</span></th>
+                                    <th class="px-3.5 py-2.5 w-48">Purpose / Cargo (Optional)</th>
+                                    <th class="px-3.5 py-2.5 w-16 text-center">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100 text-slate-800">
+                                <template x-for="(row, index) in destinationRows" :key="index">
+                                    <tr class="hover:bg-slate-50/50 transition-colors">
+                                        <td class="px-3.5 py-2.5 text-center font-bold text-slate-400" x-text="index + 1"></td>
+                                        <td class="px-3.5 py-2.5">
+                                            <input type="text"
+                                                   :name="'destinations[' + index + '][name]'"
+                                                   x-model="row.destination"
+                                                   list="location-datalist"
+                                                   required
+                                                   placeholder="e.g. ANICO MANOLO or select location..."
+                                                   class="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none">
+                                        </td>
+                                        <td class="px-3.5 py-2.5">
+                                            <div class="relative">
+                                                <input type="number" step="0.01" min="0"
+                                                       :name="'destinations[' + index + '][distance]'"
+                                                       x-model="row.distance"
+                                                       required
+                                                       placeholder="e.g. 48.50"
+                                                       class="w-full rounded-xl border border-slate-300 px-3 py-2 pr-10 text-xs font-mono font-bold text-slate-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none">
+                                                <span class="absolute inset-y-0 right-0 flex items-center pr-2.5 text-[11px] font-bold text-slate-400 pointer-events-none">
+                                                    KM
+                                                </span>
+                                            </div>
+                                        </td>
+                                        <td class="px-3.5 py-2.5">
+                                            <input type="text"
+                                                   :name="'destinations[' + index + '][purpose]'"
+                                                   x-model="row.purpose"
+                                                   placeholder="e.g. Delivery, Hauling"
+                                                   class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-700 focus:border-blue-500 outline-none">
+                                        </td>
+                                        <td class="px-3.5 py-2.5 text-center">
+                                            <button type="button"
+                                                    @click="removeRow(index)"
+                                                    x-show="destinationRows.length > 1"
+                                                    title="Remove this row"
+                                                    class="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition cursor-pointer">
+                                                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                                                </svg>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+
+                        {{-- Table Footer with + Add Row & Subtotal --}}
+                        <div class="px-4 py-2.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+                            <button type="button" @click="addRow()"
+                                    class="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-white px-3.5 py-1.5 text-xs font-bold text-blue-600 hover:bg-blue-50 transition shadow-2xs cursor-pointer">
+                                <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                                </svg>
+                                <span>+ Add Row</span>
+                            </button>
+
+                            <div class="text-xs font-mono font-bold text-slate-700 flex items-center gap-2">
+                                <span class="text-slate-400 font-sans font-semibold uppercase text-[11px]">Sum of All Rows:</span>
+                                <span class="text-blue-700 text-sm font-black" x-text="totalCalculatedDistance + ' KM'"></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <datalist id="location-datalist">
+                        @foreach($locations as $loc)
+                            <option value="{{ $loc->official_name }}">{{ $loc->code ? "({$loc->code})" : '' }}</option>
+                        @endforeach
+                    </datalist>
+                </div>
+
+                {{-- AUTOMATIC FUEL CALCULATION SUMMARY (Exact User Table) --}}
+                <div class="border-t border-slate-100 pt-5">
+                    <span class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                        Automatic Fuel Calculation Summary
+                    </span>
+
+                    <div class="overflow-hidden rounded-xl border border-slate-300 bg-white shadow-xs">
+                        <table class="w-full text-xs font-mono">
+                            <tbody>
+                                <tr class="border-b border-slate-200 bg-slate-50/70">
+                                    <td class="px-4 py-3 font-bold uppercase text-slate-600">TOTAL DISTANCE</td>
+                                    <td class="px-4 py-3 font-bold text-slate-900 text-right text-sm">
+                                        <span x-text="totalCalculatedDistance ? (parseFloat(totalCalculatedDistance).toFixed(2) + ' KM') : '0.00 KM'"></span>
+                                    </td>
+                                </tr>
+                                <tr class="border-b border-slate-200 bg-slate-50/70">
+                                    <td class="px-4 py-3 font-bold uppercase text-slate-600">AVE. CONS OF LITER/KM</td>
+                                    <td class="px-4 py-3 font-bold text-blue-700 text-right text-sm">
+                                        <span x-text="averageConsumption ? (parseFloat(averageConsumption).toFixed(2) + ' KM/L') : 'Requires Vehicle'"></span>
+                                    </td>
+                                </tr>
+                                <tr class="bg-amber-100/60">
+                                    <td class="px-4 py-3.5 font-extrabold uppercase text-amber-900 text-sm">
+                                        LITER FOR PO
+                                        <span class="block text-[10px] font-sans font-normal text-amber-700">
+                                            Total Distance &divide; Ave. Consumption &bull;
+                                            <span x-show="calculatedRawLiters" x-text="'Raw: ' + calculatedRawLiters + ' L (&ge; 0.10 &rarr; ' + calculatedLiters + ' L)'"></span>
+                                            <span x-show="!calculatedRawLiters">Decimal &ge; 0.10 rounds up</span>
+                                        </span>
+                                    </td>
+                                    <td class="px-4 py-3.5 font-extrabold text-amber-900 text-right text-lg">
+                                        <span x-text="calculatedLiters ? (calculatedLiters + ' L') : '—'"></span>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                {{-- SAVE BUTTON --}}
+                <div class="border-t border-slate-100 pt-4 flex items-center justify-end gap-3">
+                    <a href="{{ route('fuel-po.index') }}"
+                       class="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition">
+                        Cancel
+                    </a>
+                    <button type="submit"
+                            class="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-6 py-2.5 text-xs font-bold text-white hover:bg-blue-700 shadow-sm transition cursor-pointer">
+                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                        </svg>
+                        <span>SAVE ITINERARY</span>
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    @push('scripts')
+    <script>
+        function addItineraryWorkflow(config) {
+            return {
+                vehiclesList: config.vehiclesList || [],
+                locationsList: config.locationsList || [],
+                selectedVehicleId: config.initialVehicleId || '',
+
+                // Destination & Distance rows: start with at least 1 row
+                destinationRows: (config.initialRows && config.initialRows.length > 0)
+                    ? config.initialRows.map(r => ({ destination: r.destination || r.name || '', distance: r.distance || '', purpose: r.purpose || '' }))
+                    : [{ destination: config.initialDestination || '', distance: config.initialDistance || '', purpose: '' }],
+
+                addRow() {
+                    this.destinationRows.push({ destination: '', distance: '', purpose: '' });
+                },
+
+                removeRow(index) {
+                    if (this.destinationRows.length > 1) {
+                        this.destinationRows.splice(index, 1);
+                    }
+                },
+
+                get selectedVehicle() {
+                    return this.vehiclesList.find(v => String(v.id) === String(this.selectedVehicleId)) || null;
+                },
+
+                get averageConsumption() {
+                    return this.selectedVehicle?.average_consumption || null;
+                },
+
+                get totalCalculatedDistance() {
+                    let sum = 0;
+                    for (const row of this.destinationRows) {
+                        const dist = parseFloat(row.distance);
+                        if (!isNaN(dist) && dist > 0) {
+                            sum += dist;
+                        }
+                    }
+                    return (Math.round(sum * 100) / 100).toFixed(2);
+                },
+
+                get combinedDestination() {
+                    const names = this.destinationRows
+                        .map(r => (r.destination || '').trim())
+                        .filter(n => n.length > 0);
+                    return names.join(' → ');
+                },
+
+                get calculatedRawLiters() {
+                    const dist = parseFloat(this.totalCalculatedDistance);
+                    const avg = parseFloat(this.averageConsumption);
+                    if (!dist || dist <= 0 || !avg || avg <= 0) {
+                        return null;
+                    }
+                    return (dist / avg).toFixed(2);
+                },
+
+                get calculatedLiters() {
+                    const dist = parseFloat(this.totalCalculatedDistance);
+                    const avg = parseFloat(this.averageConsumption);
+                    if (!dist || dist <= 0 || !avg || avg <= 0) {
+                        return null;
+                    }
+                    const raw = Math.round((dist / avg) * 100) / 100;
+                    const intPart = Math.floor(raw);
+                    const decPart = Math.round((raw - intPart) * 100) / 100;
+                    return decPart >= 0.10 ? (intPart + 1) : intPart;
+                }
+            };
+        }
+    </script>
+    @endpush
+</x-app-layout>

@@ -19,7 +19,7 @@ class VehicleImportService
      * @var array<string, list<string>>
      */
     protected array $headerAliases = [
-        'equipment_code' => ['equipmentcode', 'equipment', 'code', 'eqcode', 'unitcode', 'vehiclecode', 'equipmentid'],
+        'equipment_code' => ['equipmentcode', 'egtpcode', 'egtp', 'eqtpcode', 'eqtp', 'eqptcode', 'eqpt', 'equipment', 'code', 'eqcode', 'unitcode', 'vehiclecode', 'equipmentid'],
         'vehicle_type' => ['vehicletype', 'type', 'equipmenttype', 'category', 'kind'],
         'model' => ['model', 'devicemodel', 'brandmodel', 'makeandmodel', 'make', 'brand'],
         'plate_number' => ['platenumber', 'plate', 'plateno', 'platenum'],
@@ -28,7 +28,9 @@ class VehicleImportService
         'status' => ['status', 'vehiclestatus', 'state', 'condition'],
         'location' => ['location', 'site', 'assignedlocation', 'yard', 'place'],
         'project_code' => ['projectcode', 'project', 'projectno', 'prjcode'],
-        'operator_driver' => ['operatordriver', 'operator', 'driver', 'driveroperator', 'assigneddriver'],
+        'operator_driver' => ['drivername', 'operatordriver', 'operator', 'driver', 'driveroperator', 'assigneddriver'],
+        'user' => ['user', 'dept', 'department', 'userdept', 'assigneduser'],
+        'average_fuel_consumption' => ['averageconsumption', 'averagefuelconsumption', 'avgconsumption', 'avgfuelconsumption', 'km/l', 'kml', 'consumption'],
         'helper' => ['helper', 'assistant', 'crew'],
         'gps_status' => ['gpsstatus', 'gps', 'gpsequipped', 'trackerstatus'],
     ];
@@ -109,6 +111,8 @@ class VehicleImportService
             $location = $this->getCellValue($row, $columnMap, 'location');
             $projectCode = $this->getCellValue($row, $columnMap, 'project_code');
             $operatorDriver = $this->getCellValue($row, $columnMap, 'operator_driver');
+            $user = $this->getCellValue($row, $columnMap, 'user');
+            $rawAvgCons = $this->getCellValue($row, $columnMap, 'average_fuel_consumption');
             $helper = $this->getCellValue($row, $columnMap, 'helper');
             $rawGpsStatus = $this->getCellValue($row, $columnMap, 'gps_status');
 
@@ -118,6 +122,9 @@ class VehicleImportService
             [$fuelMin, $fuelMax, $fuelUnit] = $this->parseFuel($rawFuel);
             [$statusValue, $statusLabel] = $this->parseStatus($rawStatus);
             $gpsStatus = $this->parseGpsStatus($rawGpsStatus);
+            $avgConsumption = is_numeric($rawAvgCons)
+                ? (float) $rawAvgCons
+                : (preg_match('/([\d\.]+)/', (string) $rawAvgCons, $m) ? (float) $m[1] : null);
 
             $attributes = [
                 'vehicle_type_id' => $vehicleTypeId,
@@ -127,11 +134,13 @@ class VehicleImportService
                 'fuel_min' => $fuelMin,
                 'fuel_max' => $fuelMax,
                 'fuel_unit' => $fuelUnit,
+                'average_fuel_consumption' => $avgConsumption,
                 'status_value' => $statusValue,
                 'status_label' => $statusLabel,
                 'location' => $location ?: null,
                 'project_code' => $projectCode ?: null,
                 'operator_driver' => $operatorDriver ?: null,
+                'user' => $user ?: null,
                 'helper' => $helper ?: null,
                 'gps_status' => $gpsStatus,
             ];

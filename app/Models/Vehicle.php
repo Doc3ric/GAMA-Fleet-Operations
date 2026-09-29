@@ -8,12 +8,13 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Storage;
 
 class Vehicle extends Model
 {
     /** @use HasFactory<VehicleFactory> */
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
     /** @var list<string> */
     protected $fillable = [
@@ -25,11 +26,13 @@ class Vehicle extends Model
         'fuel_min',
         'fuel_max',
         'fuel_unit',
+        'average_fuel_consumption',
         'status_value',
         'status_label',
         'location',
         'project_code',
         'operator_driver',
+        'user',
         'helper',
         'gps_status',
         'image',
@@ -42,6 +45,7 @@ class Vehicle extends Model
         'date_acquired' => 'date',
         'fuel_min' => 'float',
         'fuel_max' => 'float',
+        'average_fuel_consumption' => 'float',
         'status_value' => 'float',
     ];
 
@@ -76,6 +80,23 @@ class Vehicle extends Model
     public function fuelConsumptionTests(): HasMany
     {
         return $this->hasMany(FuelConsumptionTest::class, 'vehicle_id');
+    }
+
+    /**
+     * Returns average fuel consumption in KM/L, checking direct attribute first, then latest test.
+     */
+    public function getAverageConsumptionAttribute(): ?float
+    {
+        if ($this->average_fuel_consumption !== null && (float) $this->average_fuel_consumption > 0) {
+            return (float) $this->average_fuel_consumption;
+        }
+
+        $latestTest = $this->fuelConsumptionTests()->latest('test_date')->latest('id')->first();
+        if ($latestTest && (float) $latestTest->average_fuel_consumption > 0) {
+            return (float) $latestTest->average_fuel_consumption;
+        }
+
+        return null;
     }
 
     /**

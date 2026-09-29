@@ -39,6 +39,8 @@ class VehicleFactory extends Factory
             'location' => $this->faker->randomElement(['Project Site A', 'Project Site B', 'Main Yard', 'Depot']),
             'project_code' => 'PRJ-'.$this->faker->numerify('2026-###'),
             'operator_driver' => $this->faker->name(),
+            'user' => $this->faker->randomElement(['Purchasing', 'Operations', 'Engineering', 'Logistics', 'Admin']),
+            'average_fuel_consumption' => $this->faker->randomFloat(2, 3.0, 12.0),
             'helper' => $this->faker->optional()->name(),
             'gps_status' => $this->faker->randomElement(Vehicle::GPS_STATUSES),
             'image' => null,

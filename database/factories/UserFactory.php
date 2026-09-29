@@ -64,4 +64,11 @@ class UserFactory extends Factory
             'role' => User::ROLE_OPERATOR,
         ]);
     }
+
+    public function purchasing(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'role' => User::ROLE_PURCHASING,
+        ]);
+    }
 }

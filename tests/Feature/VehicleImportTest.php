@@ -217,4 +217,29 @@ class VehicleImportTest extends TestCase
         // 4. Verify vehicle status was synced to EXPIRED based on device
         $this->assertEquals('EXPIRED', $vehicle->gps_status);
     }
+
+    public function test_can_import_vehicles_with_diagram_headers_including_user_and_average_consumption(): void
+    {
+        $csvContent = "EGTP CODE,MODEL,DRIVER NAME,PLATE NUMBER,USER,PROJECT CODE,AVERAGE CONSUMPTION\n";
+        $csvContent .= "SV 12,D-MAX,JOSEPH HENEDO,KAF 6079,PURCHASING,UTILITY VAN,3 KM/L\n";
+
+        $file = UploadedFile::fake()->createWithContent('vehicles.csv', $csvContent);
+
+        $response = $this->actingAs($this->user)->post(route('vehicles.importData'), [
+            'file' => $file,
+            'mode' => 'update',
+        ]);
+
+        $response->assertRedirect(route('vehicles.index'));
+        $response->assertSessionHas('success');
+
+        $vehicle = Vehicle::where('equipment_code', 'SV 12')->first();
+        $this->assertNotNull($vehicle);
+        $this->assertEquals('D-MAX', $vehicle->model);
+        $this->assertEquals('JOSEPH HENEDO', $vehicle->operator_driver);
+        $this->assertEquals('KAF 6079', $vehicle->plate_number);
+        $this->assertEquals('PURCHASING', $vehicle->user);
+        $this->assertEquals('UTILITY VAN', $vehicle->project_code);
+        $this->assertEquals(3.00, (float) $vehicle->average_fuel_consumption);
+    }
 }

@@ -86,9 +86,37 @@ class VehicleMasterListTest extends TestCase
         $response = $this->actingAs($this->user)->get(route('vehicles.create'));
 
         $response->assertOk();
-        $response->assertSee('Equipment Code');
-        $response->assertSee('GPS Status');
-        $response->assertSee('BACKHOE');
+        $response->assertSee('EGTP CODE');
+        $response->assertSee('MODEL');
+        $response->assertSee('DRIVER NAME');
+        $response->assertSee('PLATE NUMBER');
+        $response->assertSee('USER');
+        $response->assertSee('PROJECT CODE');
+    }
+
+    public function test_can_create_vehicle_with_7_master_fields(): void
+    {
+        $response = $this->actingAs($this->user)->post(route('vehicles.store'), [
+            'equipment_code' => 'SV 12',
+            'model' => 'D-MAX',
+            'operator_driver' => 'JOSEPH HENEDO',
+            'plate_number' => 'KAF 6079',
+            'user' => 'PURCHASING',
+            'project_code' => 'UTILITY VAN',
+            'average_fuel_consumption' => '3',
+        ]);
+
+        $response->assertRedirect(route('vehicles.index'));
+        $this->assertDatabaseHas('vehicles', [
+            'equipment_code' => 'SV 12',
+            'model' => 'D-MAX',
+            'operator_driver' => 'JOSEPH HENEDO',
+            'plate_number' => 'KAF 6079',
+            'user' => 'PURCHASING',
+            'project_code' => 'UTILITY VAN',
+            'average_fuel_consumption' => 3.00,
+            'gps_status' => 'NO',
+        ]);
     }
 
     public function test_can_create_vehicle_with_valid_data(): void
@@ -187,14 +215,74 @@ class VehicleMasterListTest extends TestCase
         $this->assertDatabaseHas('vehicles', ['id' => $vehicle->id, 'gps_status' => 'EXPIRED', 'location' => 'New Site']);
     }
 
-    public function test_can_delete_vehicle(): void
+    public function test_can_delete_vehicle_moves_to_archive_bin(): void
     {
         $vehicle = Vehicle::create(['equipment_code' => 'BH 5', 'gps_status' => 'NO', 'created_by' => $this->user->id]);
 
         $response = $this->actingAs($this->user)->delete(route('vehicles.destroy', $vehicle));
 
         $response->assertRedirect(route('vehicles.index'));
+        $this->assertSoftDeleted('vehicles', ['id' => $vehicle->id]);
+    }
+
+    public function test_can_view_archive_bin(): void
+    {
+        $vehicle = Vehicle::create(['equipment_code' => 'BH 5', 'gps_status' => 'NO', 'created_by' => $this->user->id]);
+        $vehicle->delete();
+
+        $response = $this->actingAs($this->user)->get(route('vehicles.archive'));
+
+        $response->assertOk();
+        $response->assertSee('Archive Bin');
+        $response->assertSee('BH 5');
+    }
+
+    public function test_can_restore_vehicle_from_archive_bin(): void
+    {
+        $vehicle = Vehicle::create(['equipment_code' => 'BH 5', 'gps_status' => 'NO', 'created_by' => $this->user->id]);
+        $vehicle->delete();
+        $this->assertSoftDeleted('vehicles', ['id' => $vehicle->id]);
+
+        $response = $this->actingAs($this->user)->post(route('vehicles.restore', $vehicle->id));
+
+        $response->assertRedirect();
+        $this->assertNotSoftDeleted('vehicles', ['id' => $vehicle->id]);
+    }
+
+    public function test_can_permanently_delete_vehicle_from_archive_bin(): void
+    {
+        $vehicle = Vehicle::create(['equipment_code' => 'BH 5', 'gps_status' => 'NO', 'created_by' => $this->user->id]);
+        $vehicle->delete();
+
+        $response = $this->actingAs($this->user)->delete(route('vehicles.forceDelete', $vehicle->id));
+
+        $response->assertRedirect();
         $this->assertDatabaseMissing('vehicles', ['id' => $vehicle->id]);
+    }
+
+    public function test_can_restore_all_vehicles_from_archive_bin(): void
+    {
+        $v1 = Vehicle::create(['equipment_code' => 'BH 5', 'gps_status' => 'NO', 'created_by' => $this->user->id]);
+        $v2 = Vehicle::create(['equipment_code' => 'DT 01', 'gps_status' => 'NO', 'created_by' => $this->user->id]);
+        $v1->delete();
+        $v2->delete();
+
+        $response = $this->actingAs($this->user)->post(route('vehicles.restoreAll'));
+
+        $response->assertRedirect(route('vehicles.index'));
+        $this->assertNotSoftDeleted('vehicles', ['id' => $v1->id]);
+        $this->assertNotSoftDeleted('vehicles', ['id' => $v2->id]);
+    }
+
+    public function test_can_empty_archive_bin(): void
+    {
+        $v1 = Vehicle::create(['equipment_code' => 'BH 5', 'gps_status' => 'NO', 'created_by' => $this->user->id]);
+        $v1->delete();
+
+        $response = $this->actingAs($this->user)->delete(route('vehicles.emptyBin'));
+
+        $response->assertRedirect(route('vehicles.archive'));
+        $this->assertDatabaseMissing('vehicles', ['id' => $v1->id]);
     }
 
     public function test_vehicle_model_fuel_display_attribute(): void

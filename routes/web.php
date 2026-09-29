@@ -1,11 +1,13 @@
 <?php
 
 use App\Http\Controllers\AdvancedItineraryController;
+use App\Http\Controllers\AverageFuelConsumptionController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DeviceController;
 use App\Http\Controllers\DriverItineraryController;
 use App\Http\Controllers\ExcelViewerController;
 use App\Http\Controllers\FuelConsumptionController;
+use App\Http\Controllers\FuelPoController;
 use App\Http\Controllers\LocationController;
 use App\Http\Controllers\LongIdlingRecordController;
 use App\Http\Controllers\ProfileController;
@@ -40,7 +42,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('long-idling-records/{record}/image', [LongIdlingRecordController::class, 'uploadImage'])->name('records.uploadImage');
     Route::delete('long-idling-records/{record}', [LongIdlingRecordController::class, 'destroy'])->name('records.destroy');
 
-    // Vehicle Master List
+    // Vehicle Master List & Archive Bin
+    Route::get('vehicles/archive-bin', [VehicleController::class, 'archive'])->name('vehicles.archive');
+    Route::post('vehicles/archive/restore-all', [VehicleController::class, 'restoreAll'])->name('vehicles.restoreAll');
+    Route::delete('vehicles/archive/empty-bin', [VehicleController::class, 'emptyBin'])->name('vehicles.emptyBin');
+    Route::post('vehicles/{id}/restore', [VehicleController::class, 'restore'])->name('vehicles.restore');
+    Route::delete('vehicles/{id}/force-delete', [VehicleController::class, 'forceDelete'])->name('vehicles.forceDelete');
     Route::get('vehicles/template/download', [VehicleController::class, 'downloadTemplate'])->name('vehicles.downloadTemplate');
     Route::post('vehicles/import', [VehicleController::class, 'importData'])->name('vehicles.importData');
     Route::resource('vehicles', VehicleController::class);
@@ -74,7 +81,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('itineraries/{trip}/resolve-location', [DriverItineraryController::class, 'resolveLocation'])->name('itineraries.resolveLocation')->whereNumber('trip');
     Route::get('itineraries/{trip}', [DriverItineraryController::class, 'show'])->name('itineraries.show')->whereNumber('trip');
 
-    // Average Fuel Consumption
+    // Average Fuel Consumption (Dedicated List & Rate Manager)
+    Route::get('average-fuel-consumption', [AverageFuelConsumptionController::class, 'index'])->name('average-fuel-consumption.index');
+    Route::post('average-fuel-consumption', [AverageFuelConsumptionController::class, 'store'])->name('average-fuel-consumption.store');
+    Route::put('average-fuel-consumption/{vehicle}', [AverageFuelConsumptionController::class, 'update'])->name('average-fuel-consumption.update');
+    Route::delete('average-fuel-consumption/{vehicle}', [AverageFuelConsumptionController::class, 'destroy'])->name('average-fuel-consumption.destroy');
+
+    // Full-Tank Fuel Consumption Testing
     Route::get('fuel-consumption/export/excel', [FuelConsumptionController::class, 'exportExcel'])->name('fuel-consumption.exportExcel');
     Route::get('fuel-consumption/export/pdf', [FuelConsumptionController::class, 'exportAllPdf'])->name('fuel-consumption.exportAllPdf');
     Route::get('fuel-consumption/{fuelConsumption}/pdf', [FuelConsumptionController::class, 'exportPdf'])->name('fuel-consumption.exportPdf')->whereNumber('fuelConsumption');
@@ -84,10 +97,18 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('excel-viewer', [ExcelViewerController::class, 'index'])->name('excel-viewer.index');
     Route::get('excel-viewer/download/{fileId}', [ExcelViewerController::class, 'download'])->name('excel-viewer.download');
 
-    // Advanced Itinerary
+    // Advanced Itinerary Management (Operations)
     Route::post('advanced-itineraries/{advanced_itinerary}/recalculate', [AdvancedItineraryController::class, 'recalculate'])->name('advanced-itineraries.recalculate');
     Route::get('advanced-itineraries/{advanced_itinerary}/pdf', [AdvancedItineraryController::class, 'exportPdf'])->name('advanced-itineraries.exportPdf');
     Route::resource('advanced-itineraries', AdvancedItineraryController::class);
+
+    // Fuel PO Checklist Workflow (Purchasing)
+    Route::get('fuel-po/export/excel', [FuelPoController::class, 'exportExcel'])->name('fuel-po.export-excel');
+    Route::get('fuel-po/export/pdf', [FuelPoController::class, 'exportPdf'])->name('fuel-po.export-pdf');
+    Route::post('fuel-po/bulk-checklist', [FuelPoController::class, 'bulkChecklist'])->name('fuel-po.bulk-checklist');
+    Route::match(['patch', 'post'], 'fuel-po/{advanced_itinerary}/toggle-checklist', [FuelPoController::class, 'toggleChecklist'])->name('fuel-po.toggle-checklist');
+    Route::get('fuel-po/{advanced_itinerary}/pdf', [FuelPoController::class, 'downloadSinglePdf'])->name('fuel-po.pdf');
+    Route::resource('fuel-po', FuelPoController::class)->parameters(['fuel-po' => 'advanced_itinerary']);
 
     // My Work — Personal Work Workflow Assistant
     Route::get('work-tasks/calendar', [WorkTaskController::class, 'calendar'])->name('work-tasks.calendar');

@@ -25,6 +25,8 @@ class User extends Authenticatable
 
     public const ROLE_DRIVER = 'driver';
 
+    public const ROLE_PURCHASING = 'purchasing';
+
     /**
      * Get the attributes that should be cast.
      *
@@ -51,6 +53,11 @@ class User extends Authenticatable
     public function isOperator(): bool
     {
         return $this->role === self::ROLE_OPERATOR;
+    }
+
+    public function isPurchasing(): bool
+    {
+        return $this->role === self::ROLE_PURCHASING;
     }
 
     public function driverVehicleAssignments(): HasMany

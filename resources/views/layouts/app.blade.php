@@ -133,15 +133,28 @@
                 @endif
             </a>
 
-            {{-- Average Fuel Consumption --}}
-            <a href="{{ route('fuel-consumption.index') }}"
+            {{-- Fuel PO Checklist --}}
+            <a href="{{ route('fuel-po.index') }}"
                class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150
-                      {{ request()->routeIs('fuel-consumption.*') ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:bg-slate-800 hover:text-white' }}">
+                      {{ request()->routeIs('fuel-po.*') ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:bg-slate-800 hover:text-white' }}">
+                <svg class="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                </svg>
+                Fuel PO Checklist
+                @if(request()->routeIs('fuel-po.*'))
+                    <span class="ml-auto h-2 w-2 rounded-full bg-red-500"></span>
+                @endif
+            </a>
+
+            {{-- Average Fuel Consumption --}}
+            <a href="{{ route('average-fuel-consumption.index') }}"
+               class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150
+                      {{ (request()->routeIs('average-fuel-consumption.*') || request()->routeIs('fuel-consumption.*')) ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:bg-slate-800 hover:text-white' }}">
                 <svg class="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M15.362 5.214A8.252 8.252 0 0 1 12 21 8.25 8.25 0 0 1 6.038 7.047 8.287 8.287 0 0 0 9 9.601a8.983 8.983 0 0 1 3.361-6.867 8.21 8.21 0 0 0 3 2.48Z" />
                 </svg>
                 Avg Fuel Consumption
-                @if(request()->routeIs('fuel-consumption.*'))
+                @if(request()->routeIs('average-fuel-consumption.*') || request()->routeIs('fuel-consumption.*'))
                     <span class="ml-auto h-2 w-2 rounded-full bg-red-500"></span>
                 @endif
             </a>

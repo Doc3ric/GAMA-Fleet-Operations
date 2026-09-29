@@ -251,11 +251,23 @@
                     </div>
 
                     <div class="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                        <span class="block text-[10px] uppercase font-bold text-slate-400">User / Department</span>
+                        <span class="text-sm font-medium text-slate-800 mt-0.5 block">{{ $vehicle->user ?: '-' }}</span>
+                    </div>
+
+                    <div class="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                        <span class="block text-[10px] uppercase font-bold text-blue-600">Average Consumption (PO Base)</span>
+                        <span class="text-sm font-mono font-bold text-blue-900 mt-0.5 block">
+                            {{ $vehicle->average_consumption ? number_format($vehicle->average_consumption, 2) . ' KM/L' : 'Not set' }}
+                        </span>
+                    </div>
+
+                    <div class="p-3 bg-slate-50 rounded-xl border border-slate-100">
                         <span class="block text-[10px] uppercase font-bold text-slate-400">Helper / Crew</span>
                         <span class="text-sm font-medium text-slate-800 mt-0.5 block">{{ $vehicle->helper ?: '-' }}</span>
                     </div>
 
-                    <div class="p-3 bg-slate-50 rounded-xl border border-slate-100 sm:col-span-2">
+                    <div class="p-3 bg-slate-50 rounded-xl border border-slate-100">
                         <span class="block text-[10px] uppercase font-bold text-slate-400">Date Acquired</span>
                         <span class="text-sm font-medium text-slate-800 mt-0.5 block">
                             {{ $vehicle->date_acquired ? $vehicle->date_acquired->format('F d, Y') : '-' }}

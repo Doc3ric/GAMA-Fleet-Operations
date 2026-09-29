@@ -16,46 +16,28 @@ class VehicleTemplateExport implements FromCollection, WithColumnWidths, WithHea
     {
         return collect([
             [
-                'equipment_code' => 'BH 5',
-                'vehicle_type' => 'BACKHOE',
-                'model' => 'CAT 320',
-                'plate_number' => 'ABC-1234',
-                'date_acquired' => '2024-01-15',
-                'fuel' => '16-20 / LIT/HR',
-                'status' => '0.8 / RUNNING',
-                'location' => 'Project Site A',
-                'project_code' => 'PRJ-2026-001',
-                'operator_driver' => 'Juan Dela Cruz',
-                'helper' => 'Pedro Santos',
-                'gps_status' => 'YES',
+                'equipment_code' => 'SV 12',
+                'model' => 'D-MAX',
+                'driver_name' => 'JOSEPH HENEDO',
+                'plate_number' => 'KAF 6079',
+                'user' => 'PURCHASING',
+                'project_code' => 'UTILITY VAN',
             ],
             [
                 'equipment_code' => 'DT 01',
-                'vehicle_type' => 'DUMP TRUCK',
                 'model' => 'HINO 700',
+                'driver_name' => 'MARIO GOMEZ',
                 'plate_number' => 'XYZ-5678',
-                'date_acquired' => '2023-08-20',
-                'fuel' => '25-30 / LIT/HR',
-                'status' => '1.0 / RUNNING',
-                'location' => 'Main Yard',
-                'project_code' => 'PRJ-2026-002',
-                'operator_driver' => 'Mario Gomez',
-                'helper' => 'Jose Ramos',
-                'gps_status' => 'FOR CHECKUP',
+                'user' => 'OPERATIONS',
+                'project_code' => 'HAULING',
             ],
             [
-                'equipment_code' => 'EX 01',
-                'vehicle_type' => 'EXCAVATOR',
-                'model' => 'KOMATSU PC200',
-                'plate_number' => 'EFG-9012',
-                'date_acquired' => '2022-05-10',
-                'fuel' => '18 / LIT/HR',
-                'status' => 'STANDBY',
-                'location' => 'Project Site B',
-                'project_code' => 'PRJ-2026-001',
-                'operator_driver' => 'Roberto Diaz',
-                'helper' => '',
-                'gps_status' => 'NO',
+                'equipment_code' => 'BH 5',
+                'model' => 'CAT 320',
+                'driver_name' => 'JUAN DELA CRUZ',
+                'plate_number' => 'ABC-1234',
+                'user' => 'ENGINEERING',
+                'project_code' => 'EXCAVATION',
             ],
         ]);
     }
@@ -63,18 +45,12 @@ class VehicleTemplateExport implements FromCollection, WithColumnWidths, WithHea
     public function headings(): array
     {
         return [
-            'EQUIPMENT CODE',
-            'VEHICLE TYPE',
+            'EGTP CODE',
             'MODEL',
+            'DRIVER NAME',
             'PLATE NUMBER',
-            'DATE ACQUIRED',
-            'FUEL',
-            'STATUS',
-            'LOCATION',
+            'USER',
             'PROJECT CODE',
-            'OPERATOR/DRIVER',
-            'HELPER',
-            'GPS STATUS',
         ];
     }
 
@@ -91,23 +67,17 @@ class VehicleTemplateExport implements FromCollection, WithColumnWidths, WithHea
     public function columnWidths(): array
     {
         return [
-            'A' => 20, // EQUIPMENT CODE
-            'B' => 20, // VEHICLE TYPE
-            'C' => 20, // MODEL
+            'A' => 18, // EGTP CODE
+            'B' => 18, // MODEL
+            'C' => 24, // DRIVER NAME
             'D' => 18, // PLATE NUMBER
-            'E' => 18, // DATE ACQUIRED
-            'F' => 20, // FUEL
-            'G' => 20, // STATUS
-            'H' => 24, // LOCATION
-            'I' => 20, // PROJECT CODE
-            'J' => 24, // OPERATOR/DRIVER
-            'K' => 20, // HELPER
-            'L' => 18, // GPS STATUS
+            'E' => 18, // USER
+            'F' => 20, // PROJECT CODE
         ];
     }
 
     public function title(): string
     {
-        return 'Vehicles Template';
+        return 'Registered Vehicles Template';
     }
 }
