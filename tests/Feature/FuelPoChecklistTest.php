@@ -665,4 +665,106 @@ class FuelPoChecklistTest extends TestCase
             $this->assertFalse($record->po_checked);
         }
     }
+
+    public function test_authorized_user_can_delete_fuel_po_record(): void
+    {
+        $record = AdvancedItinerary::factory()->create();
+
+        $response = $this->actingAs($this->purchasing)
+            ->delete(route('fuel-po.destroy', $record));
+
+        $response->assertRedirect(route('fuel-po.index'));
+        $this->assertDatabaseMissing('advanced_itineraries', ['id' => $record->id]);
+    }
+
+    public function test_unauthorized_user_cannot_delete_fuel_po_record(): void
+    {
+        $record = AdvancedItinerary::factory()->create();
+
+        $response = $this->actingAs($this->driver)
+            ->delete(route('fuel-po.destroy', $record));
+
+        $response->assertForbidden();
+        $this->assertDatabaseHas('advanced_itineraries', ['id' => $record->id]);
+    }
+
+    public function test_authorized_user_can_bulk_delete_fuel_po_records(): void
+    {
+        $records = AdvancedItinerary::factory()->count(3)->create();
+        $idsToDelete = [$records[0]->id, $records[1]->id];
+
+        $response = $this->actingAs($this->admin)
+            ->postJson(route('fuel-po.bulk-delete'), [
+                'ids' => $idsToDelete,
+            ]);
+
+        $response->assertOk()
+            ->assertJson([
+                'success' => true,
+                'count' => 2,
+            ]);
+
+        $this->assertDatabaseMissing('advanced_itineraries', ['id' => $records[0]->id]);
+        $this->assertDatabaseMissing('advanced_itineraries', ['id' => $records[1]->id]);
+        $this->assertDatabaseHas('advanced_itineraries', ['id' => $records[2]->id]);
+    }
+
+    public function test_unauthorized_user_cannot_bulk_delete_fuel_po_records(): void
+    {
+        $records = AdvancedItinerary::factory()->count(2)->create();
+
+        $response = $this->actingAs($this->driver)
+            ->postJson(route('fuel-po.bulk-delete'), [
+                'ids' => $records->pluck('id')->all(),
+            ]);
+
+        $response->assertForbidden();
+        $this->assertDatabaseHas('advanced_itineraries', ['id' => $records[0]->id]);
+        $this->assertDatabaseHas('advanced_itineraries', ['id' => $records[1]->id]);
+    }
+
+    public function test_can_export_excel_with_selected_ids_only(): void
+    {
+        $v1 = Vehicle::factory()->create(['equipment_code' => 'EXP-01']);
+        $v2 = Vehicle::factory()->create(['equipment_code' => 'EXP-02']);
+        $v3 = Vehicle::factory()->create(['equipment_code' => 'EXP-03']);
+
+        $it1 = AdvancedItinerary::factory()->create(['vehicle_id' => $v1->id]);
+        $it2 = AdvancedItinerary::factory()->create(['vehicle_id' => $v2->id]);
+        $it3 = AdvancedItinerary::factory()->create(['vehicle_id' => $v3->id]);
+
+        $response = $this->actingAs($this->purchasing)
+            ->get(route('fuel-po.export-excel', ['ids' => "{$it1->id},{$it2->id}"]));
+
+        $response->assertOk();
+    }
+
+    public function test_can_export_pdf_with_selected_ids_only(): void
+    {
+        $v1 = Vehicle::factory()->create(['equipment_code' => 'PDF-01']);
+        $v2 = Vehicle::factory()->create(['equipment_code' => 'PDF-02']);
+
+        $it1 = AdvancedItinerary::factory()->create(['vehicle_id' => $v1->id]);
+        $it2 = AdvancedItinerary::factory()->create(['vehicle_id' => $v2->id]);
+
+        $response = $this->actingAs($this->purchasing)
+            ->get(route('fuel-po.export-pdf', ['ids' => "{$it1->id}"]));
+
+        $response->assertOk();
+    }
+
+    public function test_fuel_po_index_displays_delete_button_for_authorized_users(): void
+    {
+        $itinerary = AdvancedItinerary::factory()->create();
+
+        $this->actingAs($this->purchasing)
+            ->get(route('fuel-po.index'))
+            ->assertOk()
+            ->assertSee('action="'.route('fuel-po.destroy', $itinerary).'"', false);
+
+        // Driver shouldn't see delete form
+        $this->actingAs($this->driver)
+            ->get(route('fuel-po.index'))
+            ->assertForbidden();
+    }
 }

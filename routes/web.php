@@ -106,6 +106,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('fuel-po/export/excel', [FuelPoController::class, 'exportExcel'])->name('fuel-po.export-excel');
     Route::get('fuel-po/export/pdf', [FuelPoController::class, 'exportPdf'])->name('fuel-po.export-pdf');
     Route::post('fuel-po/bulk-checklist', [FuelPoController::class, 'bulkChecklist'])->name('fuel-po.bulk-checklist');
+    Route::post('fuel-po/bulk-delete', [FuelPoController::class, 'bulkDelete'])->name('fuel-po.bulk-delete');
     Route::match(['patch', 'post'], 'fuel-po/{advanced_itinerary}/toggle-checklist', [FuelPoController::class, 'toggleChecklist'])->name('fuel-po.toggle-checklist');
     Route::get('fuel-po/{advanced_itinerary}/pdf', [FuelPoController::class, 'downloadSinglePdf'])->name('fuel-po.pdf');
     Route::resource('fuel-po', FuelPoController::class)->parameters(['fuel-po' => 'advanced_itinerary']);

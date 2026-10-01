@@ -27,7 +27,7 @@ class AdvancedItineraryPolicy
         return $user->isAdmin() || $user->isOperator() || $user->isPurchasing();
     }
 
-    public function delete(User $user, AdvancedItinerary $itinerary): bool
+    public function delete(User $user, ?AdvancedItinerary $itinerary = null): bool
     {
         return $user->isAdmin() || $user->isPurchasing();
     }

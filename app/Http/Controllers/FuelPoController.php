@@ -403,6 +403,35 @@ class FuelPoController extends Controller
         return back()->with('success', $message);
     }
 
+    public function bulkDelete(Request $request): JsonResponse|RedirectResponse
+    {
+        Gate::authorize('delete', AdvancedItinerary::class);
+
+        $validated = $request->validate([
+            'ids' => ['required', 'array', 'min:1'],
+            'ids.*' => ['integer', 'exists:advanced_itineraries,id'],
+        ]);
+
+        $ids = $validated['ids'];
+        $count = count($ids);
+
+        AdvancedItinerary::whereIn('id', $ids)->delete();
+
+        $message = "Successfully deleted {$count} Fuel PO record(s).";
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => $message,
+                'count' => $count,
+            ]);
+        }
+
+        return redirect()
+            ->route('fuel-po.index')
+            ->with('success', $message);
+    }
+
     public function toggleChecklist(Request $request, AdvancedItinerary $advancedItinerary): JsonResponse|RedirectResponse
     {
         Gate::authorize('updateChecklist', $advancedItinerary);
@@ -511,6 +540,14 @@ class FuelPoController extends Controller
             'creator',
             'poChecker',
         ])->orderByDesc('itinerary_date')->orderByDesc('id');
+
+        if ($ids = $request->input('ids')) {
+            $idArray = is_array($ids) ? $ids : explode(',', (string) $ids);
+            $idArray = array_values(array_filter(array_map('intval', $idArray)));
+            if (! empty($idArray)) {
+                $query->whereIn('advanced_itineraries.id', $idArray);
+            }
+        }
 
         if ($search = $request->input('search')) {
             $query->where(function (Builder $q) use ($search) {
