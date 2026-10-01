@@ -760,11 +760,30 @@ class FuelPoChecklistTest extends TestCase
         $this->actingAs($this->purchasing)
             ->get(route('fuel-po.index'))
             ->assertOk()
-            ->assertSee('action="'.route('fuel-po.destroy', $itinerary).'"', false);
+            ->assertSee('confirmDelete('.$itinerary->id, false)
+            ->assertSee(route('fuel-po.destroy', $itinerary), false)
+            ->assertSee('Delete Fuel Purchase Order (PO)');
 
         // Driver shouldn't see delete form
         $this->actingAs($this->driver)
             ->get(route('fuel-po.index'))
+            ->assertForbidden();
+    }
+
+    public function test_fuel_po_show_displays_delete_button_and_modal_for_authorized_users(): void
+    {
+        $itinerary = AdvancedItinerary::factory()->create();
+
+        $this->actingAs($this->purchasing)
+            ->get(route('fuel-po.show', $itinerary))
+            ->assertOk()
+            ->assertSee('showDeleteModal = true', false)
+            ->assertSee('action="'.route('fuel-po.destroy', $itinerary).'"', false)
+            ->assertSee('Delete Fuel Purchase Order (PO)');
+
+        // Driver shouldn't be authorized to view/delete
+        $this->actingAs($this->driver)
+            ->get(route('fuel-po.show', $itinerary))
             ->assertForbidden();
     }
 
