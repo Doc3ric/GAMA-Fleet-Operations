@@ -1033,4 +1033,103 @@ class FuelPoChecklistTest extends TestCase
         $this->assertEquals(2499.00, (float) $leg->end_odo);
         $this->assertEquals(64.00, (float) $leg->total_distance);
     }
+
+    public function test_fuel_po_create_page_renders_manual_eqt_code_options(): void
+    {
+        $this->actingAs($this->purchasing)
+            ->get(route('fuel-po.create'))
+            ->assertOk()
+            ->assertSee('Select Dropdown')
+            ->assertSee('Type Manually')
+            ->assertSee('custom_equipment_code')
+            ->assertSee('custom_average_consumption');
+    }
+
+    public function test_can_create_fuel_po_with_manually_specified_equipment_code_and_calculate_liters(): void
+    {
+        $payload = [
+            'itinerary_date' => now()->toDateString(),
+            'vehicle_mode' => 'manual',
+            'custom_equipment_code' => 'VH-MAN-01',
+            'custom_model' => 'Custom Truck Model',
+            'custom_plate_number' => 'XYZ-5678',
+            'custom_user' => 'Logistics Team',
+            'custom_project_code' => 'PRJ-SPEC',
+            'custom_average_consumption' => 1.60,
+            'driver_name' => 'Custom Driver Mark',
+            'status' => 'FINALIZED',
+            'destinations' => [
+                [
+                    'name' => 'Depot to Port',
+                    'distance' => 48.50,
+                    'purpose' => 'Cargo delivery',
+                ],
+            ],
+        ];
+
+        $response = $this->actingAs($this->purchasing)
+            ->post(route('fuel-po.store'), $payload);
+
+        $response->assertRedirect(route('fuel-po.index'));
+
+        // Vehicle was created in master list
+        $vehicle = Vehicle::where('equipment_code', 'VH-MAN-01')->first();
+        $this->assertNotNull($vehicle);
+        $this->assertEquals('Custom Truck Model', $vehicle->model);
+        $this->assertEquals('XYZ-5678', $vehicle->plate_number);
+        $this->assertEquals(1.60, (float) $vehicle->average_fuel_consumption);
+
+        // Itinerary was created with 48.5 / 1.60 = 30.31 -> 31 L
+        $itinerary = AdvancedItinerary::latest('id')->first();
+        $this->assertNotNull($itinerary);
+        $this->assertEquals($vehicle->id, $itinerary->vehicle_id);
+        $this->assertEquals('Custom Driver Mark', $itinerary->driver_name);
+        $this->assertEquals(48.50, (float) $itinerary->total_distance);
+        $this->assertEquals(31.0, (float) $itinerary->fuel_liters_required);
+
+        // Verify index displays the manual vehicle details
+        $this->actingAs($this->purchasing)
+            ->get(route('fuel-po.index'))
+            ->assertOk()
+            ->assertSee('VH-MAN-01')
+            ->assertSee('XYZ-5678')
+            ->assertSee('31');
+    }
+
+    public function test_can_update_fuel_po_with_manual_equipment_code(): void
+    {
+        $oldVehicle = Vehicle::factory()->create(['equipment_code' => 'OLD-EQT-01']);
+        $itinerary = AdvancedItinerary::factory()->create([
+            'vehicle_id' => $oldVehicle->id,
+            'total_distance' => 60.0,
+        ]);
+
+        $payload = [
+            'itinerary_date' => $itinerary->itinerary_date->format('Y-m-d'),
+            'vehicle_mode' => 'manual',
+            'custom_equipment_code' => 'NEW-MAN-02',
+            'custom_average_consumption' => 2.00,
+            'driver_name' => 'Updated Driver Joe',
+            'status' => 'FINALIZED',
+            'destinations' => [
+                [
+                    'name' => 'Updated Port',
+                    'distance' => 60.0,
+                    'purpose' => 'Hauling',
+                ],
+            ],
+        ];
+
+        $response = $this->actingAs($this->purchasing)
+            ->put(route('fuel-po.update', $itinerary), $payload);
+
+        $response->assertRedirect(route('fuel-po.show', $itinerary));
+
+        $newVehicle = Vehicle::where('equipment_code', 'NEW-MAN-02')->first();
+        $this->assertNotNull($newVehicle);
+
+        $itinerary->refresh();
+        $this->assertEquals($newVehicle->id, $itinerary->vehicle_id);
+        $this->assertEquals(30.0, (float) $itinerary->fuel_liters_required); // 60 / 2.0 = 30
+    }
 }

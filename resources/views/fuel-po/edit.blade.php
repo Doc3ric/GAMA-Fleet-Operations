@@ -64,6 +64,13 @@
         vehiclesList: {{ json_encode($vehiclesList) }},
         locationsList: {{ json_encode($locationsList) }},
         initialVehicleId: '{{ old('vehicle_id', $fuelPo->vehicle_id) }}',
+        initialVehicleMode: '{{ old('vehicle_mode', old('custom_equipment_code') ? 'manual' : 'dropdown') }}',
+        initialCustomEquipmentCode: {{ json_encode(old('custom_equipment_code', '')) }},
+        initialCustomPlateNumber: {{ json_encode(old('custom_plate_number', '')) }},
+        initialCustomModel: {{ json_encode(old('custom_model', '')) }},
+        initialCustomUser: {{ json_encode(old('custom_user', '')) }},
+        initialCustomProjectCode: {{ json_encode(old('custom_project_code', '')) }},
+        initialCustomAvgConsumption: {{ json_encode(old('custom_average_consumption', '')) }},
         initialDriverName: {{ json_encode(old('driver_name', $fuelPo->driver_name !== '—' ? $fuelPo->driver_name : '')) }},
         initialRows: {{ json_encode($initialRows) }},
         initialDestination: {{ json_encode(old('destination', $fuelPo->destination ?? '')) }},
@@ -119,27 +126,68 @@
             <input type="hidden" name="destination" :value="combinedDestination">
             <input type="hidden" name="total_distance" :value="totalCalculatedDistance">
 
+            {{-- Hidden vehicle mode --}}
+            <input type="hidden" name="vehicle_mode" :value="vehicleMode">
+
             {{-- MAIN FORM CARD --}}
             <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs space-y-6">
                 {{-- TOP ROW: VEHICLE SELECTION & ITINERARY DATE/STATUS/DRIVER --}}
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-                    {{-- 1. EQT CODE (Dropdown Selection of Registered Vehicle) --}}
+                    {{-- 1. EQT CODE (Dropdown Selection OR Manual Entry) --}}
                     <div>
-                        <label class="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-1.5">
-                            EQT Code (Select Registered Vehicle) <span class="text-rose-500">*</span>
-                        </label>
-                        <select name="vehicle_id" x-model="selectedVehicleId" @change="onVehicleChange()" required
-                                class="w-full rounded-xl border border-slate-300 bg-slate-50/50 px-3 py-2.5 text-xs font-semibold text-slate-900 focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none">
-                            <option value="">-- Choose Equipment Code --</option>
-                            @foreach($vehicles as $vehicle)
-                                <option value="{{ $vehicle->id }}" {{ old('vehicle_id', $fuelPo->vehicle_id) == $vehicle->id ? 'selected' : '' }}>
-                                    {{ $vehicle->equipment_code }} &bull; {{ $vehicle->model ?: 'No Model' }} ({{ $vehicle->plate_number ?: 'No Plate' }})
-                                </option>
-                            @endforeach
-                        </select>
-                        <p class="text-[11px] text-slate-500 mt-1">
-                            Automatically loads Average Consumption, Model, Driver, Plate, User, and Project.
-                        </p>
+                        <div class="flex items-center justify-between mb-1.5">
+                            <label class="block text-xs font-bold text-slate-800 uppercase tracking-wider">
+                                EQT Code <span class="text-rose-500">*</span>
+                            </label>
+                            <div class="inline-flex rounded-lg border border-slate-200 p-0.5 bg-slate-100 text-[11px]">
+                                <button type="button"
+                                        @click="setVehicleMode('dropdown')"
+                                        :class="vehicleMode === 'dropdown' ? 'bg-white font-bold text-blue-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'"
+                                        class="px-2.5 py-0.5 rounded-md transition cursor-pointer">
+                                    Select Dropdown
+                                </button>
+                                <button type="button"
+                                        @click="setVehicleMode('manual')"
+                                        :class="vehicleMode === 'manual' ? 'bg-white font-bold text-blue-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'"
+                                        class="px-2.5 py-0.5 rounded-md transition cursor-pointer">
+                                    ✍ Type Manually
+                                </button>
+                            </div>
+                        </div>
+
+                        {{-- Mode 1: Dropdown Selection --}}
+                        <div x-show="vehicleMode === 'dropdown'">
+                            <select name="vehicle_id" x-model="selectedVehicleId" @change="onVehicleChange()" :required="vehicleMode === 'dropdown'"
+                                    class="w-full rounded-xl border border-slate-300 bg-slate-50/50 px-3 py-2.5 text-xs font-semibold text-slate-900 focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none">
+                                <option value="">-- Choose Equipment Code --</option>
+                                <option value="manual" class="font-bold text-blue-700 bg-blue-50">➕ Type Manually / Custom EQT Code</option>
+                                @foreach($vehicles as $vehicle)
+                                    <option value="{{ $vehicle->id }}" {{ old('vehicle_id', $fuelPo->vehicle_id) == $vehicle->id ? 'selected' : '' }}>
+                                        {{ $vehicle->equipment_code }} &bull; {{ $vehicle->model ?: 'No Model' }} ({{ $vehicle->plate_number ?: 'No Plate' }})
+                                    </option>
+                                @endforeach
+                            </select>
+                            <p class="text-[11px] text-slate-500 mt-1">
+                                Automatically loads Average Consumption, Model, Driver, Plate, User, and Project.
+                            </p>
+                        </div>
+
+                        {{-- Mode 2: Manual Specification --}}
+                        <div x-show="vehicleMode === 'manual'" x-cloak class="space-y-1.5">
+                            <input type="text"
+                                   name="custom_equipment_code"
+                                   x-model="manualEquipmentCode"
+                                   @input="onManualEquipmentCodeInput()"
+                                   :required="vehicleMode === 'manual'"
+                                   placeholder="e.g. VH 1371, TRUCK-08, EQ-202"
+                                   class="w-full rounded-xl border-2 border-blue-400 bg-blue-50/20 px-3 py-2.5 text-xs font-bold text-slate-900 focus:bg-white focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none uppercase font-mono shadow-2xs">
+                            <div class="flex items-center justify-between text-[11px]">
+                                <span class="text-blue-700 font-medium">Type custom/manual equipment code.</span>
+                                <button type="button" @click="setVehicleMode('dropdown')" class="text-slate-500 hover:text-blue-600 underline">
+                                    Switch back to dropdown
+                                </button>
+                            </div>
+                        </div>
                     </div>
 
                     {{-- 2. Itinerary Date, Driver & Status --}}
@@ -170,8 +218,8 @@
                     </div>
                 </div>
 
-                {{-- AUTO-LOADED VEHICLE PROFILE CARD --}}
-                <div x-show="selectedVehicle" x-cloak class="rounded-xl border border-blue-200 bg-blue-50/60 p-4 space-y-2">
+                {{-- AUTO-LOADED VEHICLE PROFILE CARD (For Dropdown Mode) --}}
+                <div x-show="vehicleMode === 'dropdown' && selectedVehicle" x-cloak class="rounded-xl border border-blue-200 bg-blue-50/60 p-4 space-y-2">
                     <div class="flex items-center justify-between">
                         <span class="text-xs font-bold text-blue-900 uppercase tracking-wider flex items-center gap-1.5">
                             <svg class="h-3.5 w-3.5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -206,6 +254,60 @@
                         <div class="bg-white rounded-lg p-2 border border-blue-100">
                             <span class="block text-[10px] text-slate-400 uppercase font-semibold">Project Code</span>
                             <span class="font-mono font-semibold text-slate-900" x-text="selectedVehicle?.project_code || '—'"></span>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- MANUAL SPECIFICATION PROFILE CARD (For Manual Mode) --}}
+                <div x-show="vehicleMode === 'manual'" x-cloak class="rounded-xl border-2 border-blue-300/80 bg-gradient-to-br from-blue-50/80 via-white to-blue-50/40 p-4 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <span class="inline-flex items-center px-2 py-0.5 rounded bg-blue-600 text-white text-[10px] font-black tracking-wider uppercase">
+                                MANUAL SPECIFY
+                            </span>
+                            <h4 class="text-xs font-bold text-slate-900">Custom Vehicle / Equipment Details</h4>
+                        </div>
+                        <span class="text-[11px] text-blue-700 font-medium">
+                            Auto-links with Vehicle Master List
+                        </span>
+                    </div>
+
+                    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 text-xs">
+                        <div>
+                            <label class="block text-[10px] text-slate-600 uppercase font-bold mb-1">
+                                Avg. Cons (KM/L) <span class="text-rose-500">*</span>
+                            </label>
+                            <input type="number" step="0.01" min="0.01" name="custom_average_consumption" x-model="manualAvgConsumption" placeholder="e.g. 1.60"
+                                   class="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900 focus:border-blue-500 outline-none">
+                            <span class="text-[9px] text-slate-400 block mt-0.5">Used for Liter for PO</span>
+                        </div>
+                        <div>
+                            <label class="block text-[10px] text-slate-600 uppercase font-bold mb-1">
+                                Plate Number
+                            </label>
+                            <input type="text" name="custom_plate_number" x-model="manualPlateNumber" placeholder="e.g. ABC-1234"
+                                   class="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-mono text-slate-900 focus:border-blue-500 outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] text-slate-600 uppercase font-bold mb-1">
+                                Make / Model
+                            </label>
+                            <input type="text" name="custom_model" x-model="manualModel" placeholder="e.g. Isuzu Giga"
+                                   class="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900 focus:border-blue-500 outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] text-slate-600 uppercase font-bold mb-1">
+                                User / Department
+                            </label>
+                            <input type="text" name="custom_user" x-model="manualUser" placeholder="e.g. Operations"
+                                   class="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900 focus:border-blue-500 outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] text-slate-600 uppercase font-bold mb-1">
+                                Project Code
+                            </label>
+                            <input type="text" name="custom_project_code" x-model="manualProjectCode" placeholder="e.g. PRJ-01"
+                                   class="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900 focus:border-blue-500 outline-none">
                         </div>
                     </div>
                 </div>
@@ -419,12 +521,56 @@
             return {
                 vehiclesList: config.vehiclesList || [],
                 locationsList: config.locationsList || [],
+                vehicleMode: config.initialVehicleMode || (config.initialCustomEquipmentCode ? 'manual' : 'dropdown'),
                 selectedVehicleId: config.initialVehicleId || '',
+                manualEquipmentCode: config.initialCustomEquipmentCode || '',
+                manualPlateNumber: config.initialCustomPlateNumber || '',
+                manualModel: config.initialCustomModel || '',
+                manualUser: config.initialCustomUser || '',
+                manualProjectCode: config.initialCustomProjectCode || '',
+                manualAvgConsumption: config.initialCustomAvgConsumption || '',
                 driverName: config.initialDriverName || '',
 
+                setVehicleMode(mode) {
+                    this.vehicleMode = mode;
+                    if (mode === 'dropdown' && this.selectedVehicleId === 'manual') {
+                        this.selectedVehicleId = '';
+                    }
+                },
+
                 onVehicleChange() {
+                    if (this.selectedVehicleId === 'manual') {
+                        this.setVehicleMode('manual');
+                        return;
+                    }
                     if (this.selectedVehicle && (!this.driverName || this.driverName.trim() === '')) {
                         this.driverName = (this.selectedVehicle.driver_name && this.selectedVehicle.driver_name !== '—') ? this.selectedVehicle.driver_name : '';
+                    }
+                },
+
+                onManualEquipmentCodeInput() {
+                    const typed = (this.manualEquipmentCode || '').trim().toLowerCase();
+                    if (!typed) return;
+                    const match = this.vehiclesList.find(v => (v.equipment_code || '').toLowerCase() === typed);
+                    if (match) {
+                        if (!this.manualPlateNumber && match.plate_number && match.plate_number !== '—') {
+                            this.manualPlateNumber = match.plate_number;
+                        }
+                        if (!this.manualModel && match.model && match.model !== '—') {
+                            this.manualModel = match.model;
+                        }
+                        if (!this.manualUser && match.user && match.user !== '—') {
+                            this.manualUser = match.user;
+                        }
+                        if (!this.manualProjectCode && match.project_code && match.project_code !== '—') {
+                            this.manualProjectCode = match.project_code;
+                        }
+                        if (!this.manualAvgConsumption && match.average_consumption) {
+                            this.manualAvgConsumption = String(match.average_consumption);
+                        }
+                        if (!this.driverName && match.driver_name && match.driver_name !== '—') {
+                            this.driverName = match.driver_name;
+                        }
                     }
                 },
 
@@ -472,10 +618,17 @@
                 },
 
                 get selectedVehicle() {
+                    if (this.vehicleMode === 'manual') {
+                        return null;
+                    }
                     return this.vehiclesList.find(v => String(v.id) === String(this.selectedVehicleId)) || null;
                 },
 
                 get averageConsumption() {
+                    if (this.vehicleMode === 'manual') {
+                        const val = parseFloat(this.manualAvgConsumption);
+                        return (!isNaN(val) && val > 0) ? val : null;
+                    }
                     return this.selectedVehicle?.average_consumption || null;
                 },
 

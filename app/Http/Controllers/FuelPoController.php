@@ -59,13 +59,88 @@ class FuelPoController extends Controller
         return view('fuel-po.create', compact('vehicles', 'locations'));
     }
 
+    /**
+     * Resolve target vehicle ID from either registered dropdown selection or manual specification.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function resolveVehicleId(array $data, ?string $driverName = null): ?int
+    {
+        $vehicleMode = $data['vehicle_mode'] ?? 'dropdown';
+        $customEquipmentCode = trim((string) ($data['custom_equipment_code'] ?? ''));
+
+        if ($vehicleMode === 'manual' || ($data['vehicle_id'] ?? null) === 'manual' || ! empty($customEquipmentCode)) {
+            if (empty($customEquipmentCode)) {
+                return null;
+            }
+
+            $customAvg = isset($data['custom_average_consumption']) && is_numeric($data['custom_average_consumption'])
+                ? (float) $data['custom_average_consumption']
+                : null;
+            $customPlate = trim((string) ($data['custom_plate_number'] ?? ''));
+            $customModel = trim((string) ($data['custom_model'] ?? ''));
+            $customUser = trim((string) ($data['custom_user'] ?? ''));
+            $customProject = trim((string) ($data['custom_project_code'] ?? ''));
+
+            $vehicle = Vehicle::firstOrCreate(
+                ['equipment_code' => $customEquipmentCode],
+                [
+                    'plate_number' => $customPlate ?: null,
+                    'model' => $customModel ?: null,
+                    'operator_driver' => $driverName ?: null,
+                    'user' => $customUser ?: null,
+                    'project_code' => $customProject ?: null,
+                    'average_fuel_consumption' => $customAvg,
+                    'gps_status' => 'NO',
+                    'created_by' => auth()->id(),
+                ]
+            );
+
+            // Update attributes if existing vehicle was missing them or user provided new values
+            $updates = [];
+            if ($customAvg !== null && ($vehicle->average_fuel_consumption === null || (float) $vehicle->average_fuel_consumption !== $customAvg)) {
+                $updates['average_fuel_consumption'] = $customAvg;
+            }
+            if (! empty($customPlate) && empty($vehicle->plate_number)) {
+                $updates['plate_number'] = $customPlate;
+            }
+            if (! empty($customModel) && empty($vehicle->model)) {
+                $updates['model'] = $customModel;
+            }
+            if (! empty($customUser) && empty($vehicle->user)) {
+                $updates['user'] = $customUser;
+            }
+            if (! empty($customProject) && empty($vehicle->project_code)) {
+                $updates['project_code'] = $customProject;
+            }
+            if (! empty($updates)) {
+                $vehicle->update($updates);
+            }
+
+            return $vehicle->id;
+        }
+
+        if (isset($data['vehicle_id']) && is_numeric($data['vehicle_id'])) {
+            return (int) $data['vehicle_id'];
+        }
+
+        return null;
+    }
+
     public function store(Request $request): RedirectResponse
     {
         Gate::authorize('create', AdvancedItinerary::class);
 
         $validated = $request->validate([
             'itinerary_date' => ['required', 'date'],
-            'vehicle_id' => ['required', 'exists:vehicles,id'],
+            'vehicle_mode' => ['nullable', 'string', 'in:dropdown,manual'],
+            'vehicle_id' => ['nullable'],
+            'custom_equipment_code' => ['nullable', 'string', 'max:20'],
+            'custom_model' => ['nullable', 'string', 'max:100'],
+            'custom_plate_number' => ['nullable', 'string', 'max:50'],
+            'custom_user' => ['nullable', 'string', 'max:100'],
+            'custom_project_code' => ['nullable', 'string', 'max:50'],
+            'custom_average_consumption' => ['nullable', 'numeric', 'min:0.01'],
             'driver_name' => ['nullable', 'string', 'max:255'],
             'destination' => ['nullable', 'string', 'max:255'],
             'total_distance' => ['nullable', 'numeric', 'min:0'],
@@ -95,7 +170,16 @@ class FuelPoController extends Controller
             'legs.*.purpose' => ['nullable', 'string', 'max:255'],
         ]);
 
-        $itinerary = DB::transaction(function () use ($validated) {
+        $targetVehicleId = $this->resolveVehicleId($validated, $validated['driver_name'] ?? null);
+
+        if (! $targetVehicleId) {
+            return back()->withInput()->withErrors([
+                'vehicle_id' => 'Please select a registered vehicle or specify a manual Equipment Code.',
+                'custom_equipment_code' => 'Please enter the Vehicle / Equipment Code.',
+            ]);
+        }
+
+        $itinerary = DB::transaction(function () use ($validated, $targetVehicleId) {
             $destRows = $validated['destinations'] ?? [];
             $legs = $validated['legs'] ?? [];
             $totalDistance = (float) ($validated['total_distance'] ?? 0);
@@ -146,7 +230,7 @@ class FuelPoController extends Controller
 
             $itinerary = AdvancedItinerary::create([
                 'itinerary_date' => $validated['itinerary_date'],
-                'vehicle_id' => $validated['vehicle_id'],
+                'vehicle_id' => $targetVehicleId,
                 'driver_name' => $validated['driver_name'] ?? null,
                 'title' => $validated['title'] ?? null,
                 'destination' => $destination,
@@ -267,7 +351,14 @@ class FuelPoController extends Controller
 
         $validated = $request->validate([
             'itinerary_date' => ['required', 'date'],
-            'vehicle_id' => ['nullable', 'exists:vehicles,id'],
+            'vehicle_mode' => ['nullable', 'string', 'in:dropdown,manual'],
+            'vehicle_id' => ['nullable'],
+            'custom_equipment_code' => ['nullable', 'string', 'max:20'],
+            'custom_model' => ['nullable', 'string', 'max:100'],
+            'custom_plate_number' => ['nullable', 'string', 'max:50'],
+            'custom_user' => ['nullable', 'string', 'max:100'],
+            'custom_project_code' => ['nullable', 'string', 'max:50'],
+            'custom_average_consumption' => ['nullable', 'numeric', 'min:0.01'],
             'driver_name' => ['nullable', 'string', 'max:255'],
             'destination' => ['nullable', 'string', 'max:255'],
             'total_distance' => ['nullable', 'numeric', 'min:0'],
@@ -297,7 +388,20 @@ class FuelPoController extends Controller
             'legs.*.purpose' => ['nullable', 'string', 'max:255'],
         ]);
 
-        DB::transaction(function () use ($advancedItinerary, $validated) {
+        $targetVehicleId = $this->resolveVehicleId($validated, $validated['driver_name'] ?? null);
+
+        if (! $targetVehicleId) {
+            $targetVehicleId = $advancedItinerary->vehicle_id;
+        }
+
+        if (! $targetVehicleId) {
+            return back()->withInput()->withErrors([
+                'vehicle_id' => 'Please select a registered vehicle or specify a manual Equipment Code.',
+                'custom_equipment_code' => 'Please enter the Vehicle / Equipment Code.',
+            ]);
+        }
+
+        DB::transaction(function () use ($advancedItinerary, $validated, $targetVehicleId) {
             $destRows = $validated['destinations'] ?? [];
             $legs = $validated['legs'] ?? [];
             $totalDistance = (float) ($validated['total_distance'] ?? 0);
@@ -348,7 +452,7 @@ class FuelPoController extends Controller
 
             $advancedItinerary->update([
                 'itinerary_date' => $validated['itinerary_date'],
-                'vehicle_id' => $validated['vehicle_id'] ?? null,
+                'vehicle_id' => $targetVehicleId,
                 'driver_name' => $validated['driver_name'] ?? null,
                 'title' => $validated['title'] ?? null,
                 'destination' => $destination,
