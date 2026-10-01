@@ -46,6 +46,7 @@
         vehiclesList: {{ json_encode($vehiclesList) }},
         locationsList: {{ json_encode($locationsList) }},
         initialVehicleId: '{{ old('vehicle_id', '') }}',
+        initialDriverName: {{ json_encode(old('driver_name', '')) }},
         initialRows: {{ json_encode($initialRows) }},
         initialDestination: '{{ old('destination', '') }}',
         initialDistance: '{{ old('total_distance', '') }}'
@@ -102,7 +103,7 @@
                         <label class="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-1.5">
                             EQT Code (Select Registered Vehicle) <span class="text-rose-500">*</span>
                         </label>
-                        <select name="vehicle_id" x-model="selectedVehicleId" required
+                        <select name="vehicle_id" x-model="selectedVehicleId" @change="onVehicleChange()" required
                                 class="w-full rounded-xl border border-slate-300 bg-slate-50/50 px-3 py-2.5 text-xs font-semibold text-slate-900 focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none">
                             <option value="">-- Choose Equipment Code --</option>
                             @foreach($vehicles as $vehicle)
@@ -116,13 +117,20 @@
                         </p>
                     </div>
 
-                    {{-- 2. Itinerary Date & Status --}}
-                    <div class="grid grid-cols-2 gap-3">
+                    {{-- 2. Itinerary Date, Driver & Status --}}
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div>
                             <label class="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-1.5">
                                 Itinerary Date <span class="text-rose-500">*</span>
                             </label>
                             <input type="date" name="itinerary_date" value="{{ old('itinerary_date', date('Y-m-d')) }}" required
+                                   class="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-900 focus:border-blue-500 outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-1.5">
+                                Driver Name <span class="text-[10px] text-blue-600 font-normal lowercase">(editable)</span>
+                            </label>
+                            <input type="text" name="driver_name" x-model="driverName" placeholder="Driver name for PO"
                                    class="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-900 focus:border-blue-500 outline-none">
                         </div>
                         <div>
@@ -351,6 +359,13 @@
                 vehiclesList: config.vehiclesList || [],
                 locationsList: config.locationsList || [],
                 selectedVehicleId: config.initialVehicleId || '',
+                driverName: config.initialDriverName || '',
+
+                onVehicleChange() {
+                    if (this.selectedVehicle && (!this.driverName || this.driverName.trim() === '')) {
+                        this.driverName = (this.selectedVehicle.driver_name && this.selectedVehicle.driver_name !== '—') ? this.selectedVehicle.driver_name : '';
+                    }
+                },
 
                 // Destination & Distance rows: start with at least 1 row
                 destinationRows: (config.initialRows && config.initialRows.length > 0)

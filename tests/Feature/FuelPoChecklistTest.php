@@ -767,4 +767,83 @@ class FuelPoChecklistTest extends TestCase
             ->get(route('fuel-po.index'))
             ->assertForbidden();
     }
+
+    public function test_can_update_fuel_po_driver_name_specifically_for_itinerary(): void
+    {
+        $vehicle = Vehicle::factory()->create([
+            'operator_driver' => 'Original Default Driver',
+            'average_fuel_consumption' => 4.0,
+        ]);
+
+        $itinerary = AdvancedItinerary::factory()->create([
+            'vehicle_id' => $vehicle->id,
+            'driver_name' => null,
+            'status' => 'DRAFT',
+            'destination' => 'Original Mill',
+            'total_distance' => 100.0,
+        ]);
+
+        // Prior to update, driver_name falls back to vehicle operator_driver
+        $this->assertEquals('Original Default Driver', $itinerary->driver_name);
+
+        $payload = [
+            'itinerary_date' => $itinerary->itinerary_date->format('Y-m-d'),
+            'vehicle_id' => $vehicle->id,
+            'driver_name' => 'Custom PO Driver Juan',
+            'status' => 'FINALIZED',
+            'destination' => 'Updated Destination',
+            'total_distance' => 120.0,
+        ];
+
+        $response = $this->actingAs($this->purchasing)
+            ->put(route('fuel-po.update', $itinerary), $payload);
+
+        $response->assertRedirect(route('fuel-po.show', $itinerary));
+
+        $itinerary->refresh();
+        $vehicle->refresh();
+
+        // Custom driver name is now saved specifically on the Fuel PO
+        $this->assertEquals('Custom PO Driver Juan', $itinerary->driver_name);
+        // Vehicle master default driver remains untouched
+        $this->assertEquals('Original Default Driver', $vehicle->operator_driver);
+    }
+
+    public function test_fuel_po_index_and_exports_display_custom_driver_name(): void
+    {
+        $vehicle = Vehicle::factory()->create([
+            'operator_driver' => 'Base Driver',
+        ]);
+
+        $itinerary = AdvancedItinerary::factory()->create([
+            'vehicle_id' => $vehicle->id,
+            'driver_name' => 'Special Reliever Driver',
+        ]);
+
+        $response = $this->actingAs($this->purchasing)
+            ->get(route('fuel-po.index'));
+
+        $response->assertOk()
+            ->assertSee('Special Reliever Driver');
+
+        // Check search filter finds by custom driver name
+        $searchResponse = $this->actingAs($this->purchasing)
+            ->get(route('fuel-po.index', ['search' => 'Reliever']));
+
+        $searchResponse->assertOk()
+            ->assertSee('Special Reliever Driver');
+    }
+
+    public function test_fuel_po_edit_page_renders_driver_name_input(): void
+    {
+        $itinerary = AdvancedItinerary::factory()->create([
+            'driver_name' => 'Driver To Edit',
+        ]);
+
+        $this->actingAs($this->purchasing)
+            ->get(route('fuel-po.edit', $itinerary))
+            ->assertOk()
+            ->assertSee('name="driver_name"', false)
+            ->assertSee('Driver To Edit');
+    }
 }

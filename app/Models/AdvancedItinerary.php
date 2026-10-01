@@ -26,6 +26,7 @@ class AdvancedItinerary extends Model
     /** @var list<string> */
     protected $fillable = [
         'vehicle_id',
+        'driver_name',
         'itinerary_date',
         'title',
         'destination',
@@ -126,6 +127,15 @@ class AdvancedItinerary extends Model
         }
 
         return $lastLeg->destination?->official_name ?? $lastLeg->purpose ?? '—';
+    }
+
+    public function getDriverNameAttribute(): string
+    {
+        if (! empty($this->attributes['driver_name'])) {
+            return $this->attributes['driver_name'];
+        }
+
+        return $this->vehicle?->operator_driver ?? '—';
     }
 
     public function getFuelLitersAttribute(): ?float

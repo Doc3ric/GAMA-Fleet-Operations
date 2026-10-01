@@ -116,7 +116,7 @@
             <td class="info-label">Model:</td>
             <td class="info-value">{{ $v?->model ?? '—' }}</td>
             <td class="info-label">Driver / Operator:</td>
-            <td class="info-value">{{ $v?->operator_driver ?? '—' }}</td>
+            <td class="info-value">{{ $fuelPo->driver_name }}</td>
         </tr>
         <tr>
             <td class="info-label">User / Department:</td>

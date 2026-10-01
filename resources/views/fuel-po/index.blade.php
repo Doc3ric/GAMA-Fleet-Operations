@@ -470,7 +470,7 @@
 
                                 {{-- 3. Driver --}}
                                 <td class="px-3 py-3 font-medium text-slate-900">
-                                    {{ $v?->operator_driver ?? '—' }}
+                                    {{ $po->driver_name }}
                                 </td>
 
                                 {{-- 4. User --}}

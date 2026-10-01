@@ -35,6 +35,7 @@
         locationsList: {{ json_encode($locationsList) }},
         vehiclesList: {{ json_encode($vehiclesList) }},
         initialVehicleId: '{{ old('vehicle_id', $fuelPo->vehicle_id) }}',
+        initialDriverName: {{ json_encode(old('driver_name', $fuelPo->driver_name !== '—' ? $fuelPo->driver_name : '')) }},
         initialLegs: {{ json_encode(old('legs', $fuelPo->legs->map(fn($leg) => [
             'origin_location_id' => (string) $leg->origin_location_id,
             'starting_point_location_id' => (string) $leg->starting_point_location_id,
@@ -80,7 +81,7 @@
                     <span class="text-[11px] text-slate-500 font-medium">Edit Mode</span>
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                     <div>
                         <label class="block text-xs font-semibold text-slate-700 mb-1">Itinerary Date <span class="text-rose-500">*</span></label>
                         <input type="date" name="itinerary_date" value="{{ old('itinerary_date', $fuelPo->itinerary_date->format('Y-m-d')) }}" required
@@ -89,7 +90,7 @@
 
                     <div>
                         <label class="block text-xs font-semibold text-slate-700 mb-1">Assigned Vehicle <span class="text-rose-500">*</span></label>
-                        <select name="vehicle_id" x-model="selectedVehicleId" required
+                        <select name="vehicle_id" x-model="selectedVehicleId" @change="onVehicleChange()" required
                                 class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none">
                             <option value="">-- Select Vehicle --</option>
                             @foreach($vehicles as $vehicle)
@@ -98,6 +99,17 @@
                                 </option>
                             @endforeach
                         </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">
+                            Driver Name
+                            <span class="text-[10px] text-blue-600 font-normal">(Editable)</span>
+                        </label>
+                        <input type="text" name="driver_name" x-model="driverName"
+                               value="{{ old('driver_name', $fuelPo->driver_name !== '—' ? $fuelPo->driver_name : '') }}"
+                               placeholder="e.g. Juan Dela Cruz"
+                               class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none">
                     </div>
 
                     <div>
@@ -386,6 +398,13 @@
                 locationsList: config.locationsList || [],
                 vehiclesList: config.vehiclesList || [],
                 selectedVehicleId: config.initialVehicleId || '',
+                driverName: config.initialDriverName || '',
+
+                onVehicleChange() {
+                    if (this.selectedVehicle && (!this.driverName || this.driverName.trim() === '')) {
+                        this.driverName = (this.selectedVehicle.driver_name && this.selectedVehicle.driver_name !== '—') ? this.selectedVehicle.driver_name : '';
+                    }
+                },
 
                 get selectedVehicle() {
                     if (!this.selectedVehicleId) return null;

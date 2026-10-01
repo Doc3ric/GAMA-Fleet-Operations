@@ -66,6 +66,7 @@ class FuelPoController extends Controller
         $validated = $request->validate([
             'itinerary_date' => ['required', 'date'],
             'vehicle_id' => ['required', 'exists:vehicles,id'],
+            'driver_name' => ['nullable', 'string', 'max:255'],
             'destination' => ['nullable', 'string', 'max:255'],
             'total_distance' => ['nullable', 'numeric', 'min:0'],
             'title' => ['nullable', 'string', 'max:255'],
@@ -133,6 +134,7 @@ class FuelPoController extends Controller
             $itinerary = AdvancedItinerary::create([
                 'itinerary_date' => $validated['itinerary_date'],
                 'vehicle_id' => $validated['vehicle_id'],
+                'driver_name' => $validated['driver_name'] ?? null,
                 'title' => $validated['title'] ?? null,
                 'destination' => $destination,
                 'total_distance' => $totalDistance > 0 ? $totalDistance : null,
@@ -247,6 +249,7 @@ class FuelPoController extends Controller
         $validated = $request->validate([
             'itinerary_date' => ['required', 'date'],
             'vehicle_id' => ['nullable', 'exists:vehicles,id'],
+            'driver_name' => ['nullable', 'string', 'max:255'],
             'destination' => ['nullable', 'string', 'max:255'],
             'total_distance' => ['nullable', 'numeric', 'min:0'],
             'title' => ['nullable', 'string', 'max:255'],
@@ -288,6 +291,7 @@ class FuelPoController extends Controller
             $advancedItinerary->update([
                 'itinerary_date' => $validated['itinerary_date'],
                 'vehicle_id' => $validated['vehicle_id'] ?? null,
+                'driver_name' => $validated['driver_name'] ?? null,
                 'title' => $validated['title'] ?? null,
                 'destination' => $validated['destination'] ?? null,
                 'total_distance' => $totalDistance > 0 ? $totalDistance : null,
@@ -552,6 +556,7 @@ class FuelPoController extends Controller
         if ($search = $request->input('search')) {
             $query->where(function (Builder $q) use ($search) {
                 $q->where('title', 'like', "%{$search}%")
+                    ->orWhere('advanced_itineraries.driver_name', 'like', "%{$search}%")
                     ->orWhereHas('vehicle', function (Builder $vq) use ($search) {
                         $vq->where('equipment_code', 'like', "%{$search}%")
                             ->orWhere('plate_number', 'like', "%{$search}%")

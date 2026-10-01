@@ -43,7 +43,7 @@ class FuelPoExport implements FromCollection, WithColumnFormatting, WithColumnWi
             return [
                 'equipment_code' => $vehicle?->equipment_code ?? '—',
                 'model' => $vehicle?->model ?? '—',
-                'driver' => $vehicle?->operator_driver ?? '—',
+                'driver' => $itinerary->driver_name,
                 'plate_number' => $vehicle?->plate_number ?? '—',
                 'user' => $vehicle?->user ?? '—',
                 'project_code' => $vehicle?->project_code ?? '—',

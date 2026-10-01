@@ -213,7 +213,7 @@
                     <td class="text-center font-bold">{{ $index + 1 }}</td>
                     <td class="font-bold">{{ $vehicle?->equipment_code ?? '—' }}</td>
                     <td>{{ $vehicle?->model ?? '—' }}</td>
-                    <td>{{ $vehicle?->operator_driver ?? '—' }}</td>
+                    <td>{{ $itinerary->driver_name }}</td>
                     <td class="font-mono">{{ $vehicle?->plate_number ?? '—' }}</td>
                     <td>{{ $vehicle?->user ?? '—' }}</td>
                     <td>{{ $vehicle?->project_code ?? '—' }}</td>

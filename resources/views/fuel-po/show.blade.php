@@ -200,7 +200,7 @@
 
                 <div class="p-3 bg-slate-50 rounded-xl border border-slate-100">
                     <span class="block text-[10px] uppercase font-bold text-slate-400">Driver Name</span>
-                    <span class="font-semibold text-slate-900 block mt-0.5">{{ $v?->operator_driver ?? '—' }}</span>
+                    <span class="font-semibold text-slate-900 block mt-0.5">{{ $fuelPo->driver_name }}</span>
                 </div>
 
                 <div class="p-3 bg-slate-50 rounded-xl border border-slate-100">
