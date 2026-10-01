@@ -932,4 +932,86 @@ class FuelPoChecklistTest extends TestCase
         $this->assertEquals('Location 1 → Location 2', $itinerary->destination);
         $this->assertCount(2, $itinerary->legs);
     }
+
+    public function test_fuel_po_create_and_edit_page_renders_start_and_end_odo_fields(): void
+    {
+        $vehicle = Vehicle::factory()->create();
+        $itinerary = AdvancedItinerary::factory()->create([
+            'vehicle_id' => $vehicle->id,
+            'start_odo' => 2435,
+            'end_odo' => 2499,
+            'total_distance' => 64,
+        ]);
+        $itinerary->legs()->create([
+            'sort_order' => 0,
+            'start_odo' => 2435,
+            'end_odo' => 2499,
+            'total_distance' => 64,
+            'purpose' => 'Delivery',
+        ]);
+
+        // Create page
+        $this->actingAs($this->purchasing)
+            ->get(route('fuel-po.create'))
+            ->assertOk()
+            ->assertSee('Start ODO')
+            ->assertSee('End ODO');
+
+        // Edit page
+        $this->actingAs($this->purchasing)
+            ->get(route('fuel-po.edit', $itinerary))
+            ->assertOk()
+            ->assertSee('Start ODO')
+            ->assertSee('End ODO')
+            ->assertSee('2435')
+            ->assertSee('2499');
+
+        // Show page
+        $this->actingAs($this->purchasing)
+            ->get(route('fuel-po.show', $itinerary))
+            ->assertOk()
+            ->assertSee('2,435.00')
+            ->assertSee('2,499.00');
+    }
+
+    public function test_creating_fuel_po_with_start_and_end_odo_saves_odometers(): void
+    {
+        $vehicle = Vehicle::factory()->create([
+            'average_fuel_consumption' => 2.00,
+        ]);
+
+        $payload = [
+            'itinerary_date' => now()->toDateString(),
+            'vehicle_id' => $vehicle->id,
+            'driver_name' => 'Driver Odo Test',
+            'status' => 'FINALIZED',
+            'destinations' => [
+                [
+                    'name' => 'Depot to Warehouse',
+                    'start_odo' => 2435,
+                    'end_odo' => 2499,
+                    'distance' => 64, // 2499 - 2435 = 64
+                    'purpose' => 'Hauling Goods',
+                ],
+            ],
+        ];
+
+        $response = $this->actingAs($this->purchasing)
+            ->post(route('fuel-po.store'), $payload);
+
+        $response->assertRedirect(route('fuel-po.index'));
+
+        $itinerary = AdvancedItinerary::latest('id')->first();
+        $this->assertNotNull($itinerary);
+        $this->assertEquals(2435.00, (float) $itinerary->start_odo);
+        $this->assertEquals(2499.00, (float) $itinerary->end_odo);
+        $this->assertEquals(64.00, (float) $itinerary->total_distance);
+        $this->assertEquals(32.00, (float) $itinerary->fuel_liters_required); // 64 / 2.0 = 32
+
+        $leg = $itinerary->legs->first();
+        $this->assertNotNull($leg);
+        $this->assertEquals(2435.00, (float) $leg->start_odo);
+        $this->assertEquals(2499.00, (float) $leg->end_odo);
+        $this->assertEquals(64.00, (float) $leg->total_distance);
+    }
 }

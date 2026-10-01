@@ -20,6 +20,8 @@ class AdvancedItineraryLeg extends Model
         'origin_location_id',
         'starting_point_location_id',
         'destination_location_id',
+        'start_odo',
+        'end_odo',
         'distance_origin_to_start',
         'distance_start_to_dest',
         'total_distance',
@@ -32,6 +34,8 @@ class AdvancedItineraryLeg extends Model
 
     /** @var array<string, string> */
     protected $casts = [
+        'start_odo' => 'float',
+        'end_odo' => 'float',
         'distance_origin_to_start' => 'float',
         'distance_start_to_dest' => 'float',
         'total_distance' => 'float',

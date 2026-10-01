@@ -74,8 +74,12 @@ class FuelPoController extends Controller
             'status' => ['nullable', 'string', 'in:DRAFT,FINALIZED'],
             'destinations' => ['nullable', 'array'],
             'destinations.*.name' => ['nullable', 'string', 'max:255'],
+            'destinations.*.start_odo' => ['nullable', 'numeric', 'min:0'],
+            'destinations.*.end_odo' => ['nullable', 'numeric', 'min:0'],
             'destinations.*.distance' => ['nullable', 'numeric', 'min:0'],
             'destinations.*.purpose' => ['nullable', 'string', 'max:255'],
+            'start_odo' => ['nullable', 'numeric', 'min:0'],
+            'end_odo' => ['nullable', 'numeric', 'min:0'],
             'legs' => ['nullable', 'array'],
             'legs.*.sort_order' => ['nullable', 'integer'],
             'legs.*.origin_location_id' => ['nullable', 'exists:locations,id'],
@@ -98,6 +102,9 @@ class FuelPoController extends Controller
             $totalDuration = 0;
             $destination = $validated['destination'] ?? null;
 
+            $firstStartOdo = null;
+            $lastEndOdo = null;
+
             if (! empty($destRows)) {
                 $calcDist = 0.0;
                 $rowNames = [];
@@ -106,6 +113,12 @@ class FuelPoController extends Controller
                     $calcDist += $rowDist;
                     if (! empty($row['name'])) {
                         $rowNames[] = trim($row['name']);
+                    }
+                    if ($firstStartOdo === null && isset($row['start_odo']) && is_numeric($row['start_odo'])) {
+                        $firstStartOdo = (float) $row['start_odo'];
+                    }
+                    if (isset($row['end_odo']) && is_numeric($row['end_odo'])) {
+                        $lastEndOdo = (float) $row['end_odo'];
                     }
                 }
                 if ($calcDist > 0) {
@@ -137,6 +150,8 @@ class FuelPoController extends Controller
                 'driver_name' => $validated['driver_name'] ?? null,
                 'title' => $validated['title'] ?? null,
                 'destination' => $destination,
+                'start_odo' => $firstStartOdo ?? (isset($validated['start_odo']) && is_numeric($validated['start_odo']) ? (float) $validated['start_odo'] : null),
+                'end_odo' => $lastEndOdo ?? (isset($validated['end_odo']) && is_numeric($validated['end_odo']) ? (float) $validated['end_odo'] : null),
                 'total_distance' => $totalDistance > 0 ? $totalDistance : null,
                 'notes' => $validated['notes'] ?? null,
                 'status' => $validated['status'] ?? AdvancedItinerary::STATUS_FINALIZED,
@@ -149,6 +164,8 @@ class FuelPoController extends Controller
                     $rowDist = isset($row['distance']) && is_numeric($row['distance']) ? (float) $row['distance'] : null;
                     $rowName = ! empty($row['name']) ? trim($row['name']) : null;
                     $purpose = ! empty($row['purpose']) ? trim($row['purpose']) : null;
+                    $rowStartOdo = isset($row['start_odo']) && is_numeric($row['start_odo']) ? (float) $row['start_odo'] : null;
+                    $rowEndOdo = isset($row['end_odo']) && is_numeric($row['end_odo']) ? (float) $row['end_odo'] : null;
 
                     $matchedLocId = null;
                     if ($rowName) {
@@ -160,6 +177,8 @@ class FuelPoController extends Controller
                     $itinerary->legs()->create([
                         'sort_order' => $index,
                         'destination_location_id' => $matchedLocId,
+                        'start_odo' => $rowStartOdo,
+                        'end_odo' => $rowEndOdo,
                         'total_distance' => $rowDist,
                         'routing_source' => 'manual',
                         'purpose' => $purpose ?: $rowName,
@@ -257,8 +276,12 @@ class FuelPoController extends Controller
             'status' => ['required', 'string', 'in:DRAFT,FINALIZED'],
             'destinations' => ['nullable', 'array'],
             'destinations.*.name' => ['nullable', 'string', 'max:255'],
+            'destinations.*.start_odo' => ['nullable', 'numeric', 'min:0'],
+            'destinations.*.end_odo' => ['nullable', 'numeric', 'min:0'],
             'destinations.*.distance' => ['nullable', 'numeric', 'min:0'],
             'destinations.*.purpose' => ['nullable', 'string', 'max:255'],
+            'start_odo' => ['nullable', 'numeric', 'min:0'],
+            'end_odo' => ['nullable', 'numeric', 'min:0'],
             'legs' => ['nullable', 'array'],
             'legs.*.sort_order' => ['nullable', 'integer'],
             'legs.*.origin_location_id' => ['nullable', 'exists:locations,id'],
@@ -281,6 +304,9 @@ class FuelPoController extends Controller
             $totalDuration = 0;
             $destination = $validated['destination'] ?? null;
 
+            $firstStartOdo = null;
+            $lastEndOdo = null;
+
             if (! empty($destRows)) {
                 $calcDist = 0.0;
                 $rowNames = [];
@@ -289,6 +315,12 @@ class FuelPoController extends Controller
                     $calcDist += $rowDist;
                     if (! empty($row['name'])) {
                         $rowNames[] = trim($row['name']);
+                    }
+                    if ($firstStartOdo === null && isset($row['start_odo']) && is_numeric($row['start_odo'])) {
+                        $firstStartOdo = (float) $row['start_odo'];
+                    }
+                    if (isset($row['end_odo']) && is_numeric($row['end_odo'])) {
+                        $lastEndOdo = (float) $row['end_odo'];
                     }
                 }
                 if ($calcDist > 0) {
@@ -320,6 +352,8 @@ class FuelPoController extends Controller
                 'driver_name' => $validated['driver_name'] ?? null,
                 'title' => $validated['title'] ?? null,
                 'destination' => $destination,
+                'start_odo' => $firstStartOdo ?? (isset($validated['start_odo']) && is_numeric($validated['start_odo']) ? (float) $validated['start_odo'] : null),
+                'end_odo' => $lastEndOdo ?? (isset($validated['end_odo']) && is_numeric($validated['end_odo']) ? (float) $validated['end_odo'] : null),
                 'total_distance' => $totalDistance > 0 ? $totalDistance : null,
                 'notes' => $validated['notes'] ?? null,
                 'status' => $validated['status'],
@@ -332,6 +366,8 @@ class FuelPoController extends Controller
                     $rowDist = isset($row['distance']) && is_numeric($row['distance']) ? (float) $row['distance'] : null;
                     $rowName = ! empty($row['name']) ? trim($row['name']) : null;
                     $purpose = ! empty($row['purpose']) ? trim($row['purpose']) : null;
+                    $rowStartOdo = isset($row['start_odo']) && is_numeric($row['start_odo']) ? (float) $row['start_odo'] : null;
+                    $rowEndOdo = isset($row['end_odo']) && is_numeric($row['end_odo']) ? (float) $row['end_odo'] : null;
 
                     $matchedLocId = null;
                     if ($rowName) {
@@ -343,6 +379,8 @@ class FuelPoController extends Controller
                     $advancedItinerary->legs()->create([
                         'sort_order' => $index,
                         'destination_location_id' => $matchedLocId,
+                        'start_odo' => $rowStartOdo,
+                        'end_odo' => $rowEndOdo,
                         'total_distance' => $rowDist,
                         'routing_source' => 'manual',
                         'purpose' => $purpose ?: $rowName,

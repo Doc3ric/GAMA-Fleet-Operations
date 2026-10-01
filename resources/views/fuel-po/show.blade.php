@@ -122,6 +122,11 @@
                 <div class="rounded-xl border border-slate-200 p-3.5 bg-slate-50/50">
                     <span class="block text-slate-400 font-medium">Final Destination</span>
                     <span class="mt-1 block font-bold text-slate-900 text-sm">{{ $fuelPo->destination_name }}</span>
+                    @if($fuelPo->start_odo !== null || $fuelPo->end_odo !== null)
+                        <span class="block text-[11px] font-mono text-slate-500 mt-1">
+                            ODO: {{ $fuelPo->start_odo !== null ? number_format($fuelPo->start_odo, 2) : '—' }} &rarr; {{ $fuelPo->end_odo !== null ? number_format($fuelPo->end_odo, 2) : '—' }}
+                        </span>
+                    @endif
                 </div>
 
                 <div class="rounded-xl border border-slate-200 p-3.5 bg-slate-50/50">
@@ -237,12 +242,11 @@
                     <thead class="bg-slate-50 text-slate-500 uppercase font-semibold">
                         <tr>
                             <th class="px-4 py-3 text-center">#</th>
-                            <th class="px-4 py-3">Origin Location</th>
-                            <th class="px-4 py-3">Starting Point</th>
-                            <th class="px-4 py-3">Destination</th>
-                            <th class="px-4 py-3 text-right">Origin &rarr; Start</th>
-                            <th class="px-4 py-3 text-right">Start &rarr; Dest</th>
+                            <th class="px-4 py-3">Destination / Route</th>
+                            <th class="px-4 py-3 text-right">Start ODO</th>
+                            <th class="px-4 py-3 text-right">End ODO</th>
                             <th class="px-4 py-3 text-right">Total Distance</th>
+                            <th class="px-4 py-3">Purpose</th>
                             <th class="px-4 py-3 text-center">Source</th>
                         </tr>
                     </thead>
@@ -250,12 +254,18 @@
                         @forelse($fuelPo->legs as $leg)
                             <tr>
                                 <td class="px-4 py-3 text-center font-bold text-slate-400">{{ $loop->iteration }}</td>
-                                <td class="px-4 py-3 font-semibold text-slate-900">{{ $leg->origin?->official_name ?? '—' }}</td>
-                                <td class="px-4 py-3 text-slate-700">{{ $leg->startingPoint?->official_name ?? '—' }}</td>
-                                <td class="px-4 py-3 font-bold text-blue-900">{{ $leg->destination?->official_name ?? '—' }}</td>
-                                <td class="px-4 py-3 text-right font-mono text-slate-600">{{ $leg->distance_origin_to_start !== null ? number_format($leg->distance_origin_to_start, 2).' km' : '—' }}</td>
-                                <td class="px-4 py-3 text-right font-mono text-slate-600">{{ $leg->distance_start_to_dest !== null ? number_format($leg->distance_start_to_dest, 2).' km' : '—' }}</td>
+                                <td class="px-4 py-3 font-bold text-blue-900">
+                                    {{ $leg->destination?->official_name ?? $leg->purpose ?? '—' }}
+                                    @if($leg->origin || $leg->startingPoint)
+                                        <span class="block text-[10px] text-slate-400 font-normal">
+                                            From: {{ $leg->origin?->official_name ?? '—' }} &rarr; Via: {{ $leg->startingPoint?->official_name ?? '—' }}
+                                        </span>
+                                    @endif
+                                </td>
+                                <td class="px-4 py-3 text-right font-mono text-slate-700">{{ $leg->start_odo !== null ? number_format($leg->start_odo, 2) : '—' }}</td>
+                                <td class="px-4 py-3 text-right font-mono text-slate-700">{{ $leg->end_odo !== null ? number_format($leg->end_odo, 2) : '—' }}</td>
                                 <td class="px-4 py-3 text-right font-mono font-bold text-blue-700">{{ $leg->total_distance !== null ? number_format($leg->total_distance, 2).' km' : '—' }}</td>
+                                <td class="px-4 py-3 text-slate-600">{{ $leg->purpose ?? '—' }}</td>
                                 <td class="px-4 py-3 text-center">
                                     <span class="rounded px-1.5 py-0.5 text-[10px] font-bold uppercase {{ $leg->routing_source === 'osrm' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600' }}">
                                         {{ $leg->routing_source }}
@@ -264,7 +274,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="8" class="px-4 py-8 text-center text-slate-500">No legs recorded for this Fuel PO.</td>
+                                <td colspan="7" class="px-4 py-8 text-center text-slate-500">No legs recorded for this Fuel PO.</td>
                             </tr>
                         @endforelse
                     </tbody>

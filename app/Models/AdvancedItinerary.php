@@ -30,6 +30,8 @@ class AdvancedItinerary extends Model
         'itinerary_date',
         'title',
         'destination',
+        'start_odo',
+        'end_odo',
         'total_distance',
         'notes',
         'status',
@@ -45,6 +47,8 @@ class AdvancedItinerary extends Model
     /** @var array<string, string> */
     protected $casts = [
         'itinerary_date' => 'date',
+        'start_odo' => 'float',
+        'end_odo' => 'float',
         'total_distance' => 'float',
         'total_duration_minutes' => 'integer',
         'fuel_liters_required' => 'float',

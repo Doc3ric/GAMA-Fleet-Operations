@@ -29,6 +29,8 @@
             foreach ($oldDestinations as $row) {
                 $initialRows[] = [
                     'destination' => $row['name'] ?? $row['destination'] ?? '',
+                    'start_odo' => $row['start_odo'] ?? '',
+                    'end_odo' => $row['end_odo'] ?? '',
                     'distance' => $row['distance'] ?? '',
                     'purpose' => $row['purpose'] ?? '',
                 ];
@@ -36,13 +38,15 @@
         } elseif (old('destination') || old('total_distance')) {
             $initialRows[] = [
                 'destination' => old('destination', ''),
+                'start_odo' => old('start_odo', ''),
+                'end_odo' => old('end_odo', ''),
                 'distance' => old('total_distance', ''),
                 'purpose' => '',
             ];
         }
     @endphp
 
-    <div class="max-w-4xl mx-auto space-y-6" x-data="addItineraryWorkflow({
+    <div class="max-w-5xl mx-auto space-y-6" x-data="addItineraryWorkflow({
         vehiclesList: {{ json_encode($vehiclesList) }},
         locationsList: {{ json_encode($locationsList) }},
         initialVehicleId: '{{ old('vehicle_id', '') }}',
@@ -61,7 +65,7 @@
                     Add Itinerary (Fuel PO Processing)
                 </h1>
                 <p class="text-xs text-slate-500 mt-1">
-                    Select registered vehicle, enter one or more destination rows with distances to compute fuel required for PO.
+                    Select registered vehicle, enter one or more destination rows with Start/End ODO or direct distances to compute fuel required for PO.
                 </p>
             </div>
             <a href="{{ route('fuel-po.index') }}"
@@ -185,7 +189,7 @@
                     </div>
                 </div>
 
-                {{-- DYNAMIC DESTINATIONS & DISTANCES (WITH ADD ROW FUNCTION) --}}
+                {{-- DYNAMIC DESTINATIONS & DISTANCES (WITH START/END ODO & ADD ROW FUNCTION) --}}
                 <div class="space-y-3 border-t border-slate-100 pt-5">
                     <div class="flex items-center justify-between">
                         <div>
@@ -197,7 +201,7 @@
                                 Destinations & Distance Breakdown
                             </h3>
                             <p class="text-[11px] text-slate-500 mt-0.5">
-                                Enter destination and distance. Use <strong>+ Add Row</strong> to add multiple stops — distances automatically sum up.
+                                Enter destination. You can enter <strong>Start ODO</strong> &amp; <strong>End ODO</strong> to auto-calculate the distance (e.g. 2499 &minus; 2435 = 64), or directly type the <strong>Distance (KM)</strong> manually.
                             </p>
                         </div>
 
@@ -211,51 +215,69 @@
                     </div>
 
                     {{-- Dynamic Rows Table --}}
-                    <div class="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                    <div class="overflow-x-auto rounded-xl border border-slate-200 bg-white">
                         <table class="min-w-full divide-y divide-slate-200 text-left text-xs">
                             <thead class="bg-slate-50 font-bold uppercase tracking-wider text-slate-500">
                                 <tr>
-                                    <th class="px-3.5 py-2.5 w-10 text-center">#</th>
-                                    <th class="px-3.5 py-2.5">Destination (Manual or Select) <span class="text-rose-500">*</span></th>
-                                    <th class="px-3.5 py-2.5 w-44">Distance (KM) <span class="text-rose-500">*</span></th>
-                                    <th class="px-3.5 py-2.5 w-48">Purpose / Cargo (Optional)</th>
-                                    <th class="px-3.5 py-2.5 w-16 text-center">Action</th>
+                                    <th class="px-3 py-2.5 w-8 text-center">#</th>
+                                    <th class="px-3 py-2.5">Destination (Manual or Select) <span class="text-rose-500">*</span></th>
+                                    <th class="px-2.5 py-2.5 w-28">Start ODO <span class="text-[10px] text-slate-400 font-normal lowercase">(opt)</span></th>
+                                    <th class="px-2.5 py-2.5 w-28">End ODO <span class="text-[10px] text-slate-400 font-normal lowercase">(opt)</span></th>
+                                    <th class="px-3 py-2.5 w-36">Distance (KM) <span class="text-rose-500">*</span></th>
+                                    <th class="px-3 py-2.5 w-40">Purpose / Cargo</th>
+                                    <th class="px-2 py-2.5 w-12 text-center">Action</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-100 text-slate-800">
                                 <template x-for="(row, index) in destinationRows" :key="index">
                                     <tr class="hover:bg-slate-50/50 transition-colors">
-                                        <td class="px-3.5 py-2.5 text-center font-bold text-slate-400" x-text="index + 1"></td>
-                                        <td class="px-3.5 py-2.5">
+                                        <td class="px-3 py-2.5 text-center font-bold text-slate-400" x-text="index + 1"></td>
+                                        <td class="px-3 py-2.5">
                                             <input type="text"
                                                    :name="'destinations[' + index + '][name]'"
                                                    x-model="row.destination"
                                                    list="location-datalist"
                                                    required
-                                                   placeholder="e.g. ANICO MANOLO or select location..."
+                                                   placeholder="e.g. ANICO MANOLO or select..."
                                                    class="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none">
                                         </td>
-                                        <td class="px-3.5 py-2.5">
+                                        <td class="px-2.5 py-2.5">
+                                            <input type="number" step="0.01" min="0"
+                                                   :name="'destinations[' + index + '][start_odo]'"
+                                                   x-model="row.start_odo"
+                                                   @input="onOdoChange(row)"
+                                                   placeholder="e.g. 2435"
+                                                   class="w-full rounded-xl border border-slate-300 px-2.5 py-2 text-xs font-mono text-slate-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none">
+                                        </td>
+                                        <td class="px-2.5 py-2.5">
+                                            <input type="number" step="0.01" min="0"
+                                                   :name="'destinations[' + index + '][end_odo]'"
+                                                   x-model="row.end_odo"
+                                                   @input="onOdoChange(row)"
+                                                   placeholder="e.g. 2499"
+                                                   class="w-full rounded-xl border border-slate-300 px-2.5 py-2 text-xs font-mono text-slate-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none">
+                                        </td>
+                                        <td class="px-3 py-2.5">
                                             <div class="relative">
                                                 <input type="number" step="0.01" min="0"
                                                        :name="'destinations[' + index + '][distance]'"
                                                        x-model="row.distance"
                                                        required
-                                                       placeholder="e.g. 48.50"
-                                                       class="w-full rounded-xl border border-slate-300 px-3 py-2 pr-10 text-xs font-mono font-bold text-slate-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none">
+                                                       placeholder="e.g. 64"
+                                                       class="w-full rounded-xl border border-slate-300 px-3 py-2 pr-9 text-xs font-mono font-bold text-slate-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none">
                                                 <span class="absolute inset-y-0 right-0 flex items-center pr-2.5 text-[11px] font-bold text-slate-400 pointer-events-none">
                                                     KM
                                                 </span>
                                             </div>
                                         </td>
-                                        <td class="px-3.5 py-2.5">
+                                        <td class="px-3 py-2.5">
                                             <input type="text"
                                                    :name="'destinations[' + index + '][purpose]'"
                                                    x-model="row.purpose"
                                                    placeholder="e.g. Delivery, Hauling"
                                                    class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-700 focus:border-blue-500 outline-none">
                                         </td>
-                                        <td class="px-3.5 py-2.5 text-center">
+                                        <td class="px-2 py-2.5 text-center">
                                             <button type="button"
                                                     @click="removeRow(index)"
                                                     x-show="destinationRows.length > 1"
@@ -369,11 +391,39 @@
 
                 // Destination & Distance rows: start with at least 1 row
                 destinationRows: (config.initialRows && config.initialRows.length > 0)
-                    ? config.initialRows.map(r => ({ destination: r.destination || r.name || '', distance: r.distance || '', purpose: r.purpose || '' }))
-                    : [{ destination: config.initialDestination || '', distance: config.initialDistance || '', purpose: '' }],
+                    ? config.initialRows.map(r => ({
+                        destination: r.destination || r.name || '',
+                        start_odo: r.start_odo !== undefined && r.start_odo !== null ? String(r.start_odo) : '',
+                        end_odo: r.end_odo !== undefined && r.end_odo !== null ? String(r.end_odo) : '',
+                        distance: r.distance !== undefined && r.distance !== null ? String(r.distance) : '',
+                        purpose: r.purpose || ''
+                    }))
+                    : [{ destination: config.initialDestination || '', start_odo: '', end_odo: '', distance: config.initialDistance || '', purpose: '' }],
+
+                onOdoChange(row) {
+                    const start = parseFloat(row.start_odo);
+                    const end = parseFloat(row.end_odo);
+                    if (!isNaN(start) && !isNaN(end) && end >= start) {
+                        const diff = Math.round((end - start) * 100) / 100;
+                        row.distance = (diff % 1 === 0) ? String(diff) : diff.toFixed(2);
+                    }
+                },
 
                 addRow() {
-                    this.destinationRows.push({ destination: '', distance: '', purpose: '' });
+                    let nextStartOdo = '';
+                    if (this.destinationRows.length > 0) {
+                        const lastRow = this.destinationRows[this.destinationRows.length - 1];
+                        if (lastRow.end_odo && !isNaN(parseFloat(lastRow.end_odo))) {
+                            nextStartOdo = lastRow.end_odo;
+                        }
+                    }
+                    this.destinationRows.push({
+                        destination: '',
+                        start_odo: nextStartOdo,
+                        end_odo: '',
+                        distance: '',
+                        purpose: ''
+                    });
                 },
 
                 removeRow(index) {
