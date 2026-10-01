@@ -350,7 +350,7 @@
                                 <tr class="border-b border-slate-200 bg-slate-50/70">
                                     <td class="px-4 py-3 font-bold uppercase text-slate-600">TOTAL DISTANCE</td>
                                     <td class="px-4 py-3 font-bold text-slate-900 text-right text-sm">
-                                        <span x-text="totalCalculatedDistance ? (parseFloat(totalCalculatedDistance).toFixed(2) + ' KM') : '0.00 KM'"></span>
+                                        <span x-text="totalCalculatedDistance ? (totalCalculatedDistance + ' KM') : '0 KM'"></span>
                                     </td>
                                 </tr>
                                 <tr class="border-b border-slate-200 bg-slate-50/70">
@@ -444,7 +444,7 @@
                     const end = parseFloat(row.end_odo);
                     if (!isNaN(start) && !isNaN(end) && end >= start) {
                         const diff = Math.round((end - start) * 100) / 100;
-                        row.distance = (diff % 1 === 0) ? String(diff) : diff.toFixed(2);
+                        row.distance = String(diff);
                     }
                 },
 
@@ -487,7 +487,7 @@
                             sum += dist;
                         }
                     }
-                    return (Math.round(sum * 100) / 100).toFixed(2);
+                    return String(Math.round(sum * 100) / 100);
                 },
 
                 get combinedDestination() {
