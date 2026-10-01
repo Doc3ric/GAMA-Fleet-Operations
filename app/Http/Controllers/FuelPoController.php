@@ -235,7 +235,7 @@ class FuelPoController extends Controller
     {
         Gate::authorize('update', $advancedItinerary);
 
-        $advancedItinerary->load(['legs', 'vehicle']);
+        $advancedItinerary->load(['legs.destination', 'vehicle']);
         $vehicles = Vehicle::orderBy('equipment_code')->get();
         $locations = Location::where('status', Location::STATUS_ACTIVE)->with('aliases')->orderBy('official_name')->get();
 
@@ -255,6 +255,10 @@ class FuelPoController extends Controller
             'title' => ['nullable', 'string', 'max:255'],
             'notes' => ['nullable', 'string'],
             'status' => ['required', 'string', 'in:DRAFT,FINALIZED'],
+            'destinations' => ['nullable', 'array'],
+            'destinations.*.name' => ['nullable', 'string', 'max:255'],
+            'destinations.*.distance' => ['nullable', 'numeric', 'min:0'],
+            'destinations.*.purpose' => ['nullable', 'string', 'max:255'],
             'legs' => ['nullable', 'array'],
             'legs.*.sort_order' => ['nullable', 'integer'],
             'legs.*.origin_location_id' => ['nullable', 'exists:locations,id'],
@@ -271,11 +275,29 @@ class FuelPoController extends Controller
         ]);
 
         DB::transaction(function () use ($advancedItinerary, $validated) {
+            $destRows = $validated['destinations'] ?? [];
+            $legs = $validated['legs'] ?? [];
             $totalDistance = (float) ($validated['total_distance'] ?? 0);
             $totalDuration = 0;
-            $legs = $validated['legs'] ?? [];
+            $destination = $validated['destination'] ?? null;
 
-            if (! empty($legs)) {
+            if (! empty($destRows)) {
+                $calcDist = 0.0;
+                $rowNames = [];
+                foreach ($destRows as $row) {
+                    $rowDist = isset($row['distance']) && is_numeric($row['distance']) ? (float) $row['distance'] : 0.0;
+                    $calcDist += $rowDist;
+                    if (! empty($row['name'])) {
+                        $rowNames[] = trim($row['name']);
+                    }
+                }
+                if ($calcDist > 0) {
+                    $totalDistance = $calcDist;
+                }
+                if (empty($destination) && ! empty($rowNames)) {
+                    $destination = implode(' → ', $rowNames);
+                }
+            } elseif (! empty($legs)) {
                 $calcDist = 0.0;
                 foreach ($legs as $legData) {
                     $legDist = isset($legData['total_distance']) && is_numeric($legData['total_distance'])
@@ -288,19 +310,45 @@ class FuelPoController extends Controller
                 }
             }
 
+            if ($destination && mb_strlen($destination) > 255) {
+                $destination = mb_substr($destination, 0, 252).'...';
+            }
+
             $advancedItinerary->update([
                 'itinerary_date' => $validated['itinerary_date'],
                 'vehicle_id' => $validated['vehicle_id'] ?? null,
                 'driver_name' => $validated['driver_name'] ?? null,
                 'title' => $validated['title'] ?? null,
-                'destination' => $validated['destination'] ?? null,
+                'destination' => $destination,
                 'total_distance' => $totalDistance > 0 ? $totalDistance : null,
                 'notes' => $validated['notes'] ?? null,
                 'status' => $validated['status'],
                 'updated_by' => auth()->id(),
             ]);
 
-            if (! empty($legs)) {
+            if (! empty($destRows)) {
+                $advancedItinerary->legs()->delete();
+                foreach ($destRows as $index => $row) {
+                    $rowDist = isset($row['distance']) && is_numeric($row['distance']) ? (float) $row['distance'] : null;
+                    $rowName = ! empty($row['name']) ? trim($row['name']) : null;
+                    $purpose = ! empty($row['purpose']) ? trim($row['purpose']) : null;
+
+                    $matchedLocId = null;
+                    if ($rowName) {
+                        $matchedLocId = Location::where('official_name', $rowName)
+                            ->orWhere('code', $rowName)
+                            ->value('id');
+                    }
+
+                    $advancedItinerary->legs()->create([
+                        'sort_order' => $index,
+                        'destination_location_id' => $matchedLocId,
+                        'total_distance' => $rowDist,
+                        'routing_source' => 'manual',
+                        'purpose' => $purpose ?: $rowName,
+                    ]);
+                }
+            } elseif (! empty($legs)) {
                 $advancedItinerary->legs()->delete();
                 foreach ($legs as $index => $legData) {
                     $legDist = isset($legData['total_distance']) && is_numeric($legData['total_distance'])
@@ -332,6 +380,7 @@ class FuelPoController extends Controller
                 }
             }
 
+            $advancedItinerary->load('vehicle');
             $vehicle = $advancedItinerary->vehicle;
             $avgConsumption = $vehicle?->average_fuel_consumption ?? $vehicle?->average_consumption;
             $fuelLiters = AdvancedItinerary::calculateFuelLiters($totalDistance, $avgConsumption ? (float) $avgConsumption : null);

@@ -846,4 +846,90 @@ class FuelPoChecklistTest extends TestCase
             ->assertSee('name="driver_name"', false)
             ->assertSee('Driver To Edit');
     }
+
+    public function test_fuel_po_edit_page_renders_with_destinations_breakdown_and_automatic_fuel_summary(): void
+    {
+        $vehicle = Vehicle::factory()->create([
+            'equipment_code' => 'EQ-TEST-55',
+            'average_fuel_consumption' => 1.60,
+        ]);
+
+        $itinerary = AdvancedItinerary::factory()->create([
+            'vehicle_id' => $vehicle->id,
+            'driver_name' => 'Assigned Driver Edit',
+            'destination' => 'Site Alpha → Site Beta',
+            'total_distance' => 48.50,
+            'fuel_liters_required' => 31.00,
+        ]);
+
+        $itinerary->legs()->create([
+            'sort_order' => 0,
+            'total_distance' => 20.00,
+            'purpose' => 'Site Alpha',
+        ]);
+        $itinerary->legs()->create([
+            'sort_order' => 1,
+            'total_distance' => 28.50,
+            'purpose' => 'Site Beta',
+        ]);
+
+        $response = $this->actingAs($this->purchasing)
+            ->get(route('fuel-po.edit', $itinerary));
+
+        $response->assertOk()
+            ->assertSee('Destinations & Distance Breakdown', false)
+            ->assertSee('Automatic Fuel Calculation Summary', false)
+            ->assertSee('Add Row', false)
+            ->assertSee('LITER FOR PO', false)
+            ->assertDontSee('Select Origin → Starting Point → Destination from Location Directory')
+            ->assertSee('Site Alpha')
+            ->assertSee('Site Beta');
+    }
+
+    public function test_updating_itinerary_with_destination_rows_recalculates_distance_and_threshold_fuel_liters(): void
+    {
+        $vehicle = Vehicle::factory()->create([
+            'average_fuel_consumption' => 1.60, // 1.60 km/l
+        ]);
+
+        $itinerary = AdvancedItinerary::factory()->create([
+            'vehicle_id' => $vehicle->id,
+            'total_distance' => 10.00,
+            'fuel_liters_required' => 7.00,
+            'driver_name' => 'Initial Driver',
+        ]);
+
+        // Submit destinations totaling 48.50 km
+        // 48.50 / 1.60 = 30.3125 -> .3125 >= 0.10 -> 31 L
+        $payload = [
+            'itinerary_date' => now()->toDateString(),
+            'vehicle_id' => $vehicle->id,
+            'driver_name' => 'Updated Custom Driver',
+            'status' => 'FINALIZED',
+            'destinations' => [
+                [
+                    'name' => 'Location 1',
+                    'distance' => 20.00,
+                    'purpose' => 'Hauling 1',
+                ],
+                [
+                    'name' => 'Location 2',
+                    'distance' => 28.50,
+                    'purpose' => 'Hauling 2',
+                ],
+            ],
+        ];
+
+        $response = $this->actingAs($this->purchasing)
+            ->put(route('fuel-po.update', $itinerary), $payload);
+
+        $response->assertRedirect(route('fuel-po.show', $itinerary));
+
+        $itinerary->refresh();
+        $this->assertEquals('Updated Custom Driver', $itinerary->driver_name);
+        $this->assertEquals(48.50, (float) $itinerary->total_distance);
+        $this->assertEquals(31.00, (float) $itinerary->fuel_liters_required);
+        $this->assertEquals('Location 1 → Location 2', $itinerary->destination);
+        $this->assertCount(2, $itinerary->legs);
+    }
 }

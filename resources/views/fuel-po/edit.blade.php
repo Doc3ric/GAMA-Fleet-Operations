@@ -8,13 +8,9 @@
     @php
         $locationsList = $locations->map(fn($loc) => [
             'id' => (string) $loc->id,
-            'code' => $loc->code ?? '',
             'official_name' => $loc->official_name,
-            'type' => $loc->type ?? '',
-            'address' => $loc->address ?? '',
+            'code' => $loc->code ?? '',
             'municipality' => $loc->municipality ?? '',
-            'province' => $loc->province ?? '',
-            'aliases' => $loc->relationLoaded('aliases') ? $loc->aliases->pluck('alias')->values()->all() : [],
         ])->values()->all();
 
         $vehiclesList = $vehicles->map(fn($v) => [
@@ -25,31 +21,73 @@
             'driver_name' => $v->operator_driver ?? '—',
             'user' => $v->user ?? '—',
             'project_code' => $v->project_code ?? '—',
-            'average_consumption' => $v->average_consumption ? (float) $v->average_consumption : null,
+            'average_consumption' => ($v->average_fuel_consumption ?? $v->average_consumption) ? (float) ($v->average_fuel_consumption ?? $v->average_consumption) : null,
         ])->values()->all();
+
+        $oldDestinations = old('destinations');
+        $initialRows = [];
+        if (is_array($oldDestinations) && count($oldDestinations) > 0) {
+            foreach ($oldDestinations as $row) {
+                $initialRows[] = [
+                    'destination' => $row['name'] ?? $row['destination'] ?? '',
+                    'distance' => $row['distance'] ?? '',
+                    'purpose' => $row['purpose'] ?? '',
+                ];
+            }
+        } elseif ($fuelPo->legs && $fuelPo->legs->count() > 0) {
+            $destParts = $fuelPo->destination ? array_map('trim', explode(' → ', $fuelPo->destination)) : [];
+            foreach ($fuelPo->legs as $i => $leg) {
+                $destName = $leg->destination?->official_name ?? ($destParts[$i] ?? $leg->purpose ?? '');
+                $purpose = ($leg->purpose && $leg->purpose !== $destName) ? $leg->purpose : '';
+                $initialRows[] = [
+                    'destination' => $destName,
+                    'distance' => $leg->total_distance !== null ? (string) $leg->total_distance : '',
+                    'purpose' => $purpose,
+                ];
+            }
+        } elseif ($fuelPo->destination || $fuelPo->total_distance) {
+            $initialRows[] = [
+                'destination' => $fuelPo->destination ?? '',
+                'distance' => $fuelPo->total_distance !== null ? (string) $fuelPo->total_distance : '',
+                'purpose' => '',
+            ];
+        }
     @endphp
 
-    <div class="max-w-6xl mx-auto space-y-6" x-data="fuelPoBuilder({
-        calculateDistanceUrl: '{{ route('locations.calculateDistance') }}',
-        csrfToken: '{{ csrf_token() }}',
-        locationsList: {{ json_encode($locationsList) }},
+    <div class="max-w-4xl mx-auto space-y-6" x-data="editItineraryWorkflow({
         vehiclesList: {{ json_encode($vehiclesList) }},
+        locationsList: {{ json_encode($locationsList) }},
         initialVehicleId: '{{ old('vehicle_id', $fuelPo->vehicle_id) }}',
         initialDriverName: {{ json_encode(old('driver_name', $fuelPo->driver_name !== '—' ? $fuelPo->driver_name : '')) }},
-        initialLegs: {{ json_encode(old('legs', $fuelPo->legs->map(fn($leg) => [
-            'origin_location_id' => (string) $leg->origin_location_id,
-            'starting_point_location_id' => (string) $leg->starting_point_location_id,
-            'destination_location_id' => (string) $leg->destination_location_id,
-            'distance_origin_to_start' => $leg->distance_origin_to_start !== null ? (string) $leg->distance_origin_to_start : '',
-            'distance_start_to_dest' => $leg->distance_start_to_dest !== null ? (string) $leg->distance_start_to_dest : '',
-            'total_distance' => $leg->total_distance !== null ? (string) $leg->total_distance : '',
-            'duration_origin_to_start_minutes' => $leg->duration_origin_to_start_minutes !== null ? (string) $leg->duration_origin_to_start_minutes : '',
-            'duration_start_to_dest_minutes' => $leg->duration_start_to_dest_minutes !== null ? (string) $leg->duration_start_to_dest_minutes : '',
-            'total_duration_minutes' => $leg->total_duration_minutes !== null ? (string) $leg->total_duration_minutes : '',
-            'routing_source' => $leg->routing_source ?? 'manual',
-            'purpose' => $leg->purpose ?? '',
-        ])->toArray())) }}
+        initialRows: {{ json_encode($initialRows) }},
+        initialDestination: {{ json_encode(old('destination', $fuelPo->destination ?? '')) }},
+        initialDistance: {{ json_encode(old('total_distance', $fuelPo->total_distance !== null ? (string) $fuelPo->total_distance : '')) }}
     })">
+        {{-- Header --}}
+        <div class="flex items-center justify-between border-b border-slate-200 pb-4">
+            <div>
+                <h1 class="text-xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
+                    <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500 text-white font-bold text-sm">
+                        PO
+                    </span>
+                    Edit Fuel PO #{{ $fuelPo->id }}
+                </h1>
+                <p class="text-xs text-slate-500 mt-1">
+                    Update registered vehicle, destination rows, distances, driver name, and operating details.
+                </p>
+            </div>
+            <div class="flex items-center gap-2">
+                <a href="{{ route('fuel-po.show', $fuelPo) }}"
+                   class="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition shadow-2xs">
+                    View Details
+                </a>
+                <a href="{{ route('fuel-po.index') }}"
+                   class="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition shadow-2xs">
+                    &larr; Back to Checklist
+                </a>
+            </div>
+        </div>
+
         {{-- Errors --}}
         @if ($errors->any())
             <div class="rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-800 text-xs font-medium space-y-1">
@@ -59,7 +97,7 @@
                     </svg>
                     Please fix the following validation errors:
                 </div>
-                <ul class="list-disc list-inside space-y-0.5 ml-2">
+                <ul class="list-disc list-inside space-y-0.5 pl-2">
                     @foreach ($errors->all() as $error)
                         <li>{{ $error }}</li>
                     @endforeach
@@ -71,318 +109,280 @@
             @csrf
             @method('PUT')
 
-            {{-- Vehicle & Basic Details Card --}}
-            <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs space-y-4">
-                <div class="flex items-center justify-between border-b border-slate-100 pb-3">
-                    <div class="flex items-center gap-2">
-                        <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Itinerary & Vehicle Master Details</h2>
-                        <span class="rounded-lg bg-slate-900 px-2 py-0.5 font-mono text-xs font-bold text-white">#{{ $fuelPo->id }}</span>
-                    </div>
-                    <span class="text-[11px] text-slate-500 font-medium">Edit Mode</span>
-                </div>
+            {{-- Hidden computed overall inputs --}}
+            <input type="hidden" name="destination" :value="combinedDestination">
+            <input type="hidden" name="total_distance" :value="totalCalculatedDistance">
 
-                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+            {{-- MAIN FORM CARD --}}
+            <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs space-y-6">
+                {{-- TOP ROW: VEHICLE SELECTION & ITINERARY DATE/STATUS/DRIVER --}}
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    {{-- 1. EQT CODE (Dropdown Selection of Registered Vehicle) --}}
                     <div>
-                        <label class="block text-xs font-semibold text-slate-700 mb-1">Itinerary Date <span class="text-rose-500">*</span></label>
-                        <input type="date" name="itinerary_date" value="{{ old('itinerary_date', $fuelPo->itinerary_date->format('Y-m-d')) }}" required
-                               class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none">
-                    </div>
-
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-700 mb-1">Assigned Vehicle <span class="text-rose-500">*</span></label>
+                        <label class="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-1.5">
+                            EQT Code (Select Registered Vehicle) <span class="text-rose-500">*</span>
+                        </label>
                         <select name="vehicle_id" x-model="selectedVehicleId" @change="onVehicleChange()" required
-                                class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none">
-                            <option value="">-- Select Vehicle --</option>
+                                class="w-full rounded-xl border border-slate-300 bg-slate-50/50 px-3 py-2.5 text-xs font-semibold text-slate-900 focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none">
+                            <option value="">-- Choose Equipment Code --</option>
                             @foreach($vehicles as $vehicle)
                                 <option value="{{ $vehicle->id }}" {{ old('vehicle_id', $fuelPo->vehicle_id) == $vehicle->id ? 'selected' : '' }}>
-                                    {{ $vehicle->equipment_code }} &bull; {{ $vehicle->plate_number ?: 'No Plate' }} ({{ $vehicle->model }})
+                                    {{ $vehicle->equipment_code }} &bull; {{ $vehicle->model ?: 'No Model' }} ({{ $vehicle->plate_number ?: 'No Plate' }})
                                 </option>
                             @endforeach
                         </select>
+                        <p class="text-[11px] text-slate-500 mt-1">
+                            Automatically loads Average Consumption, Model, Driver, Plate, User, and Project.
+                        </p>
                     </div>
 
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-700 mb-1">
-                            Driver Name
-                            <span class="text-[10px] text-blue-600 font-normal">(Editable)</span>
-                        </label>
-                        <input type="text" name="driver_name" x-model="driverName"
-                               value="{{ old('driver_name', $fuelPo->driver_name !== '—' ? $fuelPo->driver_name : '') }}"
-                               placeholder="e.g. Juan Dela Cruz"
-                               class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none">
-                    </div>
-
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-700 mb-1">Status <span class="text-rose-500">*</span></label>
-                        <select name="status" required class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none">
-                            <option value="DRAFT" {{ old('status', $fuelPo->status) === 'DRAFT' ? 'selected' : '' }}>DRAFT (Editable)</option>
-                            <option value="FINALIZED" {{ old('status', $fuelPo->status) === 'FINALIZED' ? 'selected' : '' }}>FINALIZED (Confirmed)</option>
-                        </select>
+                    {{-- 2. Itinerary Date, Driver & Status --}}
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-1.5">
+                                Itinerary Date <span class="text-rose-500">*</span>
+                            </label>
+                            <input type="date" name="itinerary_date" value="{{ old('itinerary_date', $fuelPo->itinerary_date ? $fuelPo->itinerary_date->format('Y-m-d') : date('Y-m-d')) }}" required
+                                   class="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-900 focus:border-blue-500 outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-1.5">
+                                Driver Name <span class="text-[10px] text-blue-600 font-normal lowercase">(editable)</span>
+                            </label>
+                            <input type="text" name="driver_name" x-model="driverName" placeholder="Driver name for PO"
+                                   class="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-900 focus:border-blue-500 outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-1.5">
+                                Status <span class="text-rose-500">*</span>
+                            </label>
+                            <select name="status" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-900 focus:border-blue-500 outline-none">
+                                <option value="FINALIZED" {{ old('status', $fuelPo->status) === 'FINALIZED' ? 'selected' : '' }}>FINALIZED</option>
+                                <option value="DRAFT" {{ old('status', $fuelPo->status) === 'DRAFT' ? 'selected' : '' }}>DRAFT</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
 
-                {{-- Auto-Loaded Vehicle Master Info Card --}}
-                <div x-show="selectedVehicle" x-cloak class="rounded-xl border border-blue-200 bg-blue-50/60 p-4 space-y-3">
-                    <div class="flex items-center justify-between border-b border-blue-100 pb-2">
-                        <div class="flex items-center gap-2">
-                            <svg class="h-4 w-4 text-blue-700" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                {{-- AUTO-LOADED VEHICLE PROFILE CARD --}}
+                <div x-show="selectedVehicle" x-cloak class="rounded-xl border border-blue-200 bg-blue-50/60 p-4 space-y-2">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold text-blue-900 uppercase tracking-wider flex items-center gap-1.5">
+                            <svg class="h-3.5 w-3.5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 18.75a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 0 1-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h1.125c.621 0 1.125-.504 1.125-1.125V14.25m-18 0h18M3.375 14.25l1.5-6A1.125 1.125 0 0 1 5.97 7.5h12.06a1.125 1.125 0 0 1 1.095.75l1.5 6" />
                             </svg>
-                            <span class="text-xs font-bold text-blue-900 uppercase tracking-wider">Auto-Loaded Vehicle Master Data</span>
-                        </div>
-                        <span class="text-[10px] font-semibold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">Used for Fuel PO Calculation</span>
+                            Auto-Loaded Vehicle Master Information
+                        </span>
+                        <span class="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-semibold">No Re-entry</span>
                     </div>
 
-                    <div class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-3 text-xs">
-                        <div class="bg-white/80 rounded-lg p-2.5 border border-blue-100/70">
-                            <span class="block text-[10px] font-semibold text-slate-500 uppercase">Equipment Code</span>
-                            <span class="font-mono font-bold text-slate-900 block mt-0.5" x-text="selectedVehicle?.equipment_code || '—'"></span>
+                    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 text-xs">
+                        <div class="bg-white rounded-lg p-2 border border-blue-100">
+                            <span class="block text-[10px] text-slate-400 uppercase font-semibold">EQPT Code</span>
+                            <span class="font-mono font-bold text-slate-900" x-text="selectedVehicle?.equipment_code || '—'"></span>
                         </div>
-                        <div class="bg-white/80 rounded-lg p-2.5 border border-blue-100/70">
-                            <span class="block text-[10px] font-semibold text-slate-500 uppercase">Model</span>
-                            <span class="font-semibold text-slate-900 block mt-0.5" x-text="selectedVehicle?.model || '—'"></span>
+                        <div class="bg-white rounded-lg p-2 border border-blue-100">
+                            <span class="block text-[10px] text-slate-400 uppercase font-semibold">Model</span>
+                            <span class="font-semibold text-slate-900" x-text="selectedVehicle?.model || '—'"></span>
                         </div>
-                        <div class="bg-white/80 rounded-lg p-2.5 border border-blue-100/70">
-                            <span class="block text-[10px] font-semibold text-slate-500 uppercase">Driver Name</span>
-                            <span class="font-semibold text-slate-900 block mt-0.5" x-text="selectedVehicle?.driver_name || '—'"></span>
+                        <div class="bg-white rounded-lg p-2 border border-blue-100">
+                            <span class="block text-[10px] text-slate-400 uppercase font-semibold">Driver Name</span>
+                            <span class="font-semibold text-slate-900" x-text="selectedVehicle?.driver_name || '—'"></span>
                         </div>
-                        <div class="bg-white/80 rounded-lg p-2.5 border border-blue-100/70">
-                            <span class="block text-[10px] font-semibold text-slate-500 uppercase">Plate Number</span>
-                            <span class="font-mono font-bold text-slate-900 block mt-0.5" x-text="selectedVehicle?.plate_number || '—'"></span>
+                        <div class="bg-white rounded-lg p-2 border border-blue-100">
+                            <span class="block text-[10px] text-slate-400 uppercase font-semibold">Plate Number</span>
+                            <span class="font-mono font-bold text-slate-900" x-text="selectedVehicle?.plate_number || '—'"></span>
                         </div>
-                        <div class="bg-white/80 rounded-lg p-2.5 border border-blue-100/70">
-                            <span class="block text-[10px] font-semibold text-slate-500 uppercase">User / Dept</span>
-                            <span class="font-semibold text-slate-900 block mt-0.5" x-text="selectedVehicle?.user || '—'"></span>
+                        <div class="bg-white rounded-lg p-2 border border-blue-100">
+                            <span class="block text-[10px] text-slate-400 uppercase font-semibold">User</span>
+                            <span class="font-semibold text-slate-900" x-text="selectedVehicle?.user || '—'"></span>
                         </div>
-                        <div class="bg-white/80 rounded-lg p-2.5 border border-blue-100/70">
-                            <span class="block text-[10px] font-semibold text-slate-500 uppercase">Project Code</span>
-                            <span class="font-mono font-semibold text-slate-900 block mt-0.5" x-text="selectedVehicle?.project_code || '—'"></span>
-                        </div>
-                        <div class="bg-white/80 rounded-lg p-2.5 border border-blue-100/70">
-                            <span class="block text-[10px] font-semibold text-blue-700 uppercase">Avg. Consumption</span>
-                            <div class="font-mono font-bold text-blue-900 block mt-0.5">
-                                <span x-text="selectedVehicle?.average_consumption ? (selectedVehicle.average_consumption + ' KM/L') : 'Not set'"></span>
-                            </div>
+                        <div class="bg-white rounded-lg p-2 border border-blue-100">
+                            <span class="block text-[10px] text-slate-400 uppercase font-semibold">Project Code</span>
+                            <span class="font-mono font-semibold text-slate-900" x-text="selectedVehicle?.project_code || '—'"></span>
                         </div>
                     </div>
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {{-- DYNAMIC DESTINATIONS & DISTANCES (WITH ADD ROW FUNCTION) --}}
+                <div class="space-y-3 border-t border-slate-100 pt-5">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h3 class="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                                <svg class="h-4 w-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
+                                </svg>
+                                Destinations & Distance Breakdown
+                            </h3>
+                            <p class="text-[11px] text-slate-500 mt-0.5">
+                                Enter destination and distance. Use <strong>+ Add Row</strong> to add multiple stops — distances automatically sum up.
+                            </p>
+                        </div>
+
+                        <button type="button" @click="addRow()"
+                                class="inline-flex items-center gap-1.5 rounded-xl border border-blue-300 bg-blue-50 px-3.5 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-100 shadow-2xs transition cursor-pointer">
+                            <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                            </svg>
+                            <span>Add Row</span>
+                        </button>
+                    </div>
+
+                    {{-- Dynamic Rows Table --}}
+                    <div class="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                        <table class="min-w-full divide-y divide-slate-200 text-left text-xs">
+                            <thead class="bg-slate-50 font-bold uppercase tracking-wider text-slate-500">
+                                <tr>
+                                    <th class="px-3.5 py-2.5 w-10 text-center">#</th>
+                                    <th class="px-3.5 py-2.5">Destination (Manual or Select) <span class="text-rose-500">*</span></th>
+                                    <th class="px-3.5 py-2.5 w-44">Distance (KM) <span class="text-rose-500">*</span></th>
+                                    <th class="px-3.5 py-2.5 w-48">Purpose / Cargo (Optional)</th>
+                                    <th class="px-3.5 py-2.5 w-16 text-center">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100 text-slate-800">
+                                <template x-for="(row, index) in destinationRows" :key="index">
+                                    <tr class="hover:bg-slate-50/50 transition-colors">
+                                        <td class="px-3.5 py-2.5 text-center font-bold text-slate-400" x-text="index + 1"></td>
+                                        <td class="px-3.5 py-2.5">
+                                            <input type="text"
+                                                   :name="'destinations[' + index + '][name]'"
+                                                   x-model="row.destination"
+                                                   list="location-datalist"
+                                                   required
+                                                   placeholder="e.g. ANICO MANOLO or select location..."
+                                                   class="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none">
+                                        </td>
+                                        <td class="px-3.5 py-2.5">
+                                            <div class="relative">
+                                                <input type="number" step="0.01" min="0"
+                                                       :name="'destinations[' + index + '][distance]'"
+                                                       x-model="row.distance"
+                                                       required
+                                                       placeholder="e.g. 48.50"
+                                                       class="w-full rounded-xl border border-slate-300 px-3 py-2 pr-10 text-xs font-mono font-bold text-slate-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none">
+                                                <span class="absolute inset-y-0 right-0 flex items-center pr-2.5 text-[11px] font-bold text-slate-400 pointer-events-none">
+                                                    KM
+                                                </span>
+                                            </div>
+                                        </td>
+                                        <td class="px-3.5 py-2.5">
+                                            <input type="text"
+                                                   :name="'destinations[' + index + '][purpose]'"
+                                                   x-model="row.purpose"
+                                                   placeholder="e.g. Delivery, Hauling"
+                                                   class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-700 focus:border-blue-500 outline-none">
+                                        </td>
+                                        <td class="px-3.5 py-2.5 text-center">
+                                            <button type="button"
+                                                    @click="removeRow(index)"
+                                                    x-show="destinationRows.length > 1"
+                                                    title="Remove this row"
+                                                    class="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition cursor-pointer">
+                                                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                                                </svg>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+
+                        {{-- Table Footer with + Add Row & Subtotal --}}
+                        <div class="px-4 py-2.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+                            <button type="button" @click="addRow()"
+                                    class="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-white px-3.5 py-1.5 text-xs font-bold text-blue-600 hover:bg-blue-50 transition shadow-2xs cursor-pointer">
+                                <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                                </svg>
+                                <span>+ Add Row</span>
+                            </button>
+
+                            <div class="text-xs font-mono font-bold text-slate-700 flex items-center gap-2">
+                                <span class="text-slate-400 font-sans font-semibold uppercase text-[11px]">Sum of All Rows:</span>
+                                <span class="text-blue-700 text-sm font-black" x-text="totalCalculatedDistance + ' KM'"></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <datalist id="location-datalist">
+                        @foreach($locations as $loc)
+                            <option value="{{ $loc->official_name }}">{{ $loc->code ? "({$loc->code})" : '' }}</option>
+                        @endforeach
+                    </datalist>
+                </div>
+
+                {{-- AUTOMATIC FUEL CALCULATION SUMMARY (Exact User Table) --}}
+                <div class="border-t border-slate-100 pt-5">
+                    <span class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                        Automatic Fuel Calculation Summary
+                    </span>
+
+                    <div class="overflow-hidden rounded-xl border border-slate-300 bg-white shadow-xs">
+                        <table class="w-full text-xs font-mono">
+                            <tbody>
+                                <tr class="border-b border-slate-200 bg-slate-50/70">
+                                    <td class="px-4 py-3 font-bold uppercase text-slate-600">TOTAL DISTANCE</td>
+                                    <td class="px-4 py-3 font-bold text-slate-900 text-right text-sm">
+                                        <span x-text="totalCalculatedDistance ? (parseFloat(totalCalculatedDistance).toFixed(2) + ' KM') : '0.00 KM'"></span>
+                                    </td>
+                                </tr>
+                                <tr class="border-b border-slate-200 bg-slate-50/70">
+                                    <td class="px-4 py-3 font-bold uppercase text-slate-600">AVE. CONS OF LITER/KM</td>
+                                    <td class="px-4 py-3 font-bold text-blue-700 text-right text-sm">
+                                        <span x-text="averageConsumption ? (parseFloat(averageConsumption).toFixed(2) + ' KM/L') : 'Requires Vehicle'"></span>
+                                    </td>
+                                </tr>
+                                <tr class="bg-amber-100/60">
+                                    <td class="px-4 py-3.5 font-extrabold uppercase text-amber-900 text-sm">
+                                        LITER FOR PO
+                                        <span class="block text-[10px] font-sans font-normal text-amber-700">
+                                            Total Distance &divide; Ave. Consumption &bull;
+                                            <span x-show="calculatedRawLiters" x-text="'Raw: ' + calculatedRawLiters + ' L (&ge; 0.10 &rarr; ' + calculatedLiters + ' L)'"></span>
+                                            <span x-show="!calculatedRawLiters">Decimal &ge; 0.10 rounds up</span>
+                                        </span>
+                                    </td>
+                                    <td class="px-4 py-3.5 font-extrabold text-amber-900 text-right text-lg">
+                                        <span x-text="calculatedLiters ? (calculatedLiters + ' L') : '—'"></span>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                {{-- OPTIONAL TITLE & NOTES --}}
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-slate-100 pt-5">
                     <div>
-                        <label class="block text-xs font-semibold text-slate-700 mb-1">Title / Subject (Optional)</label>
+                        <label class="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-1.5">
+                            Title / Subject <span class="text-[10px] text-slate-400 font-normal lowercase">(optional)</span>
+                        </label>
                         <input type="text" name="title" value="{{ old('title', $fuelPo->title) }}" placeholder="e.g. Cagayan de Oro to Bukidnon Mill Transfer"
-                               class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none">
+                               class="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-900 focus:border-blue-500 outline-none">
                     </div>
                     <div>
-                        <label class="block text-xs font-semibold text-slate-700 mb-1">Notes / Operating Guidelines (Optional)</label>
+                        <label class="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-1.5">
+                            Notes / Operating Guidelines <span class="text-[10px] text-slate-400 font-normal lowercase">(optional)</span>
+                        </label>
                         <textarea name="notes" rows="1" placeholder="Optional notes for purchasing or dispatch"
-                                  class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none">{{ old('notes', $fuelPo->notes) }}</textarea>
-                    </div>
-                </div>
-            </div>
-
-            {{-- Legs Section --}}
-            <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs space-y-4">
-                <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
-                    <div>
-                        <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Itinerary Legs & Distance Calculation</h2>
-                        <p class="text-xs text-slate-500 mt-0.5">Select Origin &rarr; Starting Point &rarr; Destination from Location Directory. Distances calculate automatically via road routing.</p>
-                    </div>
-                    <button type="button" @click="addLeg()"
-                            class="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-blue-700 shadow-xs transition cursor-pointer">
-                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                        </svg>
-                        Add Another Leg
-                    </button>
-                </div>
-
-                <div class="space-y-4">
-                    <template x-for="(leg, index) in legs" :key="index">
-                        <div class="rounded-xl border border-slate-200 p-4 bg-slate-50/60 space-y-3 transition">
-                            {{-- Leg Header --}}
-                            <div class="flex items-center justify-between border-b border-slate-200/80 pb-2">
-                                <div class="flex items-center gap-2">
-                                    <span class="flex h-5 w-5 items-center justify-center rounded-full bg-slate-900 text-[10px] font-bold text-white" x-text="index + 1"></span>
-                                    <span class="font-bold text-xs text-slate-800" x-text="'Leg #' + (index + 1)"></span>
-
-                                    <template x-if="leg.routing_source === 'osrm' && leg.total_distance">
-                                        <span class="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
-                                            <span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
-                                            AUTOMATIC (OSRM)
-                                        </span>
-                                    </template>
-                                    <template x-if="leg.routing_source === 'manual' && leg.total_distance">
-                                        <span class="inline-flex items-center gap-1 rounded-full bg-slate-100 border border-slate-200 px-2 py-0.5 text-[10px] font-bold text-slate-600">
-                                            <span class="h-1.5 w-1.5 rounded-full bg-slate-400"></span>
-                                            MANUAL
-                                        </span>
-                                    </template>
-                                </div>
-
-                                <div class="flex items-center gap-2">
-                                    <template x-if="index > 0 && legs[index - 1].destination_location_id">
-                                        <button type="button" @click="copyPreviousDestination(index)"
-                                                class="text-[11px] text-blue-600 hover:text-blue-800 hover:underline font-medium cursor-pointer">
-                                            &larr; Use Leg #<span x-text="index"></span> Dest as Origin
-                                        </button>
-                                    </template>
-
-                                    <button type="button" @click="removeLeg(index)" x-show="legs.length > 1"
-                                            class="text-rose-600 hover:text-rose-800 text-xs font-semibold ml-2 cursor-pointer">
-                                        Remove Leg
-                                    </button>
-                                </div>
-                            </div>
-
-                            <input type="hidden" :name="'legs[' + index + '][sort_order]'" :value="index">
-                            <input type="hidden" :name="'legs[' + index + '][routing_source]'" x-model="leg.routing_source">
-                            <input type="hidden" :name="'legs[' + index + '][duration_origin_to_start_minutes]'" x-model="leg.duration_origin_to_start_minutes">
-                            <input type="hidden" :name="'legs[' + index + '][duration_start_to_dest_minutes]'" x-model="leg.duration_start_to_dest_minutes">
-                            <input type="hidden" :name="'legs[' + index + '][total_duration_minutes]'" x-model="leg.total_duration_minutes">
-
-                            {{-- Locations Select Row --}}
-                            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                <div>
-                                    <label class="block text-[11px] font-bold uppercase text-slate-600 mb-1">
-                                        Origin Location <span class="text-rose-500">*</span>
-                                    </label>
-                                    <select :name="'legs[' + index + '][origin_location_id]'"
-                                            x-model="leg.origin_location_id"
-                                            @change="onLocationChange(index)"
-                                            required
-                                            class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none">
-                                        <option value="">-- Select Origin --</option>
-                                        @foreach($locations as $loc)
-                                            <option value="{{ $loc->id }}">{{ $loc->official_name }} ({{ $loc->code ?: $loc->municipality }})</option>
-                                        @endforeach
-                                    </select>
-                                </div>
-
-                                <div>
-                                    <label class="block text-[11px] font-bold uppercase text-slate-600 mb-1">
-                                        Starting Point (Depot/Stop) <span class="text-rose-500">*</span>
-                                    </label>
-                                    <select :name="'legs[' + index + '][starting_point_location_id]'"
-                                            x-model="leg.starting_point_location_id"
-                                            @change="onLocationChange(index)"
-                                            required
-                                            class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none">
-                                        <option value="">-- Select Starting Point --</option>
-                                        @foreach($locations as $loc)
-                                            <option value="{{ $loc->id }}">{{ $loc->official_name }} ({{ $loc->code ?: $loc->municipality }})</option>
-                                        @endforeach
-                                    </select>
-                                </div>
-
-                                <div>
-                                    <label class="block text-[11px] font-bold uppercase text-slate-600 mb-1">
-                                        Destination Location <span class="text-rose-500">*</span>
-                                    </label>
-                                    <select :name="'legs[' + index + '][destination_location_id]'"
-                                            x-model="leg.destination_location_id"
-                                            @change="onLocationChange(index)"
-                                            required
-                                            class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none">
-                                        <option value="">-- Select Destination --</option>
-                                        @foreach($locations as $loc)
-                                            <option value="{{ $loc->id }}">{{ $loc->official_name }} ({{ $loc->code ?: $loc->municipality }})</option>
-                                        @endforeach
-                                    </select>
-                                </div>
-                            </div>
-
-                            {{-- Distance & Duration Inputs Row --}}
-                            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-                                <div>
-                                    <label class="block text-[11px] font-semibold text-slate-600 mb-1">
-                                        Dist. 1: Origin &rarr; Start (km)
-                                    </label>
-                                    <input type="number" step="0.01" min="0"
-                                           :name="'legs[' + index + '][distance_origin_to_start]'"
-                                           x-model="leg.distance_origin_to_start"
-                                           @input="onManualDistanceChange(index)"
-                                           placeholder="0.00"
-                                           class="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-mono text-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none">
-                                </div>
-                                <div>
-                                    <label class="block text-[11px] font-semibold text-slate-600 mb-1">
-                                        Dist. 2: Start &rarr; Dest (km)
-                                    </label>
-                                    <input type="number" step="0.01" min="0"
-                                           :name="'legs[' + index + '][distance_start_to_dest]'"
-                                           x-model="leg.distance_start_to_dest"
-                                           @input="onManualDistanceChange(index)"
-                                           placeholder="0.00"
-                                           class="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-mono text-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none">
-                                </div>
-                                <div>
-                                    <label class="block text-[11px] font-bold text-slate-700 mb-1">
-                                        Leg Total Distance (km)
-                                    </label>
-                                    <input type="number" step="0.01" min="0"
-                                           :name="'legs[' + index + '][total_distance]'"
-                                           x-model="leg.total_distance"
-                                           readonly
-                                           placeholder="0.00"
-                                           class="w-full rounded-lg border border-slate-200 bg-slate-100/70 px-2.5 py-1.5 text-xs font-mono font-bold text-blue-700 outline-none">
-                                </div>
-                                <div>
-                                    <label class="block text-[11px] font-semibold text-slate-600 mb-1">
-                                        Purpose / Cargo (Optional)
-                                    </label>
-                                    <input type="text"
-                                           :name="'legs[' + index + '][purpose]'"
-                                           x-model="leg.purpose"
-                                           placeholder="e.g. Delivery, Hauling, Mill Transfer"
-                                           class="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none">
-                                </div>
-                            </div>
-                        </div>
-                    </template>
-                </div>
-            </div>
-
-            {{-- Summary & Submission Sticky Footer --}}
-            <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm flex flex-wrap items-center justify-between gap-4">
-                <div class="flex items-center gap-6">
-                    <div>
-                        <span class="block text-[11px] font-bold uppercase tracking-wider text-slate-400">Total Legs</span>
-                        <span class="font-bold text-slate-900 text-sm" x-text="legs.length"></span>
-                    </div>
-                    <div class="h-8 border-r border-slate-200"></div>
-                    <div>
-                        <span class="block text-[11px] font-bold uppercase tracking-wider text-slate-400">Total Road Distance</span>
-                        <div class="flex items-baseline gap-1 font-mono font-bold text-blue-600 text-lg">
-                            <span x-text="grandTotalDistance()"></span>
-                            <span class="text-xs text-slate-500 font-sans font-normal">km</span>
-                        </div>
-                    </div>
-                    <div class="h-8 border-r border-slate-200"></div>
-                    <div>
-                        <span class="block text-[11px] font-bold uppercase tracking-wider text-amber-600">Liter for PO (Distance &divide; Avg KM/L)</span>
-                        <div class="flex items-baseline gap-1 font-mono font-bold text-amber-600 text-lg">
-                            <template x-if="calculateLitersForPo() !== null">
-                                <span>
-                                    <span x-text="calculateLitersForPo()"></span>
-                                    <span class="text-xs text-slate-500 font-sans font-normal">L</span>
-                                </span>
-                            </template>
-                            <template x-if="calculateLitersForPo() === null">
-                                <span class="text-xs text-slate-400 font-sans font-normal" x-text="!selectedVehicleId ? 'Select Vehicle' : 'No Avg KM/L'"></span>
-                            </template>
-                        </div>
+                                  class="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-900 focus:border-blue-500 outline-none">{{ old('notes', $fuelPo->notes) }}</textarea>
                     </div>
                 </div>
 
-                <div class="flex items-center gap-3">
-                    <a href="{{ route('fuel-po.index') }}"
+                {{-- ACTION BUTTONS --}}
+                <div class="border-t border-slate-100 pt-4 flex items-center justify-end gap-3">
+                    <a href="{{ route('fuel-po.show', $fuelPo) }}"
                        class="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition">
                         Cancel
                     </a>
                     <button type="submit"
-                            class="rounded-xl bg-blue-600 px-6 py-2 text-xs font-bold text-white hover:bg-blue-700 shadow-sm transition cursor-pointer">
-                        Update Fuel PO Itinerary
+                            class="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-6 py-2.5 text-xs font-bold text-white hover:bg-blue-700 shadow-sm transition cursor-pointer">
+                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                        </svg>
+                        <span>SAVE CHANGES</span>
                     </button>
                 </div>
             </div>
@@ -391,12 +391,10 @@
 
     @push('scripts')
     <script>
-        function fuelPoBuilder(config) {
+        function editItineraryWorkflow(config) {
             return {
-                calculateDistanceUrl: config.calculateDistanceUrl,
-                csrfToken: config.csrfToken,
-                locationsList: config.locationsList || [],
                 vehiclesList: config.vehiclesList || [],
+                locationsList: config.locationsList || [],
                 selectedVehicleId: config.initialVehicleId || '',
                 driverName: config.initialDriverName || '',
 
@@ -406,145 +404,66 @@
                     }
                 },
 
+                // Destination & Distance rows: start with existing legs/rows or at least 1 row
+                destinationRows: (config.initialRows && config.initialRows.length > 0)
+                    ? config.initialRows.map(r => ({ destination: r.destination || r.name || '', distance: r.distance || '', purpose: r.purpose || '' }))
+                    : [{ destination: config.initialDestination || '', distance: config.initialDistance || '', purpose: '' }],
+
+                addRow() {
+                    this.destinationRows.push({ destination: '', distance: '', purpose: '' });
+                },
+
+                removeRow(index) {
+                    if (this.destinationRows.length > 1) {
+                        this.destinationRows.splice(index, 1);
+                    }
+                },
+
                 get selectedVehicle() {
-                    if (!this.selectedVehicleId) return null;
                     return this.vehiclesList.find(v => String(v.id) === String(this.selectedVehicleId)) || null;
                 },
 
-                calculateLitersForPo() {
-                    const vehicle = this.selectedVehicle;
-                    if (!vehicle || !vehicle.average_consumption || vehicle.average_consumption <= 0) {
-                        return null;
-                    }
-                    const distance = parseFloat(this.grandTotalDistance()) || 0;
-                    if (distance <= 0) {
-                        return '0';
-                    }
-                    const raw = Math.round((distance / vehicle.average_consumption) * 100) / 100;
-                    const intPart = Math.floor(raw);
-                    const decPart = Math.round((raw - intPart) * 100) / 100;
-                    return (decPart >= 0.10 ? (intPart + 1) : intPart).toString();
+                get averageConsumption() {
+                    return this.selectedVehicle?.average_consumption || null;
                 },
 
-                legs: (config.initialLegs || []).map(l => ({
-                    origin_location_id: l.origin_location_id ? String(l.origin_location_id) : '',
-                    starting_point_location_id: l.starting_point_location_id ? String(l.starting_point_location_id) : '',
-                    destination_location_id: l.destination_location_id ? String(l.destination_location_id) : '',
-                    distance_origin_to_start: l.distance_origin_to_start ?? '',
-                    distance_start_to_dest: l.distance_start_to_dest ?? '',
-                    total_distance: l.total_distance ?? '',
-                    duration_origin_to_start_minutes: l.duration_origin_to_start_minutes ?? '',
-                    duration_start_to_dest_minutes: l.duration_start_to_dest_minutes ?? '',
-                    total_duration_minutes: l.total_duration_minutes ?? '',
-                    routing_source: l.routing_source || 'manual',
-                    purpose: l.purpose || '',
-                    is_calculating: false,
-                    calc_error: null,
-                    calc_success: (l.routing_source === 'osrm' && l.total_distance)
-                })),
-
-                addLeg() {
-                    this.legs.push({
-                        origin_location_id: '',
-                        starting_point_location_id: '',
-                        destination_location_id: '',
-                        distance_origin_to_start: '',
-                        distance_start_to_dest: '',
-                        total_distance: '',
-                        duration_origin_to_start_minutes: '',
-                        duration_start_to_dest_minutes: '',
-                        total_duration_minutes: '',
-                        routing_source: 'manual',
-                        purpose: '',
-                        is_calculating: false,
-                        calc_error: null,
-                        calc_success: false
-                    });
-                },
-
-                copyPreviousDestination(index) {
-                    if (index > 0 && this.legs[index - 1].destination_location_id) {
-                        this.legs[index].origin_location_id = this.legs[index - 1].destination_location_id;
-                        this.onLocationChange(index);
-                    }
-                },
-
-                removeLeg(index) {
-                    if (this.legs.length > 1) {
-                        this.legs.splice(index, 1);
-                    }
-                },
-
-                onLocationChange(index) {
-                    const leg = this.legs[index];
-                    if (leg.origin_location_id && leg.starting_point_location_id && leg.destination_location_id) {
-                        this.calculateLeg(index);
-                    }
-                },
-
-                async calculateLeg(index) {
-                    const leg = this.legs[index];
-                    if (!leg.origin_location_id || !leg.starting_point_location_id || !leg.destination_location_id) {
-                        return;
-                    }
-
-                    leg.is_calculating = true;
-                    try {
-                        const response = await fetch(this.calculateDistanceUrl, {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'X-CSRF-TOKEN': this.csrfToken,
-                                'Accept': 'application/json'
-                            },
-                            body: JSON.stringify({
-                                origin_id: leg.origin_location_id,
-                                waypoint_id: leg.starting_point_location_id,
-                                destination_id: leg.destination_location_id
-                            })
-                        });
-
-                        const data = await response.json();
-
-                        if (response.ok && data.success && data.source === 'osrm' && data.total !== null) {
-                            leg.distance_origin_to_start = data.origin_to_start !== null ? data.origin_to_start.toFixed(2) : '';
-                            leg.distance_start_to_dest = data.start_to_dest !== null ? data.start_to_dest.toFixed(2) : '';
-                            leg.total_distance = data.total !== null ? data.total.toFixed(2) : '';
-                            leg.duration_origin_to_start_minutes = data.duration_origin_to_start_minutes ?? '';
-                            leg.duration_start_to_dest_minutes = data.duration_start_to_dest_minutes ?? '';
-                            leg.total_duration_minutes = data.total_duration_minutes ?? '';
-                            leg.routing_source = 'osrm';
-                            leg.calc_success = true;
-                        } else {
-                            leg.routing_source = 'manual';
-                        }
-                    } catch (err) {
-                        leg.routing_source = 'manual';
-                    } finally {
-                        leg.is_calculating = false;
-                    }
-                },
-
-                onManualDistanceChange(index) {
-                    const leg = this.legs[index];
-                    const d1 = parseFloat(leg.distance_origin_to_start) || 0;
-                    const d2 = parseFloat(leg.distance_start_to_dest) || 0;
-
-                    if (d1 > 0 || d2 > 0) {
-                        leg.total_distance = (Math.round((d1 + d2) * 100) / 100).toFixed(2);
-                    } else {
-                        leg.total_distance = '';
-                    }
-                    leg.routing_source = 'manual';
-                },
-
-                grandTotalDistance() {
+                get totalCalculatedDistance() {
                     let sum = 0;
-                    for (const leg of this.legs) {
-                        const total = parseFloat(leg.total_distance) || 0;
-                        sum += total;
+                    for (const row of this.destinationRows) {
+                        const dist = parseFloat(row.distance);
+                        if (!isNaN(dist) && dist > 0) {
+                            sum += dist;
+                        }
                     }
                     return (Math.round(sum * 100) / 100).toFixed(2);
+                },
+
+                get combinedDestination() {
+                    const names = this.destinationRows
+                        .map(r => (r.destination || '').trim())
+                        .filter(n => n.length > 0);
+                    return names.join(' → ');
+                },
+
+                get calculatedRawLiters() {
+                    const dist = parseFloat(this.totalCalculatedDistance);
+                    const avg = parseFloat(this.averageConsumption);
+                    if (!dist || dist <= 0 || !avg || avg <= 0) {
+                        return null;
+                    }
+                    return (dist / avg).toFixed(2);
+                },
+
+                get calculatedLiters() {
+                    const dist = parseFloat(this.totalCalculatedDistance);
+                    const avg = parseFloat(this.averageConsumption);
+                    if (!dist || dist <= 0 || !avg || avg <= 0) {
+                        return null;
+                    }
+                    const raw = Math.round((dist / avg) * 100) / 100;
+                    const intPart = Math.floor(raw);
+                    const decPart = Math.round((raw - intPart) * 100) / 100;
+                    return decPart >= 0.10 ? (intPart + 1) : intPart;
                 }
             };
         }
