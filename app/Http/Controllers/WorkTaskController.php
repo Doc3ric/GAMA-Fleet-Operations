@@ -193,6 +193,18 @@ class WorkTaskController extends Controller
             ->orderBy('category')
             ->pluck('category');
 
+        // Monthly Operations Metrics for the selected month
+        $monthTasksQuery = WorkTask::where('user_id', $userId)
+            ->whereNotNull('due_date')
+            ->whereBetween('due_date', [$startOfMonth->format('Y-m-d'), $endOfMonth->format('Y-m-d')]);
+
+        $monthScheduledCount = (clone $monthTasksQuery)->count();
+        $monthCompletedCount = (clone $monthTasksQuery)->where('status', WorkTask::STATUS_COMPLETED)->count();
+        $monthOverdueCount = (clone $monthTasksQuery)->overdue()->count();
+        $monthInProgressCount = (clone $monthTasksQuery)->where('status', WorkTask::STATUS_IN_PROGRESS)->count();
+        $monthPendingCount = (clone $monthTasksQuery)->where('status', WorkTask::STATUS_PENDING)->count();
+        $monthCompletionRate = $monthScheduledCount > 0 ? (int) round(($monthCompletedCount / $monthScheduledCount) * 100) : 0;
+
         return view('work-tasks.calendar', compact(
             'currentDate',
             'monthTitle',
@@ -205,7 +217,13 @@ class WorkTaskController extends Controller
             'dueTodayCount',
             'inProgressCount',
             'completedCount',
-            'categories'
+            'categories',
+            'monthScheduledCount',
+            'monthCompletedCount',
+            'monthOverdueCount',
+            'monthInProgressCount',
+            'monthPendingCount',
+            'monthCompletionRate'
         ));
     }
 

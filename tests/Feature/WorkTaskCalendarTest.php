@@ -189,4 +189,44 @@ class WorkTaskCalendarTest extends TestCase
         $response->assertOk();
         $response->assertSee('2026-09-25');
     }
+
+    /** 10. Calendar view passes monthly operational metrics to view */
+    public function test_calendar_view_passes_monthly_operational_metrics(): void
+    {
+        $currentMonth = Carbon::now()->startOfMonth();
+
+        // 2 tasks in this month: 1 completed, 1 pending
+        WorkTask::factory()->completed()->create([
+            'user_id' => $this->user->id,
+            'title' => 'Completed Retest Task',
+            'due_date' => $currentMonth->copy()->addDays(5)->format('Y-m-d'),
+        ]);
+
+        WorkTask::factory()->create([
+            'user_id' => $this->user->id,
+            'title' => 'Pending Calibration Task',
+            'status' => WorkTask::STATUS_PENDING,
+            'due_date' => $currentMonth->copy()->addDays(10)->format('Y-m-d'),
+        ]);
+
+        // 1 task next month (should not count in this month's scheduled metrics)
+        WorkTask::factory()->create([
+            'user_id' => $this->user->id,
+            'title' => 'Future Month Task',
+            'due_date' => $currentMonth->copy()->addMonths(2)->format('Y-m-d'),
+        ]);
+
+        $response = $this->actingAs($this->user)->get(route('work-tasks.calendar', [
+            'month' => $currentMonth->format('Y-m'),
+        ]));
+
+        $response->assertOk();
+        $response->assertViewHas('monthScheduledCount', 2);
+        $response->assertViewHas('monthCompletedCount', 1);
+        $response->assertViewHas('monthPendingCount', 1);
+        $response->assertViewHas('monthCompletionRate', 50);
+        $response->assertSee('Completed Retest Task');
+        $response->assertSee('Pending Calibration Task');
+        $response->assertDontSee('Future Month Task');
+    }
 }
