@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Services;
 
 use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use RuntimeException;
 
 class SpreadsheetViewerService
@@ -112,5 +114,62 @@ class SpreadsheetViewerService
         }
 
         throw new RuntimeException("Unsupported spreadsheet format: .{$extension}");
+    }
+
+    /**
+     * Save/export an edited workbook as a standard .xlsx file.
+     *
+     * @param  string  $filePath  Original source workbook path
+     * @param  string  $extension  Original file extension (xlsb or xlsx)
+     * @param  array<int, array{id: string, name: string, target: string}>  $sheets
+     * @param  array<string, array<int, array<int, mixed>>>  $allSheetsData
+     * @param  string  $outputPath  Destination .xlsx file path
+     */
+    public function saveWorkbook(
+        string $filePath,
+        string $extension,
+        array $sheets,
+        array $allSheetsData,
+        string $outputPath
+    ): void {
+        $spreadsheet = new Spreadsheet;
+        $sheetIndex = 0;
+
+        foreach ($sheets as $s) {
+            $sheetId = $s['id'];
+            $sheetName = $s['name'];
+
+            // Clean title per Excel sheet name constraints (max 31 chars, no forbidden chars)
+            $cleanTitle = mb_substr(str_replace(['\\', '/', '?', '*', ':', '[', ']'], '', $sheetName), 0, 31);
+            if ($cleanTitle === '') {
+                $cleanTitle = 'Sheet '.($sheetIndex + 1);
+            }
+
+            if ($sheetIndex === 0) {
+                $sheet = $spreadsheet->getActiveSheet();
+                $sheet->setTitle($cleanTitle);
+            } else {
+                $sheet = $spreadsheet->createSheet();
+                $sheet->setTitle($cleanTitle);
+            }
+
+            // Retrieve sheet rows (either modified in-memory data, or read from original file)
+            $rows = $allSheetsData[$sheetId] ?? $this->readWorksheet($filePath, $sheetId, $extension);
+
+            if (! empty($rows)) {
+                $sheet->fromArray($rows, null, 'A1');
+            }
+
+            $sheetIndex++;
+        }
+
+        // Ensure output directory exists
+        $dir = dirname($outputPath);
+        if (! is_dir($dir)) {
+            mkdir($dir, 0755, true);
+        }
+
+        $writer = new Xlsx($spreadsheet);
+        $writer->save($outputPath);
     }
 }

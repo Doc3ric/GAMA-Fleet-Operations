@@ -50,4 +50,37 @@ class ExcelViewerController extends Controller
 
         return Storage::disk('local')->download($storedFile, $downloadName);
     }
+
+    /**
+     * Download the edited spreadsheet workbook (.xlsx).
+     */
+    public function downloadEdited(Request $request, string $fileId): StreamedResponse
+    {
+        if (! preg_match('/^[a-zA-Z0-9_-]+$/', $fileId)) {
+            abort(404, 'Invalid file identifier.');
+        }
+
+        $metaPath = "excel-viewer/{$fileId}.json";
+        if (! Storage::disk('local')->exists($metaPath)) {
+            abort(404, 'Spreadsheet file record not found.');
+        }
+
+        $metadata = json_decode(Storage::disk('local')->get($metaPath) ?: '{}', true);
+
+        if (! empty($metadata['uploaded_by']) && (int) $metadata['uploaded_by'] !== (int) auth()->id()) {
+            abort(403, 'Unauthorized access to this spreadsheet.');
+        }
+
+        $editedFileName = $metadata['edited_file_name'] ?? "{$fileId}_edited.xlsx";
+        $storedFile = "excel-viewer/{$editedFileName}";
+
+        if (! Storage::disk('local')->exists($storedFile)) {
+            abort(404, 'Edited spreadsheet file not found. Please save changes first.');
+        }
+
+        $baseOriginal = pathinfo($metadata['original_name'] ?? 'workbook', PATHINFO_FILENAME);
+        $downloadName = $metadata['edited_download_name'] ?? "{$baseOriginal} (Edited).xlsx";
+
+        return Storage::disk('local')->download($storedFile, $downloadName);
+    }
 }

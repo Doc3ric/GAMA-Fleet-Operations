@@ -1,5 +1,16 @@
 <div class="space-y-4">
 
+    {{-- Success Notifications --}}
+    @if($successMessage)
+        <div class="flex items-center gap-3 rounded-xl bg-emerald-50 border border-emerald-200 p-4 text-sm text-emerald-800 shadow-xs">
+            <svg class="h-5 w-5 text-emerald-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+            </svg>
+            <div class="flex-1 font-medium">{{ $successMessage }}</div>
+            <button type="button" wire:click="$set('successMessage', null)" class="text-emerald-400 hover:text-emerald-600 font-bold">&times;</button>
+        </div>
+    @endif
+
     {{-- Error Notifications --}}
     @if($errorMessage)
         <div class="flex items-center gap-3 rounded-xl bg-rose-50 border border-rose-200 p-4 text-sm text-rose-800 shadow-xs">
@@ -31,9 +42,9 @@
                     </svg>
                 </div>
 
-                <h3 class="text-xl font-black text-slate-900 tracking-tight">Excel Workbook Viewer</h3>
+                <h3 class="text-xl font-black text-slate-900 tracking-tight">Excel Workbook Viewer &amp; Editor</h3>
                 <p class="text-xs text-slate-500 mt-1 mb-6">
-                    Upload an Excel Binary Workbook (<span class="font-bold text-slate-700">.xlsb</span>) or OpenXML Workbook (<span class="font-bold text-slate-700">.xlsx</span>) to inspect its worksheets, browse records, and filter tabular data directly in your browser.
+                    Upload an Excel Binary Workbook (<span class="font-bold text-slate-700">.xlsb</span>) or OpenXML Workbook (<span class="font-bold text-slate-700">.xlsx</span>) to view, edit cell contents, add or remove rows, and export updated files.
                 </p>
 
                 {{-- Upload Dropzone --}}
@@ -64,29 +75,36 @@
                             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
-                        <span class="text-sm font-semibold text-slate-700">Uploading & parsing spreadsheet...</span>
+                        <span class="text-sm font-semibold text-slate-700">Uploading &amp; parsing spreadsheet...</span>
                     </div>
                 </div>
 
-                {{-- Security & Isolation Info --}}
-                <div class="flex items-center justify-center gap-6 mt-6 text-xs text-slate-400">
+                {{-- Feature Badges --}}
+                <div class="flex items-center justify-center gap-6 mt-6 text-xs text-slate-400 flex-wrap">
                     <span class="flex items-center gap-1.5">
                         <svg class="h-4 w-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
                         </svg>
-                        Read-only viewer
+                        Multi-sheet viewer
+                    </span>
+                    <span class="flex items-center gap-1.5">
+                        <svg class="h-4 w-4 text-amber-500" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125" />
+                        </svg>
+                        Inline table editing
+                    </span>
+                    <span class="flex items-center gap-1.5">
+                        <svg class="h-4 w-4 text-blue-500" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                        </svg>
+                        Export updated Excel (.xlsx)
                     </span>
                     <span class="flex items-center gap-1.5">
                         <svg class="h-4 w-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
                         </svg>
                         Private secure storage
-                    </span>
-                    <span class="flex items-center gap-1.5">
-                        <svg class="h-4 w-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 5.625c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" />
-                        </svg>
-                        Zero database modifications
                     </span>
                 </div>
             </div>
@@ -118,27 +136,61 @@
                             <span class="inline-flex items-center rounded-md bg-blue-50 border border-blue-200 px-2 py-0.5 text-xs font-semibold text-blue-700">
                                 {{ count($sheets) }} {{ count($sheets) === 1 ? 'Sheet' : 'Sheets' }}
                             </span>
+
+                            @if($hasUnsavedChanges)
+                                <span class="inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-200 px-2.5 py-0.5 text-xs font-bold text-amber-700 animate-pulse">
+                                    <span class="h-1.5 w-1.5 rounded-full bg-amber-500"></span>
+                                    Unsaved Changes
+                                </span>
+                            @endif
+
+                            @if($hasEditedFile)
+                                <span class="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-xs font-bold text-emerald-700">
+                                    <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>
+                                    Edited .XLSX Available
+                                </span>
+                            @endif
                         </div>
                         <p class="text-xs text-slate-400 mt-0.5">
-                            Spreadsheet loaded in memory &bull; Read-only mode
+                            Spreadsheet loaded &bull;
+                            @if($isEditMode)
+                                <span class="text-amber-600 font-semibold">Editing active</span> &mdash; edits are preserved in session
+                            @else
+                                <span class="text-slate-500">View mode</span> &mdash; click Edit Mode to modify cells
+                            @endif
                         </p>
                     </div>
                 </div>
 
                 {{-- Action Buttons --}}
-                <div class="flex items-center gap-2.5 shrink-0">
+                <div class="flex items-center gap-2 flex-wrap shrink-0">
+                    {{-- Download Original File --}}
                     <a href="{{ route('excel-viewer.download', $fileId) }}"
-                       class="inline-flex items-center gap-2 rounded-xl bg-slate-100 hover:bg-slate-200 px-3.5 py-2 text-xs font-bold text-slate-700 transition-colors border border-slate-200">
+                       class="inline-flex items-center gap-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 px-3 py-2 text-xs font-bold text-slate-700 transition-colors border border-slate-200"
+                       title="Download the unmodified original workbook">
                         <svg class="h-4 w-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
                         </svg>
                         Download Original
                     </a>
 
+                    {{-- Download Edited XLSX (if saved) --}}
+                    @if($hasEditedFile)
+                        <a href="{{ route('excel-viewer.download-edited', $fileId) }}"
+                           class="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-3.5 py-2 text-xs font-bold text-white transition-colors shadow-xs"
+                           title="Download the updated workbook with all changes as .xlsx">
+                            <svg class="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                            </svg>
+                            Download Edited (.xlsx)
+                        </a>
+                    @endif
+
+                    {{-- Upload Another File --}}
                     <button type="button"
                             wire:click="clearFile"
-                            class="inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 px-3.5 py-2 text-xs font-bold text-white transition-colors shadow-xs">
-                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            class="inline-flex items-center gap-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 px-3 py-2 text-xs font-bold text-slate-600 transition-colors border border-slate-200">
+                        <svg class="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
                         </svg>
                         Upload Another
@@ -167,9 +219,9 @@
             </div>
         </div>
 
-        {{-- Toolbar: Search, Header Toggle, Per Page, Stats --}}
+        {{-- Toolbar: Search, Edit Mode Toggle, Add Row, Save Changes, Per Page, Stats --}}
         <div class="rounded-2xl bg-white border border-slate-200/90 shadow-xs p-4">
-            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
                 {{-- Search Bar --}}
                 <div class="relative flex-1 max-w-md">
                     <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
@@ -190,7 +242,56 @@
                     @endif
                 </div>
 
-                <div class="flex items-center gap-3 flex-wrap">
+                {{-- Toolbar Actions --}}
+                <div class="flex items-center gap-2.5 flex-wrap">
+
+                    {{-- Edit Mode Switcher --}}
+                    <button type="button"
+                            wire:click="toggleEditMode"
+                            class="inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition-all border
+                                   {{ $isEditMode
+                                      ? 'bg-amber-500 text-white border-amber-600 shadow-sm ring-2 ring-amber-500/20'
+                                      : 'bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200' }}">
+                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125" />
+                        </svg>
+                        <span>{{ $isEditMode ? 'Exit Edit Mode' : 'Edit Mode' }}</span>
+                    </button>
+
+                    @if($isEditMode)
+                        {{-- Add Row Button --}}
+                        <button type="button"
+                                wire:click="addRow"
+                                class="inline-flex items-center gap-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 px-3 py-2 text-xs font-bold text-slate-800 transition-colors shadow-xs">
+                            <svg class="h-4 w-4 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                            </svg>
+                            Add Row
+                        </button>
+
+                        {{-- Save Changes Button --}}
+                        <button type="button"
+                                wire:click="saveChanges"
+                                class="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold text-white transition-all shadow-xs
+                                       {{ $hasUnsavedChanges
+                                          ? 'bg-emerald-600 hover:bg-emerald-700 ring-2 ring-emerald-500/30'
+                                          : 'bg-blue-600 hover:bg-blue-700' }}">
+                            <div wire:loading.remove wire:target="saveChanges" class="flex items-center gap-1.5">
+                                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0Z" />
+                                </svg>
+                                <span>Save Changes</span>
+                            </div>
+                            <div wire:loading wire:target="saveChanges" class="flex items-center gap-1.5">
+                                <svg class="animate-spin h-3.5 w-3.5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                <span>Saving...</span>
+                            </div>
+                        </button>
+                    @endif
+
                     {{-- Toggle First Row as Header --}}
                     <button type="button"
                             wire:click="toggleFirstRowAsHeader"
@@ -200,70 +301,101 @@
                                       : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100' }}"
                             title="Toggle whether Row 1 is treated as the column header">
                         <span class="h-2 w-2 rounded-full {{ $useFirstRowAsHeader ? 'bg-blue-600' : 'bg-slate-400' }}"></span>
-                        <span>Row 1 as Header: <span class="font-bold">{{ $useFirstRowAsHeader ? 'ON' : 'OFF' }}</span></span>
+                        <span>Row 1 Header: <span class="font-bold">{{ $useFirstRowAsHeader ? 'ON' : 'OFF' }}</span></span>
                     </button>
 
                     {{-- Rows Per Page --}}
-                    <div class="flex items-center gap-2 text-xs text-slate-600">
+                    <div class="flex items-center gap-1.5 text-xs text-slate-600">
                         <span class="font-medium text-slate-500">Show:</span>
                         <select wire:model.live="perPage"
                                 class="rounded-xl border border-slate-200 bg-white py-1.5 pl-2.5 pr-8 text-xs font-semibold text-slate-700 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none">
-                            <option value="10">10 rows</option>
-                            <option value="25">25 rows</option>
-                            <option value="50">50 rows</option>
-                            <option value="100">100 rows</option>
+                            <option value="10">10</option>
+                            <option value="25">25</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
                         </select>
                     </div>
 
                     {{-- Row Count Badge --}}
-                    <div class="text-xs font-semibold text-slate-500 bg-slate-100 px-3 py-2 rounded-xl border border-slate-200">
-                        Showing {{ $startRow }}&ndash;{{ $endRow }} of {{ $totalRows }} rows
+                    <div class="text-xs font-semibold text-slate-500 bg-slate-100 px-3 py-2 rounded-xl border border-slate-200 whitespace-nowrap">
+                        {{ $startRow }}&ndash;{{ $endRow }} of {{ $totalRows }} rows
                     </div>
                 </div>
             </div>
         </div>
 
         {{-- Table Container with Horizontal Scrolling --}}
-        <div class="rounded-2xl bg-white border border-slate-200/90 shadow-xs overflow-hidden">
-            <div class="overflow-x-auto max-h-[600px] overflow-y-auto scrollbar-thin">
+        <div class="rounded-2xl bg-white border border-slate-200/90 shadow-xs overflow-hidden {{ $isEditMode ? 'ring-2 ring-amber-400/40' : '' }}">
+            <div class="overflow-x-auto max-h-[620px] overflow-y-auto scrollbar-thin">
                 <table class="w-full text-left border-collapse">
                     <thead class="sticky top-0 z-10 bg-[#0f172a] text-white">
                         <tr>
-                            {{-- Row Index Header --}}
-                            <th class="w-12 px-3 py-3 text-center text-[11px] font-bold uppercase tracking-wider text-slate-400 bg-[#0b1120] border-r border-slate-700/60 select-none">
-                                #
+                            {{-- Row Index Header & Actions Header --}}
+                            <th class="w-14 px-3 py-3 text-center text-[11px] font-bold uppercase tracking-wider text-slate-400 bg-[#0b1120] border-r border-slate-700/60 select-none">
+                                {{ $isEditMode ? 'Act / #' : '#' }}
                             </th>
+
                             {{-- Column Headers --}}
                             @foreach($headers as $colIdx => $header)
-                                <th class="px-4 py-3 text-xs font-bold uppercase tracking-wide text-slate-200 border-r border-slate-700/40 whitespace-nowrap">
-                                    <div class="flex flex-col">
-                                        <span>{{ $header }}</span>
-                                        @if($useFirstRowAsHeader)
+                                <th class="px-3 py-2.5 text-xs font-bold uppercase tracking-wide text-slate-200 border-r border-slate-700/40 whitespace-nowrap">
+                                    @if($isEditMode && $useFirstRowAsHeader)
+                                        <div class="flex flex-col gap-1 min-w-[130px]">
+                                            <input type="text"
+                                                   wire:change="updateCell(0, {{ $colIdx }}, $event.target.value)"
+                                                   value="{{ $header }}"
+                                                   class="rounded bg-slate-800 border border-slate-700 focus:border-blue-400 text-white px-2 py-1 text-xs outline-none font-bold">
                                             <span class="text-[9px] font-mono text-slate-400 font-normal">[{{ $this->getColumnLetter($colIdx) }}]</span>
-                                        @endif
-                                    </div>
+                                        </div>
+                                    @else
+                                        <div class="flex flex-col">
+                                            <span>{{ $header }}</span>
+                                            @if($useFirstRowAsHeader)
+                                                <span class="text-[9px] font-mono text-slate-400 font-normal">[{{ $this->getColumnLetter($colIdx) }}]</span>
+                                            @endif
+                                        </div>
+                                    @endif
                                 </th>
                             @endforeach
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-200/80 bg-white text-xs">
-                        @forelse($pagedRows as $rowOffset => $row)
+                        @forelse($pagedRows as $rowOffset => $rowItem)
                             @php
                                 $displayRowIndex = $startRow + $rowOffset;
+                                $actualRowIndex = $rowItem['_rowIndex'];
                             @endphp
                             <tr class="hover:bg-blue-50/40 transition-colors {{ $loop->even ? 'bg-slate-50/40' : '' }}">
-                                {{-- Row Index Cell --}}
-                                <td class="px-3 py-2.5 text-center text-[11px] font-mono font-semibold text-slate-400 bg-slate-100/70 border-r border-slate-200 select-none">
-                                    {{ $displayRowIndex }}
+                                {{-- Row Index & Action Cell --}}
+                                <td class="px-2 py-2 text-center text-[11px] font-mono font-semibold text-slate-500 bg-slate-100/70 border-r border-slate-200 select-none whitespace-nowrap">
+                                    <div class="flex items-center justify-center gap-1.5">
+                                        @if($isEditMode)
+                                            <button type="button"
+                                                    wire:click="deleteRow({{ $actualRowIndex }})"
+                                                    title="Delete row {{ $displayRowIndex }}"
+                                                    class="p-1 rounded text-rose-500 hover:text-rose-700 hover:bg-rose-100/60 transition-colors">
+                                                <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                                                </svg>
+                                            </button>
+                                        @endif
+                                        <span>{{ $displayRowIndex }}</span>
+                                    </div>
                                 </td>
 
                                 {{-- Column Data Cells --}}
-                                @foreach($row as $colIdx => $cell)
-                                    <td class="px-4 py-2.5 text-slate-700 border-r border-slate-100 whitespace-nowrap">
-                                        @if($cell === '' || $cell === null)
-                                            <span class="text-slate-300 font-light select-none">&mdash;</span>
+                                @foreach($rowItem['cells'] as $colIdx => $cell)
+                                    <td class="px-2 py-1.5 text-slate-700 border-r border-slate-100 whitespace-nowrap">
+                                        @if($isEditMode)
+                                            <input type="text"
+                                                   wire:change="updateCell({{ $actualRowIndex }}, {{ $colIdx }}, $event.target.value)"
+                                                   value="{{ $cell }}"
+                                                   class="w-full min-w-[130px] rounded border border-slate-200 bg-amber-50/20 focus:bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-colors">
                                         @else
-                                            <span class="font-normal">{{ (string)$cell }}</span>
+                                            @if($cell === '' || $cell === null)
+                                                <span class="text-slate-300 font-light select-none px-2">&mdash;</span>
+                                            @else
+                                                <span class="font-normal px-2">{{ (string)$cell }}</span>
+                                            @endif
                                         @endif
                                     </td>
                                 @endforeach
@@ -291,12 +423,12 @@
             </div>
 
             {{-- Table Footer & Pagination Controls --}}
-            @if($totalPages > 1)
-                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between px-5 py-3.5 border-t border-slate-200 bg-slate-50/70 gap-3">
-                    <div class="text-xs text-slate-500 font-medium">
-                        Page <span class="font-bold text-slate-800">{{ $page }}</span> of <span class="font-bold text-slate-800">{{ $totalPages }}</span>
-                    </div>
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between px-5 py-3.5 border-t border-slate-200 bg-slate-50/70 gap-3">
+                <div class="text-xs text-slate-500 font-medium">
+                    Page <span class="font-bold text-slate-800">{{ $page }}</span> of <span class="font-bold text-slate-800">{{ $totalPages }}</span>
+                </div>
 
+                @if($totalPages > 1)
                     <div class="flex items-center gap-1.5">
                         {{-- Previous Button --}}
                         <button type="button"
@@ -345,8 +477,8 @@
                             Next &rarr;
                         </button>
                     </div>
-                </div>
-            @endif
+                @endif
+            </div>
         </div>
     @endif
 

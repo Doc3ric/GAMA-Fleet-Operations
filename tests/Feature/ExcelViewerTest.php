@@ -292,4 +292,128 @@ class ExcelViewerTest extends TestCase
         $this->assertEquals($devicesCount, Device::count(), 'Devices table must not be modified.');
         $this->assertEquals($fuelTestsCount, FuelConsumptionTest::count(), 'Fuel tests table must not be modified.');
     }
+
+    public function test_user_can_toggle_edit_mode(): void
+    {
+        $file = $this->getXlsxFixture();
+
+        Livewire::actingAs($this->user)
+            ->test(ExcelViewer::class)
+            ->set('file', $file)
+            ->assertSet('isEditMode', false)
+            ->call('toggleEditMode')
+            ->assertSet('isEditMode', true)
+            ->call('toggleEditMode')
+            ->assertSet('isEditMode', false);
+    }
+
+    public function test_user_can_edit_cell_value(): void
+    {
+        $file = $this->getXlsxFixture();
+
+        $component = Livewire::actingAs($this->user)
+            ->test(ExcelViewer::class)
+            ->set('file', $file)
+            ->call('toggleEditMode')
+            ->call('updateCell', 1, 0, 'Updated Fleet Value')
+            ->assertSet('hasUnsavedChanges', true);
+
+        $rows = $component->get('rows');
+        $this->assertEquals('Updated Fleet Value', $rows[1][0]);
+    }
+
+    public function test_user_can_add_new_row(): void
+    {
+        $file = $this->getXlsxFixture();
+
+        $component = Livewire::actingAs($this->user)
+            ->test(ExcelViewer::class)
+            ->set('file', $file)
+            ->call('toggleEditMode');
+
+        $initialRowCount = count($component->get('rows'));
+
+        $component->call('addRow')
+            ->assertSet('hasUnsavedChanges', true);
+
+        $updatedRows = $component->get('rows');
+        $this->assertCount($initialRowCount + 1, $updatedRows);
+        $this->assertEquals(array_fill(0, count($updatedRows[0]), ''), end($updatedRows));
+    }
+
+    public function test_user_can_delete_row(): void
+    {
+        $file = $this->getXlsxFixture();
+
+        $component = Livewire::actingAs($this->user)
+            ->test(ExcelViewer::class)
+            ->set('file', $file)
+            ->call('toggleEditMode');
+
+        $initialRowCount = count($component->get('rows'));
+        $targetRowValue = $component->get('rows')[1][0];
+
+        $component->call('deleteRow', 1)
+            ->assertSet('hasUnsavedChanges', true);
+
+        $updatedRows = $component->get('rows');
+        $this->assertCount($initialRowCount - 1, $updatedRows);
+        $this->assertNotEquals($targetRowValue, $updatedRows[1][0]);
+    }
+
+    public function test_user_can_save_edited_workbook_as_xlsx(): void
+    {
+        $file = $this->getXlsxFixture();
+
+        $component = Livewire::actingAs($this->user)
+            ->test(ExcelViewer::class)
+            ->set('file', $file)
+            ->call('toggleEditMode')
+            ->call('updateCell', 1, 0, 'MODIFIED_CONTENT_TEST')
+            ->call('saveChanges')
+            ->assertSet('hasUnsavedChanges', false)
+            ->assertSet('hasEditedFile', true)
+            ->assertSee('Workbook changes saved successfully');
+
+        $fileId = $component->get('fileId');
+        $this->assertTrue(Storage::disk('local')->exists("excel-viewer/{$fileId}_edited.xlsx"));
+    }
+
+    public function test_user_can_download_edited_workbook(): void
+    {
+        $file = $this->getXlsxFixture();
+
+        $component = Livewire::actingAs($this->user)
+            ->test(ExcelViewer::class)
+            ->set('file', $file)
+            ->call('toggleEditMode')
+            ->call('updateCell', 1, 0, 'MODIFIED_CONTENT_TEST')
+            ->call('saveChanges');
+
+        $fileId = $component->get('fileId');
+
+        $response = $this->actingAs($this->user)->get(route('excel-viewer.download-edited', $fileId));
+        $response->assertOk();
+        $response->assertHeader('content-disposition', 'attachment; filename="test_sample (Edited).xlsx"');
+    }
+
+    public function test_unauthorized_user_cannot_download_edited_file(): void
+    {
+        $otherUser = User::factory()->create();
+
+        $fileId = 'test-file-edited-123';
+        Storage::disk('local')->put("excel-viewer/{$fileId}.json", json_encode([
+            'id' => $fileId,
+            'file_name' => "{$fileId}.xlsx",
+            'original_name' => 'private_report.xlsx',
+            'extension' => 'xlsx',
+            'uploaded_by' => $otherUser->id,
+            'has_edited_file' => true,
+            'edited_file_name' => "{$fileId}_edited.xlsx",
+        ]));
+        Storage::disk('local')->put("excel-viewer/{$fileId}_edited.xlsx", 'dummy xlsx content');
+
+        $response = $this->actingAs($this->user)->get(route('excel-viewer.download-edited', $fileId));
+        $response->assertForbidden();
+    }
 }

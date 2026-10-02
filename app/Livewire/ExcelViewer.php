@@ -39,7 +39,17 @@ class ExcelViewer extends Component
 
     public bool $useFirstRowAsHeader = true;
 
+    public bool $isEditMode = false;
+
+    public array $allSheetsData = [];
+
+    public bool $hasUnsavedChanges = false;
+
+    public bool $hasEditedFile = false;
+
     public ?string $errorMessage = null;
+
+    public ?string $successMessage = null;
 
     /**
      * Handle file upload and parse worksheets.
@@ -47,6 +57,7 @@ class ExcelViewer extends Component
     public function updatedFile(): void
     {
         $this->errorMessage = null;
+        $this->successMessage = null;
 
         $this->validate([
             'file' => [
@@ -79,6 +90,7 @@ class ExcelViewer extends Component
                 'original_name' => $origName,
                 'extension' => $ext,
                 'size' => $size,
+                'has_edited_file' => false,
                 'uploaded_by' => auth()->id(),
                 'uploaded_at' => now()->toIso8601String(),
             ];
@@ -88,6 +100,10 @@ class ExcelViewer extends Component
             $this->originalName = $origName;
             $this->extension = $ext;
             $this->fileSize = $size;
+            $this->allSheetsData = [];
+            $this->isEditMode = false;
+            $this->hasUnsavedChanges = false;
+            $this->hasEditedFile = false;
 
             // Inspect worksheets
             $service = app(SpreadsheetViewerService::class);
@@ -121,11 +137,24 @@ class ExcelViewer extends Component
     public function selectSheet(string $sheetId): void
     {
         $this->errorMessage = null;
+
+        // Persist current sheet data in memory cache before switching
+        if ($this->activeSheetId && ! empty($this->rows)) {
+            $this->allSheetsData[$this->activeSheetId] = $this->rows;
+        }
+
         $this->activeSheetId = $sheetId;
         $this->page = 1;
         $this->search = '';
 
         if (! $this->fileId || ! $this->extension) {
+            return;
+        }
+
+        // If sheet data was already cached or modified in-memory, load it
+        if (isset($this->allSheetsData[$sheetId])) {
+            $this->rows = $this->allSheetsData[$sheetId];
+
             return;
         }
 
@@ -135,9 +164,133 @@ class ExcelViewer extends Component
 
             $service = app(SpreadsheetViewerService::class);
             $this->rows = $service->readWorksheet($fullPath, $sheetId, $this->extension);
+            $this->allSheetsData[$sheetId] = $this->rows;
         } catch (\Throwable $e) {
             $this->errorMessage = 'Failed to read worksheet data: '.$e->getMessage();
             $this->rows = [];
+        }
+    }
+
+    /**
+     * Toggle Edit Mode on or off.
+     */
+    public function toggleEditMode(): void
+    {
+        $this->isEditMode = ! $this->isEditMode;
+        $this->successMessage = null;
+    }
+
+    /**
+     * Update a cell value.
+     */
+    public function updateCell(int $rowIndex, int $colIndex, mixed $value): void
+    {
+        $valStr = (string) $value;
+        $this->rows[$rowIndex][$colIndex] = $valStr;
+
+        if ($this->activeSheetId) {
+            $this->allSheetsData[$this->activeSheetId][$rowIndex][$colIndex] = $valStr;
+        }
+
+        $this->hasUnsavedChanges = true;
+        $this->successMessage = null;
+    }
+
+    /**
+     * Add a new blank row to the active sheet.
+     */
+    public function addRow(): void
+    {
+        $colCount = ! empty($this->rows) ? count($this->rows[0]) : 5;
+        $newRow = array_fill(0, $colCount, '');
+
+        $this->rows[] = $newRow;
+
+        if ($this->activeSheetId) {
+            $this->allSheetsData[$this->activeSheetId] = $this->rows;
+        }
+
+        $this->hasUnsavedChanges = true;
+        $this->successMessage = null;
+
+        // Reset search so newly added row is visible
+        $this->search = '';
+
+        // Navigate to last page so new row is immediately in view
+        $dataRowsCount = $this->useFirstRowAsHeader ? max(0, count($this->rows) - 1) : count($this->rows);
+        $this->page = max(1, (int) ceil($dataRowsCount / $this->perPage));
+    }
+
+    /**
+     * Delete a row by its index in $this->rows.
+     */
+    public function deleteRow(int $rowIndex): void
+    {
+        if (isset($this->rows[$rowIndex])) {
+            array_splice($this->rows, $rowIndex, 1);
+            $this->rows = array_values($this->rows);
+
+            if ($this->activeSheetId) {
+                $this->allSheetsData[$this->activeSheetId] = $this->rows;
+            }
+
+            $this->hasUnsavedChanges = true;
+            $this->successMessage = null;
+        }
+    }
+
+    /**
+     * Save all edited sheets into a standard Excel (.xlsx) file.
+     */
+    public function saveChanges(): void
+    {
+        $this->errorMessage = null;
+        $this->successMessage = null;
+
+        if (! $this->fileId || ! $this->extension) {
+            $this->errorMessage = 'No active workbook to save.';
+
+            return;
+        }
+
+        try {
+            // Sync current active sheet rows
+            if ($this->activeSheetId) {
+                $this->allSheetsData[$this->activeSheetId] = $this->rows;
+            }
+
+            $storedName = "{$this->fileId}.{$this->extension}";
+            $fullPath = Storage::disk('local')->path("excel-viewer/{$storedName}");
+            $editedStoredName = "{$this->fileId}_edited.xlsx";
+            $editedFullPath = Storage::disk('local')->path("excel-viewer/{$editedStoredName}");
+
+            $service = app(SpreadsheetViewerService::class);
+            $service->saveWorkbook(
+                $fullPath,
+                $this->extension,
+                $this->sheets,
+                $this->allSheetsData,
+                $editedFullPath
+            );
+
+            // Update metadata JSON file
+            $metaPath = "excel-viewer/{$this->fileId}.json";
+            $meta = [];
+            if (Storage::disk('local')->exists($metaPath)) {
+                $meta = json_decode(Storage::disk('local')->get($metaPath) ?: '{}', true);
+            }
+            $baseOriginal = pathinfo($this->originalName ?? 'workbook', PATHINFO_FILENAME);
+            $meta['has_edited_file'] = true;
+            $meta['edited_file_name'] = $editedStoredName;
+            $meta['edited_download_name'] = "{$baseOriginal} (Edited).xlsx";
+            $meta['edited_at'] = now()->toIso8601String();
+            Storage::disk('local')->put($metaPath, json_encode($meta));
+
+            $this->hasUnsavedChanges = false;
+            $this->hasEditedFile = true;
+            $this->successMessage = 'Workbook changes saved successfully! You can download the updated Excel (.xlsx) file.';
+        } catch (\Throwable $e) {
+            $this->errorMessage = 'Failed to save workbook changes: '.$e->getMessage();
         }
     }
 
@@ -207,9 +360,14 @@ class ExcelViewer extends Component
         $this->sheets = [];
         $this->activeSheetId = null;
         $this->rows = [];
+        $this->allSheetsData = [];
+        $this->isEditMode = false;
+        $this->hasUnsavedChanges = false;
+        $this->hasEditedFile = false;
         $this->search = '';
         $this->page = 1;
         $this->errorMessage = null;
+        $this->successMessage = null;
     }
 
     /**
@@ -243,21 +401,31 @@ class ExcelViewer extends Component
                     $valStr = trim((string) $colVal);
                     $headers[] = $valStr !== '' ? $valStr : $this->getColumnLetter($colIdx);
                 }
-                $dataRows = array_slice($this->rows, 1);
+                for ($r = 1; $r < count($this->rows); $r++) {
+                    $dataRows[] = [
+                        '_rowIndex' => $r,
+                        'cells' => $this->rows[$r],
+                    ];
+                }
             } else {
                 // Column letters A, B, C...
                 for ($c = 0; $c < $columnCount; $c++) {
                     $headers[] = $this->getColumnLetter($c);
                 }
-                $dataRows = $this->rows;
+                for ($r = 0; $r < count($this->rows); $r++) {
+                    $dataRows[] = [
+                        '_rowIndex' => $r,
+                        'cells' => $this->rows[$r],
+                    ];
+                }
             }
         }
 
-        // Apply search filter across all cells in each row
+        // Apply search filter across cells in each row
         $searchTrimmed = trim($this->search);
         if ($searchTrimmed !== '') {
-            $dataRows = array_values(array_filter($dataRows, function ($row) use ($searchTrimmed) {
-                foreach ($row as $cell) {
+            $dataRows = array_values(array_filter($dataRows, function ($rowItem) use ($searchTrimmed) {
+                foreach ($rowItem['cells'] as $cell) {
                     if (stripos((string) $cell, $searchTrimmed) !== false) {
                         return true;
                     }

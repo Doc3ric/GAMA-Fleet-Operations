@@ -96,6 +96,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Excel Viewer
     Route::get('excel-viewer', [ExcelViewerController::class, 'index'])->name('excel-viewer.index');
     Route::get('excel-viewer/download/{fileId}', [ExcelViewerController::class, 'download'])->name('excel-viewer.download');
+    Route::get('excel-viewer/download/{fileId}/edited', [ExcelViewerController::class, 'downloadEdited'])->name('excel-viewer.download-edited');
 
     // Advanced Itinerary Management (Operations)
     Route::post('advanced-itineraries/{advanced_itinerary}/recalculate', [AdvancedItineraryController::class, 'recalculate'])->name('advanced-itineraries.recalculate');
