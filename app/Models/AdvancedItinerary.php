@@ -23,6 +23,15 @@ class AdvancedItinerary extends Model
         self::STATUS_FINALIZED,
     ];
 
+    public const CALCULATION_METHOD_DIVIDE = 'divide';
+
+    public const CALCULATION_METHOD_MULTIPLY = 'multiply';
+
+    public const CALCULATION_METHODS = [
+        self::CALCULATION_METHOD_DIVIDE,
+        self::CALCULATION_METHOD_MULTIPLY,
+    ];
+
     /** @var list<string> */
     protected $fillable = [
         'vehicle_id',
@@ -37,6 +46,7 @@ class AdvancedItinerary extends Model
         'status',
         'total_duration_minutes',
         'fuel_liters_required',
+        'calculation_method',
         'po_checked',
         'po_checked_at',
         'po_checked_by',
@@ -52,6 +62,7 @@ class AdvancedItinerary extends Model
         'total_distance' => 'float',
         'total_duration_minutes' => 'integer',
         'fuel_liters_required' => 'float',
+        'calculation_method' => 'string',
         'po_checked' => 'boolean',
         'po_checked_at' => 'datetime',
         'po_checked_by' => 'integer',
@@ -150,8 +161,13 @@ class AdvancedItinerary extends Model
 
         $vehicle = $this->vehicle;
         $avgConsumption = $vehicle?->average_fuel_consumption ?? $vehicle?->average_consumption;
+        $method = $this->calculation_method ?: self::detectCalculationMethod($vehicle?->equipment_code);
 
-        return self::calculateFuelLiters($this->total_distance, $avgConsumption !== null ? (float) $avgConsumption : null);
+        return self::calculateFuelLiters(
+            $this->total_distance,
+            $avgConsumption !== null ? (float) $avgConsumption : null,
+            $method
+        );
     }
 
     public function poChecker(): BelongsTo
@@ -160,15 +176,38 @@ class AdvancedItinerary extends Model
     }
 
     /**
-     * Calculate fuel liters required based on Total Distance ÷ Average Consumption.
+     * Auto-detect whether to use 'multiply' (FL / Forklift) or 'divide' (standard vehicles).
+     */
+    public static function detectCalculationMethod(?string $equipmentCode): string
+    {
+        if ($equipmentCode === null || trim($equipmentCode) === '') {
+            return self::CALCULATION_METHOD_DIVIDE;
+        }
+
+        // Forklift vehicles generally start with "FL" (e.g. FL5, FL 8/FL6, FL 9, FL10)
+        if (preg_match('/^FL(\s*[-_\/0-9]|$)/i', trim($equipmentCode))) {
+            return self::CALCULATION_METHOD_MULTIPLY;
+        }
+
+        return self::CALCULATION_METHOD_DIVIDE;
+    }
+
+    /**
+     * Calculate fuel liters required based on Total Distance and Average Consumption.
+     * Method 'divide': Total Distance ÷ Average Consumption (standard vehicles).
+     * Method 'multiply': Total Distance × Average Consumption (FL / Forklift vehicles).
+     *
      * Uses custom threshold rounding (0.10 threshold):
      * - Decimal .00 to .09: keep integer part (floor)
      * - Decimal .10 and higher: round up to next whole integer (ceiling)
      *
      * Returns null safely if average consumption is missing, zero, or negative.
      */
-    public static function calculateFuelLiters(?float $distance, ?float $averageConsumption): ?float
-    {
+    public static function calculateFuelLiters(
+        ?float $distance,
+        ?float $averageConsumption,
+        string $method = self::CALCULATION_METHOD_DIVIDE
+    ): ?float {
         if ($distance === null || $distance <= 0) {
             return 0.0;
         }
@@ -177,7 +216,12 @@ class AdvancedItinerary extends Model
             return null;
         }
 
-        $raw = $distance / $averageConsumption;
+        if ($method === self::CALCULATION_METHOD_MULTIPLY) {
+            $raw = $distance * $averageConsumption;
+        } else {
+            $raw = $distance / $averageConsumption;
+        }
+
         $rounded = round($raw, 2);
         $intPart = floor($rounded);
         $decPart = round($rounded - $intPart, 2);
@@ -193,7 +237,12 @@ class AdvancedItinerary extends Model
     {
         $vehicle = $this->vehicle;
         $avgConsumption = $vehicle?->average_fuel_consumption ?? $vehicle?->average_consumption;
-        $liters = self::calculateFuelLiters($this->total_distance, $avgConsumption !== null ? (float) $avgConsumption : null);
+        $method = $this->calculation_method ?: self::detectCalculationMethod($vehicle?->equipment_code);
+        $liters = self::calculateFuelLiters(
+            $this->total_distance,
+            $avgConsumption !== null ? (float) $avgConsumption : null,
+            $method
+        );
 
         $this->fuel_liters_required = $liters;
 

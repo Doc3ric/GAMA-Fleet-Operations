@@ -74,7 +74,8 @@
         initialDriverName: {{ json_encode(old('driver_name', $fuelPo->driver_name !== '—' ? $fuelPo->driver_name : '')) }},
         initialRows: {{ json_encode($initialRows) }},
         initialDestination: {{ json_encode(old('destination', $fuelPo->destination ?? '')) }},
-        initialDistance: {{ json_encode(old('total_distance', $fuelPo->total_distance !== null ? (string) $fuelPo->total_distance : '')) }}
+        initialDistance: {{ json_encode(old('total_distance', $fuelPo->total_distance !== null ? (string) $fuelPo->total_distance : '')) }},
+        initialCalculationMethod: {{ json_encode(old('calculation_method', $fuelPo->calculation_method ?: \App\Models\AdvancedItinerary::detectCalculationMethod($fuelPo->vehicle?->equipment_code))) }}
     })">
         {{-- Header --}}
         <div class="flex items-center justify-between border-b border-slate-200 pb-4">
@@ -442,9 +443,31 @@
 
                 {{-- AUTOMATIC FUEL CALCULATION SUMMARY (Exact User Table) --}}
                 <div class="border-t border-slate-100 pt-5">
-                    <span class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
-                        Automatic Fuel Calculation Summary
-                    </span>
+                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
+                        <div>
+                            <span class="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                                Automatic Fuel Calculation Summary
+                            </span>
+                            <span class="text-[11px] text-slate-500">
+                                Select formula function. Forklift (FL) equipment automatically defaults to multiplication.
+                            </span>
+                        </div>
+
+                        {{-- Calculation Mode Selector Dropdown --}}
+                        <div class="inline-flex items-center gap-2">
+                            <label for="calculation_method_select_edit" class="text-xs font-bold text-slate-600 whitespace-nowrap">
+                                Formula:
+                            </label>
+                            <select id="calculation_method_select_edit"
+                                    name="calculation_method"
+                                    x-model="calculationMethod"
+                                    @change="userOverrodeMethod = true"
+                                    class="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none shadow-2xs">
+                                <option value="divide">&divide; Divide (Default: Distance &divide; Ave. Cons)</option>
+                                <option value="multiply">&times; Multiplication (FL Forklift: Distance &times; Ave. Rate)</option>
+                            </select>
+                        </div>
+                    </div>
 
                     <div class="overflow-hidden rounded-xl border border-slate-300 bg-white shadow-xs">
                         <table class="w-full text-xs font-mono">
@@ -456,16 +479,21 @@
                                     </td>
                                 </tr>
                                 <tr class="border-b border-slate-200 bg-slate-50/70">
-                                    <td class="px-4 py-3 font-bold uppercase text-slate-600">AVE. CONS OF LITER/KM</td>
+                                    <td class="px-4 py-3 font-bold uppercase text-slate-600">
+                                        <span x-show="calculationMethod === 'divide'">AVE. CONS OF LITER/KM</span>
+                                        <span x-show="calculationMethod === 'multiply'">AVE. CONSUMPTION RATE</span>
+                                    </td>
                                     <td class="px-4 py-3 font-bold text-blue-700 text-right text-sm">
-                                        <span x-text="averageConsumption ? (parseFloat(averageConsumption).toFixed(2) + ' KM/L') : 'Requires Vehicle'"></span>
+                                        <span x-text="averageConsumption ? (parseFloat(averageConsumption).toFixed(2) + (calculationMethod === 'multiply' ? ' (Rate)' : ' KM/L')) : 'Requires Vehicle'"></span>
                                     </td>
                                 </tr>
                                 <tr class="bg-amber-100/60">
                                     <td class="px-4 py-3.5 font-extrabold uppercase text-amber-900 text-sm">
                                         LITER FOR PO
                                         <span class="block text-[10px] font-sans font-normal text-amber-700">
-                                            Total Distance &divide; Ave. Consumption &bull;
+                                            <span x-show="calculationMethod === 'divide'">Total Distance &divide; Ave. Consumption</span>
+                                            <span x-show="calculationMethod === 'multiply'">Total Distance &times; Ave. Consumption Rate (FL / Forklift)</span>
+                                            &bull;
                                             <span x-show="calculatedRawLiters" x-text="'Raw: ' + calculatedRawLiters + ' L (&ge; 0.10 &rarr; ' + calculatedLiters + ' L)'"></span>
                                             <span x-show="!calculatedRawLiters">Decimal &ge; 0.10 rounds up</span>
                                         </span>
@@ -530,11 +558,22 @@
                 manualProjectCode: config.initialCustomProjectCode || '',
                 manualAvgConsumption: config.initialCustomAvgConsumption || '',
                 driverName: config.initialDriverName || '',
+                calculationMethod: config.initialCalculationMethod || 'divide',
+                userOverrodeMethod: Boolean(config.initialCalculationMethod),
+
+                detectVehicleMethod(code) {
+                    if (!code) return 'divide';
+                    return /^FL(\s*[-_\/0-9]|$)/i.test(code.trim()) ? 'multiply' : 'divide';
+                },
 
                 setVehicleMode(mode) {
                     this.vehicleMode = mode;
                     if (mode === 'dropdown' && this.selectedVehicleId === 'manual') {
                         this.selectedVehicleId = '';
+                    }
+                    if (!this.userOverrodeMethod) {
+                        const code = mode === 'manual' ? this.manualEquipmentCode : this.selectedVehicle?.equipment_code;
+                        this.calculationMethod = this.detectVehicleMethod(code);
                     }
                 },
 
@@ -543,15 +582,23 @@
                         this.setVehicleMode('manual');
                         return;
                     }
-                    if (this.selectedVehicle && (!this.driverName || this.driverName.trim() === '')) {
-                        this.driverName = (this.selectedVehicle.driver_name && this.selectedVehicle.driver_name !== '—') ? this.selectedVehicle.driver_name : '';
+                    if (this.selectedVehicle) {
+                        if (!this.userOverrodeMethod) {
+                            this.calculationMethod = this.detectVehicleMethod(this.selectedVehicle.equipment_code);
+                        }
+                        if (!this.driverName || this.driverName.trim() === '') {
+                            this.driverName = (this.selectedVehicle.driver_name && this.selectedVehicle.driver_name !== '—') ? this.selectedVehicle.driver_name : '';
+                        }
                     }
                 },
 
                 onManualEquipmentCodeInput() {
-                    const typed = (this.manualEquipmentCode || '').trim().toLowerCase();
+                    const typed = (this.manualEquipmentCode || '').trim();
+                    if (!this.userOverrodeMethod) {
+                        this.calculationMethod = this.detectVehicleMethod(typed);
+                    }
                     if (!typed) return;
-                    const match = this.vehiclesList.find(v => (v.equipment_code || '').toLowerCase() === typed);
+                    const match = this.vehiclesList.find(v => (v.equipment_code || '').toLowerCase() === typed.toLowerCase());
                     if (match) {
                         if (!this.manualPlateNumber && match.plate_number && match.plate_number !== '—') {
                             this.manualPlateNumber = match.plate_number;
@@ -656,7 +703,8 @@
                     if (!dist || dist <= 0 || !avg || avg <= 0) {
                         return null;
                     }
-                    return (dist / avg).toFixed(2);
+                    const raw = this.calculationMethod === 'multiply' ? (dist * avg) : (dist / avg);
+                    return raw.toFixed(2);
                 },
 
                 get calculatedLiters() {
@@ -665,7 +713,9 @@
                     if (!dist || dist <= 0 || !avg || avg <= 0) {
                         return null;
                     }
-                    const raw = Math.round((dist / avg) * 100) / 100;
+                    const raw = this.calculationMethod === 'multiply'
+                        ? Math.round((dist * avg) * 100) / 100
+                        : Math.round((dist / avg) * 100) / 100;
                     const intPart = Math.floor(raw);
                     const decPart = Math.round((raw - intPart) * 100) / 100;
                     return decPart >= 0.10 ? (intPart + 1) : intPart;

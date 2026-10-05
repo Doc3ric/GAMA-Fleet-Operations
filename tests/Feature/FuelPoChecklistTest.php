@@ -1132,4 +1132,210 @@ class FuelPoChecklistTest extends TestCase
         $this->assertEquals($newVehicle->id, $itinerary->vehicle_id);
         $this->assertEquals(30.0, (float) $itinerary->fuel_liters_required); // 60 / 2.0 = 30
     }
+
+    public function test_fuel_po_index_can_filter_by_calendar_date_range(): void
+    {
+        $vehicle = Vehicle::factory()->create(['equipment_code' => 'OCT-TEST-01']);
+
+        // Itinerary A in range (2026-10-02)
+        $itA = AdvancedItinerary::factory()->create([
+            'vehicle_id' => $vehicle->id,
+            'driver_name' => 'Driver Early Oct A',
+            'itinerary_date' => '2026-10-02',
+            'total_distance' => 50.0,
+            'fuel_liters_required' => 10.0,
+        ]);
+
+        // Itinerary B in range (2026-10-05)
+        $itB = AdvancedItinerary::factory()->create([
+            'vehicle_id' => $vehicle->id,
+            'driver_name' => 'Driver Early Oct B',
+            'itinerary_date' => '2026-10-05',
+            'total_distance' => 80.0,
+            'fuel_liters_required' => 16.0,
+        ]);
+
+        // Itinerary C outside range (2026-10-15)
+        $itC = AdvancedItinerary::factory()->create([
+            'vehicle_id' => $vehicle->id,
+            'driver_name' => 'Driver Mid Oct Out',
+            'itinerary_date' => '2026-10-15',
+            'total_distance' => 100.0,
+            'fuel_liters_required' => 20.0,
+        ]);
+
+        $response = $this->actingAs($this->purchasing)
+            ->get(route('fuel-po.index', [
+                'date_from' => '2026-10-01',
+                'date_to' => '2026-10-05',
+            ]));
+
+        $response->assertOk();
+        $response->assertSee('Driver Early Oct A');
+        $response->assertSee('Driver Early Oct B');
+        $response->assertDontSee('Driver Mid Oct Out');
+
+        // Check metrics: 2 records matching
+        $metrics = $response->viewData('metrics');
+        $this->assertEquals(2, $metrics['total_count']);
+        $this->assertEquals(26.0, $metrics['total_fuel_liters']);
+
+        // Check active date filter banner in HTML
+        $response->assertSee('Oct 01, 2026');
+        $response->assertSee('Oct 05, 2026');
+        $response->assertSee('Clear Date Filter');
+    }
+
+    public function test_fuel_po_exports_honor_calendar_date_range_filter(): void
+    {
+        $vehicle = Vehicle::factory()->create();
+
+        AdvancedItinerary::factory()->create([
+            'vehicle_id' => $vehicle->id,
+            'itinerary_date' => '2026-10-03',
+            'total_distance' => 40.0,
+        ]);
+
+        // Excel export
+        $excelResp = $this->actingAs($this->purchasing)
+            ->get(route('fuel-po.export-excel', [
+                'date_from' => '2026-10-01',
+                'date_to' => '2026-10-05',
+            ]));
+        $excelResp->assertOk();
+        $this->assertStringContainsString('fuel-po-checklist', (string) $excelResp->headers->get('content-disposition'));
+
+        // PDF export
+        $pdfResp = $this->actingAs($this->purchasing)
+            ->get(route('fuel-po.export-pdf', [
+                'date_from' => '2026-10-01',
+                'date_to' => '2026-10-05',
+            ]));
+        $pdfResp->assertOk();
+        $this->assertStringContainsString('application/pdf', (string) $pdfResp->headers->get('content-type'));
+    }
+
+    public function test_fuel_calculation_formula_divide_and_multiply_with_gama_threshold(): void
+    {
+        // Divide: exactly 20.00
+        $this->assertSame(20.0, AdvancedItinerary::calculateFuelLiters(60.0, 3.0, AdvancedItinerary::CALCULATION_METHOD_DIVIDE));
+        // Divide: 60.3 / 3 = 20.10 (>= 0.10 threshold -> rounds up to 21)
+        $this->assertSame(21.0, AdvancedItinerary::calculateFuelLiters(60.3, 3.0, AdvancedItinerary::CALCULATION_METHOD_DIVIDE));
+        // Divide: 60.1 / 3 = 20.033... (< 0.10 threshold -> rounds down to 20)
+        $this->assertSame(20.0, AdvancedItinerary::calculateFuelLiters(60.1, 3.0, AdvancedItinerary::CALCULATION_METHOD_DIVIDE));
+
+        // Multiply: 10 * 1.8 = 18.00
+        $this->assertSame(18.0, AdvancedItinerary::calculateFuelLiters(10.0, 1.8, AdvancedItinerary::CALCULATION_METHOD_MULTIPLY));
+        // Multiply: 10.1 * 1.8 = 18.18 (>= 0.10 threshold -> rounds up to 19)
+        $this->assertSame(19.0, AdvancedItinerary::calculateFuelLiters(10.1, 1.8, AdvancedItinerary::CALCULATION_METHOD_MULTIPLY));
+        // Multiply: 10.05 * 1.8 = 18.09 (< 0.10 threshold -> rounds down to 18)
+        $this->assertSame(18.0, AdvancedItinerary::calculateFuelLiters(10.05, 1.8, AdvancedItinerary::CALCULATION_METHOD_MULTIPLY));
+    }
+
+    public function test_fl_equipment_code_detection_logic(): void
+    {
+        $this->assertSame(AdvancedItinerary::CALCULATION_METHOD_MULTIPLY, AdvancedItinerary::detectCalculationMethod('FL5'));
+        $this->assertSame(AdvancedItinerary::CALCULATION_METHOD_MULTIPLY, AdvancedItinerary::detectCalculationMethod('FL 8/FL6'));
+        $this->assertSame(AdvancedItinerary::CALCULATION_METHOD_MULTIPLY, AdvancedItinerary::detectCalculationMethod('FL 9'));
+        $this->assertSame(AdvancedItinerary::CALCULATION_METHOD_MULTIPLY, AdvancedItinerary::detectCalculationMethod('FL10'));
+        $this->assertSame(AdvancedItinerary::CALCULATION_METHOD_MULTIPLY, AdvancedItinerary::detectCalculationMethod('fl-02'));
+
+        $this->assertSame(AdvancedItinerary::CALCULATION_METHOD_DIVIDE, AdvancedItinerary::detectCalculationMethod('VH 1371'));
+        $this->assertSame(AdvancedItinerary::CALCULATION_METHOD_DIVIDE, AdvancedItinerary::detectCalculationMethod('SV17'));
+        $this->assertSame(AdvancedItinerary::CALCULATION_METHOD_DIVIDE, AdvancedItinerary::detectCalculationMethod('TRUCK-01'));
+        $this->assertSame(AdvancedItinerary::CALCULATION_METHOD_DIVIDE, AdvancedItinerary::detectCalculationMethod(null));
+        $this->assertSame(AdvancedItinerary::CALCULATION_METHOD_DIVIDE, AdvancedItinerary::detectCalculationMethod(''));
+    }
+
+    public function test_store_fuel_po_auto_detects_fl_forklift_and_calculates_with_multiplication(): void
+    {
+        $flVehicle = Vehicle::factory()->create([
+            'equipment_code' => 'FL 9',
+            'average_fuel_consumption' => 2.0,
+        ]);
+
+        $response = $this->actingAs($this->purchasing)
+            ->post(route('fuel-po.store'), [
+                'itinerary_date' => '2026-10-06',
+                'vehicle_mode' => 'dropdown',
+                'vehicle_id' => $flVehicle->id,
+                'total_distance' => 10.1,
+                'destinations' => [
+                    ['name' => 'Depot Yard', 'distance' => 10.1, 'purpose' => 'Hauling'],
+                ],
+            ]);
+
+        $response->assertRedirect(route('fuel-po.index'));
+
+        $itinerary = AdvancedItinerary::where('vehicle_id', $flVehicle->id)->latest('id')->first();
+        $this->assertNotNull($itinerary);
+        $this->assertSame(AdvancedItinerary::CALCULATION_METHOD_MULTIPLY, $itinerary->calculation_method);
+        // 10.1 * 2.0 = 20.20 -> rounds up to 21.0
+        $this->assertEquals(21.0, $itinerary->fuel_liters_required);
+    }
+
+    public function test_store_fuel_po_respects_manual_calculation_method_override(): void
+    {
+        $vehicle = Vehicle::factory()->create([
+            'equipment_code' => 'VH 1371',
+            'average_fuel_consumption' => 2.5,
+        ]);
+
+        // Manually override standard vehicle to use multiplication
+        $response = $this->actingAs($this->purchasing)
+            ->post(route('fuel-po.store'), [
+                'itinerary_date' => '2026-10-06',
+                'vehicle_mode' => 'dropdown',
+                'vehicle_id' => $vehicle->id,
+                'calculation_method' => 'multiply',
+                'total_distance' => 4.0,
+                'destinations' => [
+                    ['name' => 'Route A', 'distance' => 4.0, 'purpose' => 'Delivery'],
+                ],
+            ]);
+
+        $response->assertRedirect(route('fuel-po.index'));
+
+        $itinerary = AdvancedItinerary::where('vehicle_id', $vehicle->id)->latest('id')->first();
+        $this->assertNotNull($itinerary);
+        $this->assertSame('multiply', $itinerary->calculation_method);
+        // 4.0 * 2.5 = 10.0
+        $this->assertEquals(10.0, $itinerary->fuel_liters_required);
+    }
+
+    public function test_update_fuel_po_allows_changing_calculation_method(): void
+    {
+        $vehicle = Vehicle::factory()->create([
+            'equipment_code' => 'VH 1371',
+            'average_fuel_consumption' => 2.0,
+        ]);
+
+        $itinerary = AdvancedItinerary::factory()->create([
+            'vehicle_id' => $vehicle->id,
+            'itinerary_date' => '2026-10-06',
+            'total_distance' => 10.0,
+            'calculation_method' => 'divide',
+            'fuel_liters_required' => 5.0, // 10 / 2 = 5
+        ]);
+
+        $response = $this->actingAs($this->purchasing)
+            ->put(route('fuel-po.update', $itinerary), [
+                'itinerary_date' => '2026-10-06',
+                'vehicle_mode' => 'dropdown',
+                'vehicle_id' => $vehicle->id,
+                'status' => 'FINALIZED',
+                'calculation_method' => 'multiply',
+                'total_distance' => 10.0,
+                'destinations' => [
+                    ['name' => 'Plant Route', 'distance' => 10.0, 'purpose' => 'Hauling'],
+                ],
+            ]);
+
+        $response->assertRedirect(route('fuel-po.show', $itinerary));
+
+        $itinerary->refresh();
+        $this->assertSame('multiply', $itinerary->calculation_method);
+        // 10.0 * 2.0 = 20.0
+        $this->assertEquals(20.0, $itinerary->fuel_liters_required);
+    }
 }

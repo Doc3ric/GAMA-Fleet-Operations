@@ -28,6 +28,182 @@
         importPreview: {{ !empty($preloadedImport) ? json_encode($preloadedImport) : 'null' }},
         importFile: null,
 
+        {{-- Calendar Range Filter State --}}
+        calendarOpen: false,
+        calYear: {{ request('date_from') ? (int) \Carbon\Carbon::parse(request('date_from'))->format('Y') : (int) now()->format('Y') }},
+        calMonth: {{ request('date_from') ? (int) \Carbon\Carbon::parse(request('date_from'))->format('n') - 1 : (int) now()->format('n') - 1 }},
+        dateFrom: '{{ request('date_from', '') }}',
+        dateTo: '{{ request('date_to', '') }}',
+        tempDateFrom: '{{ request('date_from', '') }}',
+        tempDateTo: '{{ request('date_to', '') }}',
+        todayStr: '{{ now()->format('Y-m-d') }}',
+        monthNames: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
+
+        formatDateRangeDisplay() {
+            if (this.dateFrom && this.dateTo) {
+                if (this.dateFrom === this.dateTo) {
+                    return this.formatDateHuman(this.dateFrom);
+                }
+                return this.formatDateHuman(this.dateFrom) + ' \u2192 ' + this.formatDateHuman(this.dateTo);
+            } else if (this.dateFrom) {
+                return 'From ' + this.formatDateHuman(this.dateFrom);
+            } else if (this.dateTo) {
+                return 'Until ' + this.formatDateHuman(this.dateTo);
+            }
+            return 'Filter by Date Range...';
+        },
+
+        formatDateHuman(dStr) {
+            if (!dStr) return '';
+            try {
+                const parts = dStr.split('-');
+                if (parts.length === 3) {
+                    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                    const m = parseInt(parts[1], 10) - 1;
+                    return months[m] + ' ' + parseInt(parts[2], 10) + ', ' + parts[0];
+                }
+            } catch(e) {}
+            return dStr;
+        },
+
+        getCalendarDays() {
+            const year = this.calYear;
+            const month = this.calMonth;
+            const firstDayIndex = new Date(year, month, 1).getDay();
+            const totalDays = new Date(year, month + 1, 0).getDate();
+            const pad = (n) => String(n).padStart(2, '0');
+
+            const days = [];
+            for (let i = 0; i < firstDayIndex; i++) {
+                days.push({ day: null, dateStr: null });
+            }
+            for (let d = 1; d <= totalDays; d++) {
+                const dateStr = `${year}-${pad(month + 1)}-${pad(d)}`;
+                days.push({ day: d, dateStr: dateStr });
+            }
+            return days;
+        },
+
+        prevMonth() {
+            if (this.calMonth === 0) {
+                this.calMonth = 11;
+                this.calYear--;
+            } else {
+                this.calMonth--;
+            }
+        },
+
+        nextMonth() {
+            if (this.calMonth === 11) {
+                this.calMonth = 0;
+                this.calYear++;
+            } else {
+                this.calMonth++;
+            }
+        },
+
+        selectCalendarDay(dateStr) {
+            if (!dateStr) return;
+            if (!this.tempDateFrom || (this.tempDateFrom && this.tempDateTo)) {
+                this.tempDateFrom = dateStr;
+                this.tempDateTo = '';
+            } else {
+                if (dateStr >= this.tempDateFrom) {
+                    this.tempDateTo = dateStr;
+                } else {
+                    this.tempDateTo = this.tempDateFrom;
+                    this.tempDateFrom = dateStr;
+                }
+            }
+        },
+
+        isDayInRange(dateStr) {
+            if (!dateStr || !this.tempDateFrom || !this.tempDateTo) return false;
+            return dateStr > this.tempDateFrom && dateStr < this.tempDateTo;
+        },
+
+        isDayStart(dateStr) {
+            return dateStr && dateStr === this.tempDateFrom;
+        },
+
+        isDayEnd(dateStr) {
+            return dateStr && dateStr === this.tempDateTo;
+        },
+
+        applyDatePreset(preset, autoSubmit = false) {
+            const today = new Date();
+            const pad = (n) => String(n).padStart(2, '0');
+            const format = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+            if (preset === 'today') {
+                this.tempDateFrom = format(today);
+                this.tempDateTo = format(today);
+            } else if (preset === 'yesterday') {
+                const yest = new Date(today);
+                yest.setDate(yest.getDate() - 1);
+                this.tempDateFrom = format(yest);
+                this.tempDateTo = format(yest);
+            } else if (preset === 'this_week') {
+                const day = today.getDay();
+                const diffToMon = (day === 0 ? -6 : 1) - day;
+                const mon = new Date(today);
+                mon.setDate(today.getDate() + diffToMon);
+                const sun = new Date(mon);
+                sun.setDate(mon.getDate() + 6);
+                this.tempDateFrom = format(mon);
+                this.tempDateTo = format(sun);
+            } else if (preset === 'this_month') {
+                const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+                const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+                this.tempDateFrom = format(firstDay);
+                this.tempDateTo = format(lastDay);
+            } else if (preset === 'last_month') {
+                const firstDay = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+                const lastDay = new Date(today.getFullYear(), today.getMonth(), 0);
+                this.tempDateFrom = format(firstDay);
+                this.tempDateTo = format(lastDay);
+            } else if (preset === 'oct_1_5') {
+                const year = today.getFullYear();
+                this.tempDateFrom = `${year}-10-01`;
+                this.tempDateTo = `${year}-10-05`;
+            }
+
+            if (this.tempDateFrom) {
+                const d = new Date(this.tempDateFrom + 'T00:00:00');
+                this.calYear = d.getFullYear();
+                this.calMonth = d.getMonth();
+            }
+
+            if (autoSubmit) {
+                this.dateFrom = this.tempDateFrom;
+                this.dateTo = this.tempDateTo;
+                this.calendarOpen = false;
+                this.$nextTick(() => {
+                    document.getElementById('fuel-po-filter-form')?.submit();
+                });
+            }
+        },
+
+        applyCalendarFilter() {
+            this.dateFrom = this.tempDateFrom;
+            this.dateTo = this.tempDateTo;
+            this.calendarOpen = false;
+            this.$nextTick(() => {
+                document.getElementById('fuel-po-filter-form')?.submit();
+            });
+        },
+
+        clearCalendarFilter() {
+            this.tempDateFrom = '';
+            this.tempDateTo = '';
+            this.dateFrom = '';
+            this.dateTo = '';
+            this.calendarOpen = false;
+            this.$nextTick(() => {
+                document.getElementById('fuel-po-filter-form')?.submit();
+            });
+        },
+
         openImportModal() {
             this.importError = null;
             this.importPreview = null;
@@ -382,51 +558,298 @@
             </div>
         </div>
 
-        {{-- Filters Card --}}
-        <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs">
-            <form method="GET" action="{{ route('fuel-po.index') }}" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
-                <div class="md:col-span-2">
-                    <label class="block text-[11px] font-bold uppercase text-slate-500 mb-1">Search Details</label>
-                    <input type="text" name="search" value="{{ request('search') }}"
-                           placeholder="Search EQPT, Plate, Driver, User, Destination..."
-                           class="w-full rounded-xl border border-slate-200 px-3 py-1.5 text-xs text-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none">
+        {{-- Filters Card with Interactive Calendar Range Filter --}}
+        <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs space-y-3.5">
+            <form id="fuel-po-filter-form" method="GET" action="{{ route('fuel-po.index') }}" class="space-y-3">
+                {{-- Row 1: Search, Vehicle, Checklist State, Filter/Reset --}}
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 items-end">
+                    {{-- Search Details (5 cols) --}}
+                    <div class="lg:col-span-5">
+                        <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">Search Details</label>
+                        <div class="relative">
+                            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+                                </svg>
+                            </div>
+                            <input type="text" name="search" value="{{ request('search') }}"
+                                   placeholder="Search EQPT, Plate, Driver, User, Destination..."
+                                   class="w-full rounded-xl border border-slate-200 pl-9 pr-3 py-2 text-xs text-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none">
+                        </div>
+                    </div>
+
+                    {{-- Vehicle (3 cols) --}}
+                    <div class="lg:col-span-3">
+                        <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">Vehicle</label>
+                        <select name="vehicle_id" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none">
+                            <option value="">All Vehicles</option>
+                            @foreach($vehicles as $v)
+                                <option value="{{ $v->id }}" {{ request('vehicle_id') == $v->id ? 'selected' : '' }}>
+                                    {{ $v->equipment_code }} ({{ $v->plate_number ?: 'No Plate' }})
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    {{-- Checklist State (2 cols) --}}
+                    <div class="lg:col-span-2">
+                        <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">Checklist State</label>
+                        <select name="po_status" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none">
+                            <option value="">All Statuses</option>
+                            <option value="unchecked" {{ request('po_status') === 'unchecked' ? 'selected' : '' }}>☐ UNCHECKED Only</option>
+                            <option value="checked" {{ request('po_status') === 'checked' ? 'selected' : '' }}>☑ CHECKED Only</option>
+                        </select>
+                    </div>
+
+                    {{-- Submit & Reset (2 cols) --}}
+                    <div class="lg:col-span-2 flex items-center gap-2">
+                        <button type="submit"
+                                class="flex-1 rounded-xl bg-slate-900 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800 transition shadow-xs cursor-pointer">
+                            Filter
+                        </button>
+                        @if(request()->hasAny(['search', 'vehicle_id', 'po_status', 'date_from', 'date_to']))
+                            <a href="{{ route('fuel-po.index') }}"
+                               class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition cursor-pointer">
+                                Reset
+                            </a>
+                        @endif
+                    </div>
                 </div>
 
-                <div>
-                    <label class="block text-[11px] font-bold uppercase text-slate-500 mb-1">Vehicle</label>
-                    <select name="vehicle_id" class="w-full rounded-xl border border-slate-200 px-3 py-1.5 text-xs text-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none">
-                        <option value="">All Vehicles</option>
-                        @foreach($vehicles as $v)
-                            <option value="{{ $v->id }}" {{ request('vehicle_id') == $v->id ? 'selected' : '' }}>
-                                {{ $v->equipment_code }} ({{ $v->plate_number ?: 'No Plate' }})
-                            </option>
-                        @endforeach
-                    </select>
-                </div>
+                {{-- Row 2: Calendar Filter Bar --}}
+                <div class="pt-3 border-t border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                    <div class="flex items-center gap-2.5 flex-wrap">
+                        <span class="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5 shrink-0">
+                            <svg class="h-4 w-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+                            </svg>
+                            <span>Itinerary Calendar Filter:</span>
+                        </span>
 
-                <div>
-                    <label class="block text-[11px] font-bold uppercase text-slate-500 mb-1">Checklist State</label>
-                    <select name="po_status" class="w-full rounded-xl border border-slate-200 px-3 py-1.5 text-xs text-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none">
-                        <option value="">All Statuses</option>
-                        <option value="unchecked" {{ request('po_status') === 'unchecked' ? 'selected' : '' }}>☐ UNCHECKED Only</option>
-                        <option value="checked" {{ request('po_status') === 'checked' ? 'selected' : '' }}>☑ CHECKED Only</option>
-                    </select>
-                </div>
+                        {{-- Direct Calendar Date Inputs --}}
+                        <div class="flex items-center gap-2">
+                            <div class="relative">
+                                <span class="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-slate-400 text-[10px] font-bold uppercase">From</span>
+                                <input type="date" name="date_from" x-model="dateFrom"
+                                       class="rounded-xl border border-slate-200 pl-12 pr-2.5 py-1.5 text-xs text-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none bg-slate-50/50">
+                            </div>
+                            <span class="text-slate-400 text-xs font-bold">&rarr;</span>
+                            <div class="relative">
+                                <span class="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-slate-400 text-[10px] font-bold uppercase">To</span>
+                                <input type="date" name="date_to" x-model="dateTo"
+                                       class="rounded-xl border border-slate-200 pl-8 pr-2.5 py-1.5 text-xs text-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none bg-slate-50/50">
+                            </div>
+                        </div>
 
-                <div class="flex items-end gap-2">
-                    <button type="submit"
-                            class="flex-1 rounded-xl bg-slate-900 px-3 py-1.5 text-xs font-bold text-white hover:bg-slate-800 transition">
-                        Filter
-                    </button>
-                    @if(request()->hasAny(['search', 'vehicle_id', 'po_status', 'date_from', 'date_to']))
-                        <a href="{{ route('fuel-po.index') }}"
-                           class="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition">
-                            Reset
-                        </a>
-                    @endif
+                        {{-- Interactive Calendar Modal / Popover Button --}}
+                        <div class="relative">
+                            <button type="button"
+                                    @click="calendarOpen = !calendarOpen"
+                                    class="inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-bold transition shadow-2xs cursor-pointer"
+                                    :class="dateFrom || dateTo
+                                        ? 'border-blue-400 bg-blue-50 text-blue-800 ring-2 ring-blue-500/20'
+                                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'">
+                                <svg class="h-3.5 w-3.5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+                                </svg>
+                                <span>Calendar UI</span>
+                                <svg class="h-3 w-3 text-slate-400" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+                                </svg>
+                            </button>
+
+                            {{-- Interactive Visual Calendar Dropdown Popover --}}
+                            <div x-show="calendarOpen" x-cloak
+                                 @click.outside="calendarOpen = false"
+                                 @keydown.escape.window="calendarOpen = false"
+                                 class="absolute z-50 left-0 mt-2 w-[340px] sm:w-[420px] rounded-2xl bg-white border border-slate-200 shadow-2xl p-4 space-y-4">
+                                
+                                {{-- Popover Header --}}
+                                <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                                    <div>
+                                        <h4 class="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                                            <span class="flex h-5 w-5 items-center justify-center rounded-md bg-blue-600 text-white text-[10px]">📅</span>
+                                            <span>Select Itinerary Date Range</span>
+                                        </h4>
+                                        <p class="text-[11px] text-slate-500 mt-0.5">
+                                            Click start date, then click end date on calendar
+                                        </p>
+                                    </div>
+                                    <button type="button" @click="calendarOpen = false" class="text-slate-400 hover:text-slate-600 text-sm font-bold">&times;</button>
+                                </div>
+
+                                {{-- Quick Presets Inside Popover --}}
+                                <div class="flex items-center gap-1.5 flex-wrap">
+                                    <button type="button" @click="applyDatePreset('today')"
+                                            class="rounded-lg bg-slate-100 hover:bg-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-700 transition cursor-pointer">
+                                        Today
+                                    </button>
+                                    <button type="button" @click="applyDatePreset('this_week')"
+                                            class="rounded-lg bg-slate-100 hover:bg-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-700 transition cursor-pointer">
+                                        This Week
+                                    </button>
+                                    <button type="button" @click="applyDatePreset('this_month')"
+                                            class="rounded-lg bg-slate-100 hover:bg-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-700 transition cursor-pointer">
+                                        This Month
+                                    </button>
+                                    <button type="button" @click="applyDatePreset('oct_1_5')"
+                                            class="rounded-lg bg-blue-50 border border-blue-200 hover:bg-blue-100 px-2 py-1 text-[11px] font-bold text-blue-800 transition cursor-pointer">
+                                        Oct 1–5
+                                    </button>
+                                    <button type="button" @click="applyDatePreset('last_month')"
+                                            class="rounded-lg bg-slate-100 hover:bg-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-700 transition cursor-pointer">
+                                        Last Month
+                                    </button>
+                                </div>
+
+                                {{-- Month Navigation --}}
+                                <div class="flex items-center justify-between pt-1">
+                                    <button type="button" @click="prevMonth()" class="p-1 rounded-lg hover:bg-slate-100 text-slate-600 transition cursor-pointer">
+                                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+                                        </svg>
+                                    </button>
+                                    <span class="text-xs font-bold text-slate-800 tracking-wide" x-text="monthNames[calMonth] + ' ' + calYear"></span>
+                                    <button type="button" @click="nextMonth()" class="p-1 rounded-lg hover:bg-slate-100 text-slate-600 transition cursor-pointer">
+                                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+                                        </svg>
+                                    </button>
+                                </div>
+
+                                {{-- Days of Week --}}
+                                <div class="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                                    <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
+                                </div>
+
+                                {{-- Calendar Days Grid --}}
+                                <div class="grid grid-cols-7 gap-y-1 gap-x-0.5 text-center">
+                                    <template x-for="(dObj, idx) in getCalendarDays()" :key="idx">
+                                        <div>
+                                            <template x-if="dObj.day === null">
+                                                <div class="h-8"></div>
+                                            </template>
+                                            <template x-if="dObj.day !== null">
+                                                <button type="button"
+                                                        @click="selectCalendarDay(dObj.dateStr)"
+                                                        class="h-8 w-full text-xs transition flex items-center justify-center cursor-pointer select-none"
+                                                        :class="{
+                                                            'bg-blue-600 text-white font-bold rounded-l-xl shadow-xs': isDayStart(dObj.dateStr),
+                                                            'bg-blue-600 text-white font-bold rounded-r-xl shadow-xs': isDayEnd(dObj.dateStr),
+                                                            'rounded-xl': isDayStart(dObj.dateStr) && isDayEnd(dObj.dateStr),
+                                                            'bg-blue-100 text-blue-900 font-semibold rounded-none': isDayInRange(dObj.dateStr),
+                                                            'hover:bg-slate-100 text-slate-700 font-medium rounded-xl': !isDayStart(dObj.dateStr) && !isDayEnd(dObj.dateStr) && !isDayInRange(dObj.dateStr),
+                                                            'ring-1 ring-blue-500 font-bold text-blue-600': dObj.dateStr === todayStr && !isDayStart(dObj.dateStr) && !isDayEnd(dObj.dateStr) && !isDayInRange(dObj.dateStr)
+                                                        }"
+                                                        x-text="dObj.day">
+                                                </button>
+                                            </template>
+                                        </div>
+                                    </template>
+                                </div>
+
+                                {{-- Selected Range Preview & Actions --}}
+                                <div class="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                                    <div class="text-[11px] text-slate-600 font-medium">
+                                        <template x-if="tempDateFrom && tempDateTo">
+                                            <span>
+                                                Selected: <strong class="text-blue-700 font-mono" x-text="formatDateHuman(tempDateFrom) + ' \u2013 ' + formatDateHuman(tempDateTo)"></strong>
+                                            </span>
+                                        </template>
+                                        <template x-if="tempDateFrom && !tempDateTo">
+                                            <span>
+                                                From: <strong class="text-blue-700 font-mono" x-text="formatDateHuman(tempDateFrom)"></strong> (click end date)
+                                            </span>
+                                        </template>
+                                        <template x-if="!tempDateFrom">
+                                            <span class="text-slate-400">No dates picked</span>
+                                        </template>
+                                    </div>
+
+                                    <div class="flex items-center gap-2">
+                                        <button type="button" @click="clearCalendarFilter()"
+                                                class="px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition cursor-pointer">
+                                            Clear
+                                        </button>
+                                        <button type="button" @click="applyCalendarFilter()"
+                                                class="px-3.5 py-1.5 rounded-lg bg-blue-600 text-xs font-bold text-white hover:bg-blue-700 shadow-xs transition cursor-pointer">
+                                            Apply Filter
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {{-- Quick Shortcut Presets on the Right --}}
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                        <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mr-1">Presets:</span>
+                        <button type="button" @click="applyDatePreset('oct_1_5', true)"
+                                class="rounded-lg border px-2.5 py-1 text-xs font-bold transition shadow-2xs cursor-pointer
+                                       {{ request('date_from') === now()->format('Y') . '-10-01' && request('date_to') === now()->format('Y') . '-10-05'
+                                          ? 'border-blue-400 bg-blue-600 text-white'
+                                          : 'border-blue-200 bg-blue-50/70 text-blue-800 hover:bg-blue-100' }}"
+                                title="Quick filter for October 1 to October 5">
+                            Oct 1–5
+                        </button>
+                        <button type="button" @click="applyDatePreset('today', true)"
+                                class="rounded-lg border px-2.5 py-1 text-xs font-semibold transition shadow-2xs cursor-pointer
+                                       {{ request('date_from') === now()->format('Y-m-d') && request('date_to') === now()->format('Y-m-d')
+                                          ? 'border-blue-400 bg-blue-600 text-white'
+                                          : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50' }}">
+                            Today
+                        </button>
+                        <button type="button" @click="applyDatePreset('this_week', true)"
+                                class="rounded-lg border px-2.5 py-1 text-xs font-semibold transition shadow-2xs cursor-pointer
+                                       border-slate-200 bg-white text-slate-700 hover:bg-slate-50">
+                            This Week
+                        </button>
+                        <button type="button" @click="applyDatePreset('this_month', true)"
+                                class="rounded-lg border px-2.5 py-1 text-xs font-semibold transition shadow-2xs cursor-pointer
+                                       border-slate-200 bg-white text-slate-700 hover:bg-slate-50">
+                            This Month
+                        </button>
+                    </div>
                 </div>
             </form>
         </div>
+
+        {{-- Active Date Filter Banner (If date_from or date_to is set) --}}
+        @if(request('date_from') || request('date_to'))
+            <div class="rounded-2xl border border-blue-200 bg-blue-50/90 px-4 py-3 flex items-center justify-between gap-3 text-xs text-blue-900 shadow-2xs">
+                <div class="flex items-center gap-2.5">
+                    <span class="flex h-7 w-7 items-center justify-center rounded-xl bg-blue-600 text-white shrink-0 shadow-2xs">
+                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+                        </svg>
+                    </span>
+                    <div>
+                        <p class="font-bold text-blue-950">
+                            Filtering Itineraries for:
+                            <span class="text-blue-700 font-mono">
+                                @if(request('date_from') && request('date_to'))
+                                    {{ \Carbon\Carbon::parse(request('date_from'))->format('M d, Y') }} &ndash; {{ \Carbon\Carbon::parse(request('date_to'))->format('M d, Y') }}
+                                @elseif(request('date_from'))
+                                    From {{ \Carbon\Carbon::parse(request('date_from'))->format('M d, Y') }} onward
+                                @else
+                                    Up to {{ \Carbon\Carbon::parse(request('date_to'))->format('M d, Y') }}
+                                @endif
+                            </span>
+                        </p>
+                        <p class="text-[11px] text-blue-700 mt-0.5">
+                            Showing <strong>{{ number_format($metrics['total_count']) }}</strong> PO record(s) matching this date period &bull;
+                            <strong>{{ (float) $metrics['total_fuel_liters'] == round($metrics['total_fuel_liters']) ? number_format($metrics['total_fuel_liters'], 0) : number_format($metrics['total_fuel_liters'], 2) }} L</strong> required fuel for PO
+                        </p>
+                    </div>
+                </div>
+
+                <a href="{{ route('fuel-po.index', request()->except(['date_from', 'date_to', 'page'])) }}"
+                   class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-blue-300 bg-white hover:bg-blue-100 text-blue-800 font-bold text-xs transition shadow-2xs shrink-0 cursor-pointer">
+                    <span>Clear Date Filter</span>
+                    <span class="text-blue-500 font-bold">&times;</span>
+                </a>
+            </div>
+        @endif
 
         {{-- Floating/Sticky Selected Action Banner --}}
         <div x-show="selectedIds.length > 0" x-cloak
@@ -607,7 +1030,7 @@
                                 {{-- 7. Avg. Consumption --}}
                                 <td class="px-3 py-3 text-right font-mono text-slate-700">
                                     @if($avgConsumption)
-                                        <span class="font-semibold">{{ number_format($avgConsumption, 2) }}</span> <span class="text-[10px] text-slate-400">KM/L</span>
+                                        <span class="font-semibold">{{ number_format($avgConsumption, 2) }}</span> <span class="text-[10px] text-slate-400">{{ $po->calculation_method === 'multiply' ? 'Rate' : 'KM/L' }}</span>
                                     @else
                                         <span class="text-slate-400">—</span>
                                     @endif
@@ -618,6 +1041,9 @@
                                     @if($fuelLiters !== null)
                                         <span class="font-mono font-bold text-blue-700 text-sm">{{ (float) $fuelLiters == round($fuelLiters) ? number_format($fuelLiters, 0) : number_format($fuelLiters, 2) }}</span>
                                         <span class="text-[11px] font-semibold text-slate-500">L</span>
+                                        @if($po->calculation_method === 'multiply')
+                                            <span class="inline-block px-1 py-0.5 bg-amber-100 text-amber-800 text-[9px] font-bold rounded ml-0.5" title="Multiplication formula (FL Forklift)">&times; FL</span>
+                                        @endif
                                     @else
                                         <span class="text-slate-400 text-xs italic">N/A</span>
                                     @endif

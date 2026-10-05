@@ -153,6 +153,7 @@ class FuelPoController extends Controller
             'title' => ['nullable', 'string', 'max:255'],
             'notes' => ['nullable', 'string'],
             'status' => ['nullable', 'string', 'in:DRAFT,FINALIZED'],
+            'calculation_method' => ['nullable', 'string', 'in:divide,multiply'],
             'destinations' => ['nullable', 'array'],
             'destinations.*.name' => ['nullable', 'string', 'max:255'],
             'destinations.*.start_odo' => ['nullable', 'numeric', 'min:0'],
@@ -234,6 +235,12 @@ class FuelPoController extends Controller
                 $destination = mb_substr($destination, 0, 252).'...';
             }
 
+            $vehicle = Vehicle::find($targetVehicleId);
+            $calculationMethod = $validated['calculation_method'] ?? null;
+            if (empty($calculationMethod)) {
+                $calculationMethod = AdvancedItinerary::detectCalculationMethod($vehicle?->equipment_code ?? $validated['custom_equipment_code'] ?? null);
+            }
+
             $itinerary = AdvancedItinerary::create([
                 'itinerary_date' => $validated['itinerary_date'],
                 'vehicle_id' => $targetVehicleId,
@@ -245,6 +252,7 @@ class FuelPoController extends Controller
                 'total_distance' => $totalDistance > 0 ? $totalDistance : null,
                 'notes' => $validated['notes'] ?? null,
                 'status' => $validated['status'] ?? AdvancedItinerary::STATUS_FINALIZED,
+                'calculation_method' => $calculationMethod,
                 'created_by' => auth()->id(),
                 'po_checked' => false,
             ]);
@@ -306,9 +314,9 @@ class FuelPoController extends Controller
             }
 
             // Safe Fuel Liter calculation: Distance / Average Consumption (Threshold Rounding: >= 0.10 rounds up)
-            $vehicle = $itinerary->vehicle;
+            $vehicle = $itinerary->vehicle ?: $vehicle;
             $avgConsumption = $vehicle?->average_fuel_consumption ?? $vehicle?->average_consumption;
-            $fuelLiters = AdvancedItinerary::calculateFuelLiters($totalDistance, $avgConsumption ? (float) $avgConsumption : null);
+            $fuelLiters = AdvancedItinerary::calculateFuelLiters($totalDistance, $avgConsumption ? (float) $avgConsumption : null, $calculationMethod);
 
             $itinerary->update([
                 'total_duration_minutes' => $totalDuration > 0 ? $totalDuration : null,
@@ -371,6 +379,7 @@ class FuelPoController extends Controller
             'title' => ['nullable', 'string', 'max:255'],
             'notes' => ['nullable', 'string'],
             'status' => ['required', 'string', 'in:DRAFT,FINALIZED'],
+            'calculation_method' => ['nullable', 'string', 'in:divide,multiply'],
             'destinations' => ['nullable', 'array'],
             'destinations.*.name' => ['nullable', 'string', 'max:255'],
             'destinations.*.start_odo' => ['nullable', 'numeric', 'min:0'],
@@ -456,6 +465,12 @@ class FuelPoController extends Controller
                 $destination = mb_substr($destination, 0, 252).'...';
             }
 
+            $vehicle = Vehicle::find($targetVehicleId);
+            $calculationMethod = $validated['calculation_method'] ?? null;
+            if (empty($calculationMethod)) {
+                $calculationMethod = AdvancedItinerary::detectCalculationMethod($vehicle?->equipment_code ?? $validated['custom_equipment_code'] ?? null);
+            }
+
             $advancedItinerary->update([
                 'itinerary_date' => $validated['itinerary_date'],
                 'vehicle_id' => $targetVehicleId,
@@ -467,6 +482,7 @@ class FuelPoController extends Controller
                 'total_distance' => $totalDistance > 0 ? $totalDistance : null,
                 'notes' => $validated['notes'] ?? null,
                 'status' => $validated['status'],
+                'calculation_method' => $calculationMethod,
                 'updated_by' => auth()->id(),
             ]);
 
@@ -529,9 +545,9 @@ class FuelPoController extends Controller
             }
 
             $advancedItinerary->load('vehicle');
-            $vehicle = $advancedItinerary->vehicle;
+            $vehicle = $advancedItinerary->vehicle ?: $vehicle;
             $avgConsumption = $vehicle?->average_fuel_consumption ?? $vehicle?->average_consumption;
-            $fuelLiters = AdvancedItinerary::calculateFuelLiters($totalDistance, $avgConsumption ? (float) $avgConsumption : null);
+            $fuelLiters = AdvancedItinerary::calculateFuelLiters($totalDistance, $avgConsumption ? (float) $avgConsumption : null, $calculationMethod);
 
             $advancedItinerary->update([
                 'total_duration_minutes' => $totalDuration > 0 ? $totalDuration : null,

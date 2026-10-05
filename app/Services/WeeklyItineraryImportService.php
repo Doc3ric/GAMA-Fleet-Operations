@@ -154,12 +154,14 @@ class WeeklyItineraryImportService
             $avgConsumption = (float) $avgConsumption;
         }
 
+        $calculationMethod = AdvancedItinerary::detectCalculationMethod($vehicle?->equipment_code ?? $parsed['header']['plate_number_raw'] ?? null);
+
         $createdItineraries = [];
 
-        DB::transaction(function () use ($parsed, $targetVehicleId, $driverName, $status, $userId, $avgConsumption, &$createdItineraries) {
+        DB::transaction(function () use ($parsed, $targetVehicleId, $driverName, $status, $userId, $avgConsumption, $calculationMethod, &$createdItineraries) {
             foreach ($parsed['date_groups'] as $group) {
                 $dailyDist = (float) $group['total_distance'];
-                $fuelLiters = AdvancedItinerary::calculateFuelLiters($dailyDist, $avgConsumption);
+                $fuelLiters = AdvancedItinerary::calculateFuelLiters($dailyDist, $avgConsumption, $calculationMethod);
 
                 $destinationsList = [];
                 foreach ($group['legs'] as $leg) {
@@ -185,6 +187,7 @@ class WeeklyItineraryImportService
                     'end_odo' => $group['end_odo'],
                     'total_distance' => $dailyDist > 0 ? $dailyDist : null,
                     'fuel_liters_required' => $fuelLiters,
+                    'calculation_method' => $calculationMethod,
                     'notes' => 'Imported from Weekly Itinerary Report: '.$parsed['file_name'],
                     'status' => $status,
                     'po_checked' => false,

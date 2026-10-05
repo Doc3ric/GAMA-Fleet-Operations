@@ -134,10 +134,12 @@
                 </div>
 
                 <div class="rounded-xl border border-slate-200 p-3.5 bg-slate-50/50">
-                    <span class="block text-slate-400 font-medium">Average Consumption</span>
+                    <span class="block text-slate-400 font-medium">
+                        {{ ($fuelPo->calculation_method === 'multiply') ? 'Consumption Rate' : 'Average Consumption' }}
+                    </span>
                     <span class="mt-1 block font-mono font-bold text-blue-700 text-base">
                         @if($avgConsumption)
-                            {{ number_format($avgConsumption, 2) }} <span class="text-xs font-normal text-slate-500 font-sans">KM/L</span>
+                            {{ number_format($avgConsumption, 2) }} <span class="text-xs font-normal text-slate-500 font-sans">{{ ($fuelPo->calculation_method === 'multiply') ? 'Rate' : 'KM/L' }}</span>
                         @else
                             <span class="text-slate-400 font-sans text-xs">Not set</span>
                         @endif
@@ -145,13 +147,18 @@
                 </div>
 
                 <div class="rounded-xl border border-blue-200 bg-blue-50/50 p-3.5">
-                    <span class="block text-blue-700 font-medium">Liter for PO (Distance &divide; Avg Consump)</span>
+                    @php
+                        $isMultiply = ($fuelPo->calculation_method === 'multiply');
+                    @endphp
+                    <span class="block text-blue-700 font-medium">
+                        Liter for PO ({{ $isMultiply ? 'Distance × Rate [FL]' : 'Distance ÷ Avg Consump' }})
+                    </span>
                     <span class="mt-1 block font-mono font-bold text-blue-900 text-lg">
                         @if($fuelLiters !== null)
                             {{ (float) $fuelLiters == round($fuelLiters) ? number_format($fuelLiters, 0) : number_format($fuelLiters, 2) }} <span class="text-xs font-normal text-slate-500 font-sans">L</span>
                             @if($avgConsumption && $fuelPo->total_distance)
                                 @php
-                                    $rawLiters = round($fuelPo->total_distance / $avgConsumption, 2);
+                                    $rawLiters = round($isMultiply ? ($fuelPo->total_distance * $avgConsumption) : ($fuelPo->total_distance / $avgConsumption), 2);
                                 @endphp
                                 @if($rawLiters != $fuelLiters)
                                     <span class="block text-[10px] text-blue-600 font-sans font-normal mt-0.5">
