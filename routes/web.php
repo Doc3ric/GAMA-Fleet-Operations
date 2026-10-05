@@ -8,6 +8,7 @@ use App\Http\Controllers\DriverItineraryController;
 use App\Http\Controllers\ExcelViewerController;
 use App\Http\Controllers\FuelConsumptionController;
 use App\Http\Controllers\FuelPoController;
+use App\Http\Controllers\FuelPoImportController;
 use App\Http\Controllers\LocationController;
 use App\Http\Controllers\LongIdlingRecordController;
 use App\Http\Controllers\ProfileController;
@@ -109,6 +110,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('fuel-po/bulk-checklist', [FuelPoController::class, 'bulkChecklist'])->name('fuel-po.bulk-checklist');
     Route::post('fuel-po/bulk-delete', [FuelPoController::class, 'bulkDelete'])->name('fuel-po.bulk-delete');
     Route::match(['patch', 'post'], 'fuel-po/{advanced_itinerary}/toggle-checklist', [FuelPoController::class, 'toggleChecklist'])->name('fuel-po.toggle-checklist');
+    // Fuel PO Import Workflow (Weekly Itinerary Report)
+    Route::get('fuel-po/import/template', [FuelPoImportController::class, 'downloadTemplate'])->name('fuel-po.import.template');
+    Route::post('fuel-po/import/preview', [FuelPoImportController::class, 'preview'])->name('fuel-po.import.preview');
+    Route::post('fuel-po/import/confirm', [FuelPoImportController::class, 'confirm'])->name('fuel-po.import.confirm');
+
     Route::get('fuel-po/{advanced_itinerary}/pdf', [FuelPoController::class, 'downloadSinglePdf'])->name('fuel-po.pdf');
     Route::resource('fuel-po', FuelPoController::class)->parameters(['fuel-po' => 'advanced_itinerary']);
 

@@ -201,9 +201,10 @@ class DeviceManagementTest extends TestCase
         ]);
 
         // 2. Import CSV containing device matching GAJ-5943
+        $futureExp = now()->addDays(20)->format('Y-m-d');
         $csvContent = implode("\n", [
             'Device Name,IMEI,Model,Activated Date,Sales Time,SIM,User Expiration Date,Group,ICCID,IMSI,Mileage',
-            'GAJ-5943,865135060611447,X3,2025-04-25,2025-04-25,9982474024,2026-10-04(Expires in 20 days),Default Group,89630324227008132231,515039232540055,19228.42',
+            "GAJ-5943,865135060611447,X3,2025-04-25,2025-04-25,9982474024,{$futureExp}(Expires in 20 days),Default Group,89630324227008132231,515039232540055,19228.42",
         ]);
 
         $file = UploadedFile::fake()->createWithContent('devices.csv', $csvContent);

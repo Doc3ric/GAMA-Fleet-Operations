@@ -75,10 +75,19 @@
                     Select registered vehicle, enter one or more destination rows with Start/End ODO or direct distances to compute fuel required for PO.
                 </p>
             </div>
-            <a href="{{ route('fuel-po.index') }}"
-               class="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition shadow-2xs">
-                &larr; Back to Checklist
-            </a>
+            <div class="flex items-center gap-2">
+                <a href="{{ route('fuel-po.index') }}"
+                   class="rounded-xl border border-indigo-200 bg-indigo-50 px-3.5 py-2 text-xs font-bold text-indigo-700 hover:bg-indigo-100 transition shadow-2xs flex items-center gap-1.5">
+                    <svg class="h-4 w-4 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+                    </svg>
+                    <span>Import Weekly Report</span>
+                </a>
+                <a href="{{ route('fuel-po.index') }}"
+                   class="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition shadow-2xs">
+                    &larr; Back to Checklist
+                </a>
+            </div>
         </div>
 
         {{-- Errors --}}

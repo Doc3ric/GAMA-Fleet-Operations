@@ -15,6 +15,91 @@
         deleteId: null,
         deleteInfo: '',
         deleteActionUrl: '',
+        showImportModal: false,
+        isImportParsing: false,
+        isImportSaving: false,
+        importError: null,
+        importPreview: null,
+        importFile: null,
+
+        openImportModal() {
+            this.importError = null;
+            this.importPreview = null;
+            this.importFile = null;
+            this.showImportModal = true;
+        },
+
+        async handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            this.importFile = file;
+            this.importError = null;
+            this.importPreview = null;
+            this.isImportParsing = true;
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await fetch('{{ route('fuel-po.import.preview') }}', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                        'Accept': 'application/json'
+                    },
+                    body: formData
+                });
+
+                const data = await response.json();
+                if (response.ok && data.success) {
+                    this.importPreview = data;
+                } else {
+                    this.importError = data.message || 'Failed to process spreadsheet file.';
+                }
+            } catch (err) {
+                this.importError = 'Network error while processing spreadsheet.';
+            } finally {
+                this.isImportParsing = false;
+                event.target.value = '';
+            }
+        },
+
+        async commitImport() {
+            if (!this.importPreview || !this.importPreview.import_token) return;
+            this.isImportSaving = true;
+            this.importError = null;
+
+            try {
+                const response = await fetch('{{ route('fuel-po.import.confirm') }}', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        import_token: this.importPreview.import_token,
+                        extension: this.importPreview.extension,
+                        vehicle_id: this.importPreview.vehicle_match.vehicle_id,
+                        driver_name: this.importPreview.header.driver_name,
+                        custom_equipment_code: this.importPreview.vehicle_match.equipment_code,
+                        custom_plate_number: this.importPreview.vehicle_match.plate_number,
+                        custom_average_consumption: this.importPreview.vehicle_match.avg_consumption
+                    })
+                });
+
+                const data = await response.json();
+                if (response.ok && data.success) {
+                    window.location.reload();
+                } else {
+                    this.importError = data.message || 'Failed to commit imported itinerary records.';
+                }
+            } catch (err) {
+                this.importError = 'Network error while committing import.';
+            } finally {
+                this.isImportSaving = false;
+            }
+        },
 
         confirmDelete(id, info, url) {
             this.deleteId = id;
@@ -236,6 +321,17 @@
                     </svg>
                     <span x-text="selectedIds.length > 0 ? 'Download PDF (' + selectedIds.length + ' Selected)' : 'Download PDF'">Download PDF</span>
                 </a>
+
+                {{-- Import Itinerary Button --}}
+                <button type="button"
+                        @click="openImportModal()"
+                        title="Import driver Weekly Itinerary Report (.xlsx, .xlsb, .xls)"
+                        class="inline-flex items-center gap-1.5 rounded-xl border border-indigo-300 bg-indigo-50 px-3.5 py-2 text-xs font-bold text-indigo-800 hover:bg-indigo-100 shadow-2xs transition cursor-pointer">
+                    <svg class="h-4 w-4 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+                    </svg>
+                    <span>Import Itinerary</span>
+                </button>
 
                 <a href="{{ route('fuel-po.create') }}"
                    class="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-700 shadow-xs transition">
@@ -660,6 +756,240 @@
                             <span>Delete Record</span>
                         </button>
                     </form>
+                </div>
+            </div>
+        </div>
+        {{-- IMPORT WEEKLY ITINERARY REPORT MODAL --}}
+        <div x-show="showImportModal"
+             x-cloak
+             @keydown.escape.window="if (!isImportSaving && !isImportParsing) showImportModal = false"
+             class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
+             style="display: none;">
+            <div class="fixed inset-0 bg-slate-900/50 backdrop-blur-2xs transition-opacity"
+                 @click="if (!isImportSaving && !isImportParsing) showImportModal = false"></div>
+
+            <div class="relative bg-white rounded-3xl shadow-2xl w-full max-w-3xl border border-slate-200 z-10 overflow-hidden flex flex-col max-h-[90vh]"
+                 @click.stop>
+                {{-- Modal Header --}}
+                <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/60">
+                    <div class="flex items-center gap-3">
+                        <span class="flex h-10 w-10 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-xs">
+                            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+                            </svg>
+                        </span>
+                        <div>
+                            <h3 class="text-sm font-bold text-slate-900">Import Weekly Itinerary Report</h3>
+                            <p class="text-xs text-slate-500">Auto-generate Fuel PO checklists from driver's Excel template (.xlsx, .xlsb, .xls)</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <a href="{{ route('fuel-po.import.template') }}"
+                           class="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition shadow-2xs">
+                            <svg class="h-3.5 w-3.5 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                            </svg>
+                            <span>Download Template (.xlsx)</span>
+                        </a>
+                        <button type="button"
+                                @click="if (!isImportSaving && !isImportParsing) showImportModal = false"
+                                class="text-slate-400 hover:text-slate-600 p-1.5 rounded-xl hover:bg-slate-100 transition">
+                            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                {{-- Modal Body (Scrollable) --}}
+                <div class="p-6 overflow-y-auto space-y-5">
+                    {{-- Error Notice --}}
+                    <div x-show="importError" x-cloak
+                         class="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-xs text-rose-800 flex items-start gap-3 shadow-2xs">
+                        <svg class="h-5 w-5 text-rose-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
+                        </svg>
+                        <div class="flex-1">
+                            <h4 class="font-bold text-rose-900">Upload Issue</h4>
+                            <p class="mt-0.5" x-text="importError"></p>
+                        </div>
+                    </div>
+
+                    {{-- Step 1: File Dropzone (Visible if no preview loaded) --}}
+                    <div x-show="!importPreview" class="space-y-4">
+                        <label class="relative flex flex-col items-center justify-center rounded-3xl border-2 border-dashed border-indigo-200 hover:border-indigo-400 bg-indigo-50/30 hover:bg-indigo-50/60 p-8 text-center transition cursor-pointer group">
+                            <input type="file"
+                                   accept=".xlsx,.xlsb,.xls"
+                                   @change="handleFileUpload($event)"
+                                   :disabled="isImportParsing"
+                                   class="sr-only">
+
+                            <div x-show="!isImportParsing" class="space-y-3">
+                                <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-100 text-indigo-600 group-hover:scale-105 transition">
+                                    <svg class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m6.75 12-3-3m0 0-3 3m3-3v6m-1.5-15H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <span class="text-sm font-bold text-slate-900 block">Click to upload or drag & drop</span>
+                                    <span class="text-xs text-slate-500 mt-0.5 block">Supports Weekly Itinerary Reports in <strong>.xlsx</strong>, <strong>.xlsb</strong>, and <strong>.xls</strong> up to 20MB</span>
+                                </div>
+                            </div>
+
+                            <div x-show="isImportParsing" x-cloak class="space-y-3">
+                                <svg class="animate-spin h-8 w-8 text-indigo-600 mx-auto" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                                </svg>
+                                <p class="text-xs font-bold text-indigo-900">Analyzing workbook structure, matching vehicle &amp; computing fuel liters...</p>
+                            </div>
+                        </label>
+                    </div>
+
+                    {{-- Step 2: Interactive Preview Card (Visible when file is parsed) --}}
+                    <div x-show="importPreview" x-cloak class="space-y-5">
+                        {{-- Top Match & Status Ribbon --}}
+                        <div class="rounded-2xl border p-4 bg-gradient-to-br transition"
+                             :class="importPreview?.vehicle_match?.is_matched ? 'border-emerald-200 from-emerald-50/50 via-white to-emerald-50/20' : 'border-amber-200 from-amber-50/50 via-white to-amber-50/20'">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div>
+                                    <div class="flex items-center gap-2">
+                                        <template x-if="importPreview?.vehicle_match?.is_matched">
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                                                ✓ Vehicle Matched
+                                            </span>
+                                        </template>
+                                        <template x-if="!importPreview?.vehicle_match?.is_matched">
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">
+                                                ⚠ Custom / Unregistered Vehicle
+                                            </span>
+                                        </template>
+                                        <span class="text-xs text-slate-500 font-mono" x-text="importPreview?.file_name"></span>
+                                    </div>
+                                    <h4 class="text-sm font-bold text-slate-900 mt-1">
+                                        <span x-text="importPreview?.vehicle_match?.equipment_code || 'No EQT Code'"></span>
+                                        <span class="text-slate-400 font-normal" x-text="'• ' + (importPreview?.vehicle_match?.plate_number || 'No Plate')"></span>
+                                        <span class="text-slate-400 font-normal" x-show="importPreview?.vehicle_match?.model" x-text="'(' + importPreview?.vehicle_match?.model + ')'"></span>
+                                    </h4>
+                                </div>
+
+                                <div class="flex items-center gap-4 text-xs">
+                                    <div class="text-right">
+                                        <span class="block text-[10px] uppercase font-bold text-slate-400">Driver</span>
+                                        <input type="text"
+                                               x-model="importPreview.header.driver_name"
+                                               placeholder="Driver name"
+                                               class="text-xs font-semibold text-slate-900 border border-slate-300 rounded-lg px-2 py-0.5 text-right focus:border-indigo-500 outline-none">
+                                    </div>
+                                    <div class="text-right">
+                                        <span class="block text-[10px] uppercase font-bold text-slate-400">Avg. Consump</span>
+                                        <span class="font-mono font-bold text-blue-700 block mt-0.5"
+                                              x-text="importPreview?.vehicle_match?.avg_consumption ? (importPreview.vehicle_match.avg_consumption + ' KM/L') : 'Not set'"></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {{-- KPI Cards --}}
+                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                            <div class="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                                <span class="block text-[10px] uppercase font-bold text-slate-400">Week Period</span>
+                                <span class="font-semibold text-slate-800 block mt-0.5 truncate" x-text="importPreview?.header?.week_label || '—'"></span>
+                            </div>
+                            <div class="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                                <span class="block text-[10px] uppercase font-bold text-slate-400">PO Records (Days)</span>
+                                <span class="font-extrabold text-slate-900 block mt-0.5 text-base" x-text="(importPreview?.summary?.total_dates || 0) + ' PO Record(s)'"></span>
+                            </div>
+                            <div class="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                                <span class="block text-[10px] uppercase font-bold text-slate-400">Total Distance</span>
+                                <span class="font-mono font-extrabold text-slate-900 block mt-0.5 text-base" x-text="(importPreview?.summary?.total_distance || 0) + ' KM'"></span>
+                            </div>
+                            <div class="p-3 bg-indigo-50 rounded-xl border border-indigo-200">
+                                <span class="block text-[10px] uppercase font-bold text-indigo-700">Total Liter for PO</span>
+                                <span class="font-mono font-extrabold text-indigo-900 block mt-0.5 text-base" x-text="importPreview?.summary?.overall_fuel_liters ? (importPreview.summary.overall_fuel_liters + ' L') : '—'"></span>
+                            </div>
+                        </div>
+
+                        {{-- Date-by-Date PO Breakdown --}}
+                        <div class="space-y-3">
+                            <h4 class="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center justify-between">
+                                <span>PO Records to be Created (<span x-text="importPreview?.date_groups?.length || 0"></span>)</span>
+                                <span class="text-[11px] text-slate-400 font-normal lowercase">1 Fuel PO per date</span>
+                            </h4>
+
+                            <div class="divide-y divide-slate-100 rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-2xs">
+                                <template x-for="(group, gIdx) in importPreview?.date_groups" :key="gIdx">
+                                    <div class="p-4 hover:bg-slate-50/50 transition">
+                                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                            <div>
+                                                <div class="flex items-center gap-2">
+                                                    <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-100 text-blue-800 font-mono" x-text="group.date"></span>
+                                                    <h5 class="text-xs font-bold text-slate-900" x-text="group.formatted_date"></h5>
+                                                </div>
+                                                <p class="text-[11px] text-slate-500 mt-1">
+                                                    <span class="font-medium text-slate-700" x-text="group.legs.length + ' stop(s): '"></span>
+                                                    <span x-text="group.legs.map(l => l.destination).join(' &rarr; ')"></span>
+                                                </p>
+                                            </div>
+
+                                            <div class="flex items-center gap-4 text-xs font-mono shrink-0">
+                                                <div>
+                                                    <span class="block text-[9px] uppercase font-bold text-slate-400 font-sans">Distance</span>
+                                                    <span class="font-bold text-slate-800" x-text="group.total_distance + ' KM'"></span>
+                                                </div>
+                                                <div>
+                                                    <span class="block text-[9px] uppercase font-bold text-indigo-700 font-sans">Liter for PO</span>
+                                                    <span class="font-extrabold text-indigo-900" x-text="group.fuel_liters_required ? (group.fuel_liters_required + ' L') : '—'"></span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Modal Footer --}}
+                <div class="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+                    <div>
+                        <button type="button"
+                                x-show="importPreview"
+                                @click="importPreview = null; importFile = null;"
+                                class="text-xs text-blue-600 hover:text-blue-800 font-semibold underline cursor-pointer">
+                            &larr; Choose different file
+                        </button>
+                    </div>
+
+                    <div class="flex items-center gap-3">
+                        <button type="button"
+                                @click="showImportModal = false"
+                                :disabled="isImportSaving"
+                                class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition cursor-pointer disabled:opacity-50">
+                            Cancel
+                        </button>
+
+                        <button type="button"
+                                x-show="importPreview"
+                                @click="commitImport()"
+                                :disabled="isImportSaving"
+                                style="background-color: #16a34a !important; color: #ffffff !important;"
+                                class="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-6 py-2.5 text-xs font-black text-white hover:bg-emerald-700 shadow-md transition cursor-pointer disabled:opacity-50">
+                            <span x-show="!isImportSaving" class="flex items-center gap-2">
+                                <svg class="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                                </svg>
+                                <span>SAVE TO PO CHECKLIST (<span x-text="importPreview?.summary?.total_dates || 1"></span> Record)</span>
+                            </span>
+                            <span x-show="isImportSaving" x-cloak class="flex items-center gap-2">
+                                <svg class="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                                </svg>
+                                <span>Saving to Checklist...</span>
+                            </span>
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
