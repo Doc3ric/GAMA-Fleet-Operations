@@ -6,6 +6,7 @@ use App\Exports\FuelPoExport;
 use App\Models\AdvancedItinerary;
 use App\Models\Location;
 use App\Models\Vehicle;
+use App\Services\WeeklyItineraryImportService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -14,15 +15,20 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 use Maatwebsite\Excel\Facades\Excel;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Throwable;
 
 class FuelPoController extends Controller
 {
     public function index(Request $request): View
     {
         Gate::authorize('viewAny', AdvancedItinerary::class);
+
+        [$preloadedImport, $preloadedImportError] = $this->resolveBridgedImport($request);
 
         $query = $this->buildFilterQuery($request);
 
@@ -46,7 +52,7 @@ class FuelPoController extends Controller
         $records = $query->paginate(20)->withQueryString();
         $vehicles = Vehicle::orderBy('equipment_code')->get(['id', 'equipment_code', 'plate_number', 'model']);
 
-        return view('fuel-po.index', compact('records', 'vehicles', 'metrics'));
+        return view('fuel-po.index', compact('records', 'vehicles', 'metrics', 'preloadedImport', 'preloadedImportError'));
     }
 
     public function create(): View
@@ -786,5 +792,90 @@ class FuelPoController extends Controller
         }
 
         return $query;
+    }
+
+    /**
+     * Resolve preloaded import preview if bridging from Excel Viewer.
+     *
+     * @return array{0: ?array<string, mixed>, 1: ?string}
+     */
+    protected function resolveBridgedImport(Request $request): array
+    {
+        if (! $request->filled('bridge_file_id')) {
+            return [null, null];
+        }
+
+        $bridgeFileId = (string) $request->query('bridge_file_id');
+        $useEdited = (bool) $request->query('use_edited', 0);
+
+        if (! preg_match('/^[0-9a-fA-F-]{36}$/', $bridgeFileId)) {
+            return [null, 'Invalid spreadsheet identifier format.'];
+        }
+
+        $metaPath = "excel-viewer/{$bridgeFileId}.json";
+        if (! Storage::disk('local')->exists($metaPath)) {
+            return [null, 'Spreadsheet session or metadata file not found.'];
+        }
+
+        $metadata = json_decode((string) Storage::disk('local')->get($metaPath), true) ?: [];
+        $isOwnerOrAdmin = (isset($metadata['uploaded_by']) && (int) $metadata['uploaded_by'] === (int) auth()->id())
+            || (bool) auth()->user()?->isAdmin();
+
+        if (! $isOwnerOrAdmin) {
+            return [null, 'Unauthorized access to the requested spreadsheet.'];
+        }
+
+        $ext = $metadata['extension'] ?? 'xlsx';
+        $sourceFile = "excel-viewer/{$bridgeFileId}.{$ext}";
+        $originalName = $metadata['original_name'] ?? 'Weekly-Itinerary-Report.xlsx';
+
+        if ($useEdited && ! empty($metadata['has_edited_file']) && Storage::disk('local')->exists("excel-viewer/{$bridgeFileId}_edited.xlsx")) {
+            $sourceFile = "excel-viewer/{$bridgeFileId}_edited.xlsx";
+            $ext = 'xlsx';
+            $originalName = $metadata['edited_download_name'] ?? ($metadata['original_name'] ?? 'Weekly-Itinerary-Report.xlsx');
+        }
+
+        if (! Storage::disk('local')->exists($sourceFile)) {
+            return [null, 'The selected spreadsheet file could not be found in storage.'];
+        }
+
+        $token = (string) Str::uuid();
+        $destRel = "itinerary-imports/{$token}.{$ext}";
+
+        try {
+            Storage::disk('local')->copy($sourceFile, $destRel);
+            $fullPath = Storage::disk('local')->path($destRel);
+
+            /** @var WeeklyItineraryImportService $importService */
+            $importService = app(WeeklyItineraryImportService::class);
+            $parsed = $importService->parse($fullPath, $originalName);
+
+            $preloadedImport = [
+                'success' => true,
+                'import_token' => $token,
+                'extension' => $ext,
+                'file_name' => $parsed['file_name'],
+                'sheet_name' => $parsed['sheet_name'],
+                'header' => $parsed['header'],
+                'vehicle_match' => [
+                    'is_matched' => $parsed['vehicle_match']['is_matched'],
+                    'vehicle_id' => $parsed['vehicle_match']['vehicle']?->id,
+                    'equipment_code' => $parsed['vehicle_match']['vehicle']?->equipment_code ?? $parsed['vehicle_match']['detected_eqtp_code'],
+                    'plate_number' => $parsed['vehicle_match']['vehicle']?->plate_number ?? $parsed['vehicle_match']['detected_plate'],
+                    'model' => $parsed['vehicle_match']['vehicle']?->model,
+                    'avg_consumption' => $parsed['avg_consumption'],
+                    'confidence' => $parsed['vehicle_match']['confidence'],
+                ],
+                'summary' => $parsed['summary'],
+                'date_groups' => array_values($parsed['date_groups']),
+                'is_bridged' => true,
+            ];
+
+            return [$preloadedImport, null];
+        } catch (Throwable $e) {
+            Storage::disk('local')->delete($destRel);
+
+            return [null, 'Could not parse bridged spreadsheet as Weekly Itinerary Report: '.$e->getMessage()];
+        }
     }
 }

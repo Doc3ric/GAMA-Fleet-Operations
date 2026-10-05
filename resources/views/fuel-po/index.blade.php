@@ -4,7 +4,13 @@
         <span class="text-slate-800 font-semibold">Fuel PO Checklist</span>
     @endsection
 
-    <div class="space-y-6" x-data="{
+    <div class="space-y-6"
+         x-init="
+            if (window.location.search.includes('bridge_file_id')) {
+                window.history.replaceState({}, '', '{{ route('fuel-po.index') }}');
+            }
+         "
+         x-data="{
         toggleLoading: {},
         selectedIds: [],
         allIds: {{ json_encode($records->pluck('id')->values()->all()) }},
@@ -15,11 +21,11 @@
         deleteId: null,
         deleteInfo: '',
         deleteActionUrl: '',
-        showImportModal: false,
+        showImportModal: {{ !empty($preloadedImport) || !empty($preloadedImportError) ? 'true' : 'false' }},
         isImportParsing: false,
         isImportSaving: false,
-        importError: null,
-        importPreview: null,
+        importError: {{ !empty($preloadedImportError) ? json_encode($preloadedImportError) : 'null' }},
+        importPreview: {{ !empty($preloadedImport) ? json_encode($preloadedImport) : 'null' }},
         importFile: null,
 
         openImportModal() {
@@ -90,7 +96,7 @@
 
                 const data = await response.json();
                 if (response.ok && data.success) {
-                    window.location.reload();
+                    window.location.href = '{{ route('fuel-po.index') }}';
                 } else {
                     this.importError = data.message || 'Failed to commit imported itinerary records.';
                 }
@@ -848,6 +854,26 @@
 
                     {{-- Step 2: Interactive Preview Card (Visible when file is parsed) --}}
                     <div x-show="importPreview" x-cloak class="space-y-5">
+                        {{-- Bridge Notice Ribbon (Shown if transferred from Excel Viewer) --}}
+                        <template x-if="importPreview?.is_bridged">
+                            <div class="rounded-2xl border border-blue-200 bg-blue-50/80 p-3.5 text-xs text-blue-900 flex items-center justify-between gap-3 shadow-2xs">
+                                <div class="flex items-center gap-2.5">
+                                    <span class="flex h-7 w-7 items-center justify-center rounded-xl bg-blue-600 text-white shrink-0 shadow-2xs">
+                                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                                        </svg>
+                                    </span>
+                                    <div>
+                                        <p class="font-bold text-blue-950">Bridged directly from Excel Viewer</p>
+                                        <p class="text-[11px] text-blue-700 mt-0.5">Spreadsheet imported automatically with zero re-uploading. Review fuel summary below and click <strong>SAVE TO PO CHECKLIST</strong>.</p>
+                                    </div>
+                                </div>
+                                <a href="{{ route('excel-viewer.index') }}" class="text-blue-700 hover:text-blue-900 font-semibold underline text-[11px] shrink-0">
+                                    Excel Viewer &rarr;
+                                </a>
+                            </div>
+                        </template>
+
                         {{-- Top Match & Status Ribbon --}}
                         <div class="rounded-2xl border p-4 bg-gradient-to-br transition"
                              :class="importPreview?.vehicle_match?.is_matched ? 'border-emerald-200 from-emerald-50/50 via-white to-emerald-50/20' : 'border-amber-200 from-amber-50/50 via-white to-amber-50/20'">

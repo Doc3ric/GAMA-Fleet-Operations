@@ -329,4 +329,134 @@ class WeeklyItineraryImportTest extends TestCase
         $this->assertEquals(24.0, $itineraries[1]->total_distance);
         $this->assertEquals(7.0, $itineraries[1]->fuel_liters_required);
     }
+
+    public function test_fuel_po_index_preloads_import_when_bridged_from_excel_viewer(): void
+    {
+        $vehicle = Vehicle::factory()->create([
+            'equipment_code' => 'EV 10',
+            'plate_number' => 'NDY 5123',
+            'average_fuel_consumption' => 3.7,
+        ]);
+
+        $fileId = '11111111-2222-3333-4444-555555555555';
+        $fixture = $this->getXlsbFixture();
+
+        Storage::disk('local')->put("excel-viewer/{$fileId}.xlsb", $fixture->getContent());
+        Storage::disk('local')->put("excel-viewer/{$fileId}.json", json_encode([
+            'id' => $fileId,
+            'file_name' => "{$fileId}.xlsb",
+            'original_name' => 'Sept_19 2026 EV 10 Itinerary.xlsb',
+            'extension' => 'xlsb',
+            'uploaded_by' => $this->user->id,
+        ]));
+
+        $response = $this->actingAs($this->user)->get(route('fuel-po.index', [
+            'bridge_file_id' => $fileId,
+        ]));
+
+        $response->assertOk();
+        $response->assertViewHas('preloadedImport');
+
+        $preloaded = $response->viewData('preloadedImport');
+        $this->assertNotNull($preloaded);
+        $this->assertTrue($preloaded['is_bridged']);
+        $this->assertTrue($preloaded['vehicle_match']['is_matched']);
+        $this->assertEquals($vehicle->id, $preloaded['vehicle_match']['vehicle_id']);
+        $this->assertEquals(1, $preloaded['summary']['total_dates']);
+        $this->assertEquals(85.0, $preloaded['summary']['total_distance']);
+        $this->assertEquals(23.0, $preloaded['summary']['overall_fuel_liters']);
+
+        $response->assertSee('Bridged directly from Excel Viewer');
+        $response->assertSee('SAVE TO PO CHECKLIST');
+    }
+
+    public function test_bridged_import_preview_can_be_confirmed_to_create_itineraries(): void
+    {
+        $vehicle = Vehicle::factory()->create([
+            'equipment_code' => 'EV 10',
+            'plate_number' => 'NDY 5123',
+            'average_fuel_consumption' => 3.7,
+        ]);
+
+        $fileId = '22222222-3333-4444-5555-666666666666';
+        $fixture = $this->getXlsbFixture();
+
+        Storage::disk('local')->put("excel-viewer/{$fileId}.xlsb", $fixture->getContent());
+        Storage::disk('local')->put("excel-viewer/{$fileId}.json", json_encode([
+            'id' => $fileId,
+            'file_name' => "{$fileId}.xlsb",
+            'original_name' => 'Sept_19 2026 EV 10 Itinerary.xlsb',
+            'extension' => 'xlsb',
+            'uploaded_by' => $this->user->id,
+        ]));
+
+        $indexResp = $this->actingAs($this->user)->get(route('fuel-po.index', [
+            'bridge_file_id' => $fileId,
+        ]));
+        $indexResp->assertOk();
+
+        $preloaded = $indexResp->viewData('preloadedImport');
+        $this->assertNotNull($preloaded);
+
+        $confirmResp = $this->actingAs($this->user)->postJson(route('fuel-po.import.confirm'), [
+            'import_token' => $preloaded['import_token'],
+            'extension' => $preloaded['extension'],
+            'vehicle_id' => $preloaded['vehicle_match']['vehicle_id'],
+            'driver_name' => $preloaded['header']['driver_name'],
+        ]);
+
+        $confirmResp->assertOk();
+        $confirmResp->assertJsonPath('count', 1);
+
+        $this->assertDatabaseHas('advanced_itineraries', [
+            'vehicle_id' => $vehicle->id,
+            'total_distance' => 85.0,
+            'fuel_liters_required' => 23.0,
+        ]);
+    }
+
+    public function test_unauthorized_user_cannot_bridge_spreadsheet_of_another_user(): void
+    {
+        $otherUser = User::factory()->create();
+        $fileId = '33333333-4444-5555-6666-777777777777';
+
+        Storage::disk('local')->put("excel-viewer/{$fileId}.xlsx", 'content');
+        Storage::disk('local')->put("excel-viewer/{$fileId}.json", json_encode([
+            'id' => $fileId,
+            'file_name' => "{$fileId}.xlsx",
+            'original_name' => 'other.xlsx',
+            'extension' => 'xlsx',
+            'uploaded_by' => $otherUser->id,
+        ]));
+
+        $response = $this->actingAs($this->user)->get(route('fuel-po.index', [
+            'bridge_file_id' => $fileId,
+        ]));
+
+        $response->assertOk();
+        $response->assertViewHas('preloadedImport', null);
+        $this->assertStringContainsString('Unauthorized access', (string) $response->viewData('preloadedImportError'));
+    }
+
+    public function test_corrupted_or_non_itinerary_file_bridged_shows_friendly_error(): void
+    {
+        $fileId = '44444444-5555-6666-7777-888888888888';
+
+        Storage::disk('local')->put("excel-viewer/{$fileId}.xlsx", 'corrupted-content');
+        Storage::disk('local')->put("excel-viewer/{$fileId}.json", json_encode([
+            'id' => $fileId,
+            'file_name' => "{$fileId}.xlsx",
+            'original_name' => 'bad.xlsx',
+            'extension' => 'xlsx',
+            'uploaded_by' => $this->user->id,
+        ]));
+
+        $response = $this->actingAs($this->user)->get(route('fuel-po.index', [
+            'bridge_file_id' => $fileId,
+        ]));
+
+        $response->assertOk();
+        $response->assertViewHas('preloadedImport', null);
+        $this->assertStringContainsString('Could not parse bridged spreadsheet', (string) $response->viewData('preloadedImportError'));
+    }
 }

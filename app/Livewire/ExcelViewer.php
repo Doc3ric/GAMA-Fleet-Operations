@@ -295,6 +295,39 @@ class ExcelViewer extends Component
     }
 
     /**
+     * Directly hand off the active spreadsheet to the Fuel PO Checklist import flow.
+     */
+    public function sendToFuelPo(): mixed
+    {
+        $this->errorMessage = null;
+
+        if (! auth()->user()?->isAdmin() && ! auth()->user()?->isOperator() && ! auth()->user()?->isPurchasing()) {
+            $this->errorMessage = 'You do not have permission to access the Fuel PO Checklist.';
+
+            return null;
+        }
+
+        if (! $this->fileId || ! $this->extension) {
+            $this->errorMessage = 'No active spreadsheet loaded to send to Fuel PO Checklist.';
+
+            return null;
+        }
+
+        // If there are unsaved edits in progress, auto-save them first
+        if ($this->hasUnsavedChanges) {
+            $this->saveChanges();
+            if ($this->errorMessage) {
+                return null;
+            }
+        }
+
+        return $this->redirectRoute('fuel-po.index', [
+            'bridge_file_id' => $this->fileId,
+            'use_edited' => $this->hasEditedFile ? 1 : 0,
+        ]);
+    }
+
+    /**
      * Reset pagination when search query updates.
      */
     public function updatedSearch(): void

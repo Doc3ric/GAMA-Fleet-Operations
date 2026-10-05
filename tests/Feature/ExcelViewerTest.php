@@ -416,4 +416,58 @@ class ExcelViewerTest extends TestCase
         $response = $this->actingAs($this->user)->get(route('excel-viewer.download-edited', $fileId));
         $response->assertForbidden();
     }
+
+    public function test_user_can_send_workbook_to_fuel_po_and_redirects_with_bridge_file_id(): void
+    {
+        $file = $this->getXlsbFixture();
+
+        $component = Livewire::actingAs($this->user)
+            ->test(ExcelViewer::class)
+            ->set('file', $file);
+
+        $fileId = $component->get('fileId');
+
+        $component->call('sendToFuelPo')
+            ->assertRedirect(route('fuel-po.index', [
+                'bridge_file_id' => $fileId,
+                'use_edited' => 0,
+            ]));
+    }
+
+    public function test_user_sending_edited_workbook_auto_saves_and_redirects_with_use_edited_flag(): void
+    {
+        $file = $this->getXlsxFixture();
+
+        $component = Livewire::actingAs($this->user)
+            ->test(ExcelViewer::class)
+            ->set('file', $file)
+            ->call('toggleEditMode')
+            ->call('updateCell', 1, 0, 'Auto Save Fuel PO Test');
+
+        $this->assertTrue($component->get('hasUnsavedChanges'));
+
+        $fileId = $component->get('fileId');
+
+        $component->call('sendToFuelPo')
+            ->assertSet('hasUnsavedChanges', false)
+            ->assertSet('hasEditedFile', true)
+            ->assertRedirect(route('fuel-po.index', [
+                'bridge_file_id' => $fileId,
+                'use_edited' => 1,
+            ]));
+
+        $this->assertTrue(Storage::disk('local')->exists("excel-viewer/{$fileId}_edited.xlsx"));
+    }
+
+    public function test_driver_role_cannot_send_to_fuel_po(): void
+    {
+        $driverUser = User::factory()->create(['role' => User::ROLE_DRIVER]);
+        $file = $this->getXlsxFixture();
+
+        Livewire::actingAs($driverUser)
+            ->test(ExcelViewer::class)
+            ->set('file', $file)
+            ->call('sendToFuelPo')
+            ->assertSet('errorMessage', 'You do not have permission to access the Fuel PO Checklist.');
+    }
 }

@@ -186,6 +186,30 @@
                         </a>
                     @endif
 
+                    {{-- Send to Fuel PO Checklist --}}
+                    @can('viewAny', \App\Models\AdvancedItinerary::class)
+                        <button type="button"
+                                wire:click="sendToFuelPo"
+                                wire:loading.attr="disabled"
+                                style="background-color: #2563eb !important; color: #ffffff !important;"
+                                class="inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-bold text-white transition-all shadow-xs cursor-pointer hover:opacity-90 disabled:opacity-50"
+                                title="Send this active workbook directly to the Fuel PO Checklist import without re-uploading">
+                            <span wire:loading.remove wire:target="sendToFuelPo" class="flex items-center gap-1.5">
+                                <svg class="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                                </svg>
+                                <span>Send to Fuel PO</span>
+                            </span>
+                            <span wire:loading wire:target="sendToFuelPo" class="flex items-center gap-1.5">
+                                <svg class="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                                </svg>
+                                <span>Preparing PO...</span>
+                            </span>
+                        </button>
+                    @endcan
+
                     {{-- Upload Another File --}}
                     <button type="button"
                             wire:click="clearFile"
