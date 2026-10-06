@@ -1472,4 +1472,45 @@ class FuelPoChecklistTest extends TestCase
         $itinerary->refresh();
         $this->assertSame($updatedLongDestination, $itinerary->destination);
     }
+
+    public function test_filtering_by_unchecked_checklist_state_and_view_all_per_page(): void
+    {
+        $vehicle = Vehicle::factory()->create(['equipment_code' => 'VH-FILTER-TEST']);
+
+        // Create 25 unchecked records and 5 checked records
+        for ($i = 1; $i <= 25; $i++) {
+            AdvancedItinerary::factory()->create([
+                'vehicle_id' => $vehicle->id,
+                'title' => "Unchecked Itinerary #{$i}",
+                'po_checked' => false,
+            ]);
+        }
+        for ($i = 1; $i <= 5; $i++) {
+            AdvancedItinerary::factory()->create([
+                'vehicle_id' => $vehicle->id,
+                'title' => "Checked Itinerary #{$i}",
+                'po_checked' => true,
+            ]);
+        }
+
+        // Default pagination: 20 per page for unchecked
+        $response = $this->actingAs($this->purchasing)
+            ->get(route('fuel-po.index', ['po_status' => 'unchecked']));
+
+        $response->assertOk();
+        $response->assertSee('Viewing UNCHECKED (Pending) Fuel PO Checklist');
+        $this->assertCount(20, $response->viewData('records'));
+        $this->assertEquals(25, $response->viewData('records')->total());
+
+        // View ALL on single page: per_page=all
+        $allResponse = $this->actingAs($this->purchasing)
+            ->get(route('fuel-po.index', ['po_status' => 'unchecked', 'per_page' => 'all']));
+
+        $allResponse->assertOk();
+        $this->assertCount(25, $allResponse->viewData('records'));
+        // None of the checked records should be present
+        foreach ($allResponse->viewData('records') as $record) {
+            $this->assertFalse((bool) $record->po_checked);
+        }
+    }
 }

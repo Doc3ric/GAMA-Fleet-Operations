@@ -44,12 +44,21 @@ class FuelPoController extends Controller
         $metrics = [
             'total_count' => $allMatching->count(),
             'checked_count' => $allMatching->where('po_checked', true)->count(),
-            'unchecked_count' => $allMatching->where('po_checked', false)->count(),
+            'unchecked_count' => $allMatching->filter(fn (AdvancedItinerary $it) => ! $it->po_checked)->count(),
             'total_fuel_liters' => $totalFuelLiters,
             'total_distance' => $totalDistance,
         ];
 
-        $records = $query->paginate(20)->withQueryString();
+        $perPageParam = $request->input('per_page', '20');
+        if ($perPageParam === 'all') {
+            $perPage = max(1, $allMatching->count());
+        } elseif (in_array((int) $perPageParam, [20, 50, 100, 200], true)) {
+            $perPage = (int) $perPageParam;
+        } else {
+            $perPage = 20;
+        }
+
+        $records = $query->paginate($perPage)->withQueryString();
         $vehicles = Vehicle::orderBy('equipment_code')->get(['id', 'equipment_code', 'plate_number', 'model']);
 
         return view('fuel-po.index', compact('records', 'vehicles', 'metrics', 'preloadedImport', 'preloadedImportError'));
@@ -826,7 +835,9 @@ class FuelPoController extends Controller
             if ($poStatus === 'checked') {
                 $query->where('po_checked', true);
             } elseif ($poStatus === 'unchecked') {
-                $query->where('po_checked', false);
+                $query->where(function (Builder $q) {
+                    $q->where('po_checked', false)->orWhereNull('po_checked');
+                });
             }
         }
 

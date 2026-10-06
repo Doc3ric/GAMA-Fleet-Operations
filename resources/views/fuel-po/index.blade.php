@@ -525,29 +525,35 @@
             </div>
         </div>
 
-        {{-- Metric KPI Cards --}}
+        {{-- Metric KPI Cards (Clickable Quick Filters) --}}
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs">
-                <span class="block text-[11px] font-bold uppercase tracking-wider text-slate-400">Total Records</span>
+            <a href="{{ route('fuel-po.index', request()->except(['po_status', 'page'])) }}"
+               class="rounded-2xl border bg-white p-4 shadow-2xs hover:border-slate-300 transition group block cursor-pointer {{ !request('po_status') ? 'border-slate-400 ring-2 ring-slate-400/20' : 'border-slate-200' }}"
+               title="View all records (clear checklist filter)">
+                <span class="block text-[11px] font-bold uppercase tracking-wider text-slate-400 group-hover:text-slate-600 transition">Total Records</span>
                 <span class="mt-1 block text-2xl font-extrabold text-slate-900">{{ number_format($metrics['total_count']) }}</span>
-                <span class="text-[10px] text-slate-400">Recorded Fuel POs</span>
-            </div>
+                <span class="text-[10px] text-slate-400">View All POs</span>
+            </a>
 
-            <div class="rounded-2xl border border-emerald-200 bg-emerald-50/40 p-4 shadow-2xs">
+            <a href="{{ route('fuel-po.index', array_merge(request()->except(['page']), ['po_status' => 'checked'])) }}"
+               class="rounded-2xl border p-4 shadow-2xs transition group block cursor-pointer {{ request('po_status') === 'checked' ? 'border-emerald-500 bg-emerald-50 ring-2 ring-emerald-500/20' : 'border-emerald-200 bg-emerald-50/40 hover:bg-emerald-50' }}"
+               title="Filter by checked records only">
                 <span class="block text-[11px] font-bold uppercase tracking-wider text-emerald-700 flex items-center gap-1">
                     <span>☑ Checked for PO</span>
                 </span>
                 <span class="mt-1 block text-2xl font-extrabold text-emerald-800">{{ number_format($metrics['checked_count']) }}</span>
-                <span class="text-[10px] text-emerald-600 font-medium">Processed POs</span>
-            </div>
+                <span class="text-[10px] text-emerald-600 font-medium">Click to View Checked</span>
+            </a>
 
-            <div class="rounded-2xl border border-amber-200 bg-amber-50/40 p-4 shadow-2xs">
+            <a href="{{ route('fuel-po.index', array_merge(request()->except(['page']), ['po_status' => 'unchecked'])) }}"
+               class="rounded-2xl border p-4 shadow-2xs transition group block cursor-pointer {{ request('po_status') === 'unchecked' ? 'border-amber-500 bg-amber-50 ring-2 ring-amber-500/20' : 'border-amber-200 bg-amber-50/40 hover:bg-amber-50' }}"
+               title="Filter by unchecked records only">
                 <span class="block text-[11px] font-bold uppercase tracking-wider text-amber-700 flex items-center gap-1">
                     <span>☐ Unchecked (Pending)</span>
                 </span>
                 <span class="mt-1 block text-2xl font-extrabold text-amber-800">{{ number_format($metrics['unchecked_count']) }}</span>
-                <span class="text-[10px] text-amber-600 font-medium">Awaiting PO Check</span>
-            </div>
+                <span class="text-[10px] text-amber-600 font-medium">Click to View Unchecked</span>
+            </a>
 
             <div class="rounded-2xl border border-blue-200 bg-blue-50/40 p-4 shadow-2xs">
                 <span class="block text-[11px] font-bold uppercase tracking-wider text-blue-700">Total PO Fuel Liters</span>
@@ -561,6 +567,8 @@
         {{-- Filters Card with Interactive Calendar Range Filter --}}
         <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs space-y-3.5">
             <form id="fuel-po-filter-form" method="GET" action="{{ route('fuel-po.index') }}" class="space-y-3">
+                <input type="hidden" name="per_page" value="{{ request('per_page', '20') }}">
+
                 {{-- Row 1: Search, Vehicle, Checklist State, Filter/Reset --}}
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 items-end">
                     {{-- Search Details (5 cols) --}}
@@ -851,6 +859,42 @@
             </div>
         @endif
 
+        {{-- Active Checklist State Banner --}}
+        @if(request('po_status'))
+            <div class="rounded-2xl border px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-2xs {{ request('po_status') === 'unchecked' ? 'border-amber-300 bg-amber-50 text-amber-950' : 'border-emerald-300 bg-emerald-50 text-emerald-950' }}">
+                <div class="flex items-center gap-2.5">
+                    <span class="flex h-7 w-7 items-center justify-center rounded-xl text-white font-bold text-sm shrink-0 shadow-2xs {{ request('po_status') === 'unchecked' ? 'bg-amber-500' : 'bg-emerald-600' }}">
+                        {{ request('po_status') === 'unchecked' ? '☐' : '☑' }}
+                    </span>
+                    <div>
+                        <p class="font-extrabold text-sm">
+                            {{ request('po_status') === 'unchecked' ? 'Viewing UNCHECKED (Pending) Fuel PO Checklist' : 'Viewing CHECKED Fuel PO Checklist' }}
+                        </p>
+                        <p class="text-[11px] {{ request('po_status') === 'unchecked' ? 'text-amber-800' : 'text-emerald-800' }}">
+                            Showing <strong>{{ number_format($records->total()) }}</strong> {{ request('po_status') === 'unchecked' ? 'pending / unchecked' : 'completed / checked' }} record(s)
+                            @if(request('per_page') !== 'all' && $records->total() > 20)
+                                &bull; <a href="{{ route('fuel-po.index', array_merge(request()->query(), ['per_page' => 'all', 'page' => 1])) }}" class="font-bold underline hover:opacity-80">Click here to view all on a single page</a>
+                            @endif
+                        </p>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-2 shrink-0">
+                    @if(request('per_page') !== 'all' && $records->total() > 20)
+                        <a href="{{ route('fuel-po.index', array_merge(request()->query(), ['per_page' => 'all', 'page' => 1])) }}"
+                           class="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border font-bold text-xs transition shadow-2xs {{ request('po_status') === 'unchecked' ? 'border-amber-400 bg-white hover:bg-amber-100 text-amber-900' : 'border-emerald-400 bg-white hover:bg-emerald-100 text-emerald-900' }}">
+                            <span>View All ({{ $records->total() }})</span>
+                        </a>
+                    @endif
+                    <a href="{{ route('fuel-po.index', request()->except(['po_status', 'page'])) }}"
+                       class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs transition shadow-2xs">
+                        <span>Clear State Filter</span>
+                        <span class="text-slate-400 font-bold">&times;</span>
+                    </a>
+                </div>
+            </div>
+        @endif
+
         {{-- Floating/Sticky Selected Action Banner --}}
         <div x-show="selectedIds.length > 0" x-cloak
              class="rounded-2xl border border-blue-200 bg-blue-50/95 p-4 flex flex-wrap items-center justify-between gap-3 text-xs shadow-sm transition">
@@ -926,8 +970,22 @@
                     Clear Selection
                 </button>
             </div>
-            <div class="text-[11px] text-slate-400">
-                Showing {{ $records->firstItem() ?? 0 }} to {{ $records->lastItem() ?? 0 }} of {{ $records->total() }} records
+            <div class="flex items-center gap-3 text-[11px] text-slate-500 flex-wrap">
+                <div>
+                    Showing <span class="font-bold text-slate-700">{{ $records->firstItem() ?? 0 }}</span> to <span class="font-bold text-slate-700">{{ $records->lastItem() ?? 0 }}</span> of <span class="font-bold text-slate-700">{{ $records->total() }}</span> records
+                </div>
+                <div class="flex items-center gap-1 border-l border-slate-200 pl-3">
+                    <span class="text-slate-400 font-semibold">View:</span>
+                    @foreach(['20', '50', '100', 'all'] as $pSize)
+                        @php
+                            $isActive = (request('per_page', '20') === $pSize);
+                        @endphp
+                        <a href="{{ route('fuel-po.index', array_merge(request()->query(), ['per_page' => $pSize, 'page' => 1])) }}"
+                           class="px-2 py-0.5 rounded-md text-[11px] font-bold transition {{ $isActive ? 'bg-blue-600 text-white shadow-2xs' : 'bg-slate-100 hover:bg-slate-200 text-slate-600' }}">
+                            {{ $pSize === 'all' ? 'All' : $pSize }}
+                        </a>
+                    @endforeach
+                </div>
             </div>
         </div>
 
