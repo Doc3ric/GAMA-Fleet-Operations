@@ -760,25 +760,30 @@
                                             @csrf
                                             @method('PATCH')
                                             <button type="submit"
-                                                    class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white border border-slate-300 text-slate-600 text-[11px] font-bold rounded-lg hover:bg-slate-50 cursor-pointer">
-                                                Reopen
+                                                    class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white border border-slate-300 text-slate-600 text-[11px] font-bold rounded-lg hover:bg-slate-50 cursor-pointer shadow-2xs">
+                                                <svg class="h-3 w-3 text-slate-500" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 15 3 9m0 0 6-6M3 9h12a6 6 0 0 1 0 12h-3" />
+                                                </svg>
+                                                <span>Reopen</span>
                                             </button>
                                         </form>
                                     </template>
-                                    <div class="flex items-center gap-1">
+                                    <div class="flex items-center gap-1.5">
                                         <a :href="task.edit_url"
-                                           class="p-1.5 text-slate-400 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition"
+                                           class="inline-flex items-center gap-1 px-2 py-1 text-slate-600 hover:text-blue-700 hover:bg-blue-50 text-[11px] font-semibold rounded-lg border border-slate-200 transition shadow-2xs"
                                            title="Edit">
-                                            <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                            <svg class="h-3 w-3 text-blue-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                                                 <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
                                             </svg>
+                                            <span>Edit</span>
                                         </a>
                                         <a :href="task.show_url"
-                                           class="p-1.5 text-slate-400 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition"
+                                           class="inline-flex items-center gap-1 px-2 py-1 text-slate-600 hover:text-blue-700 hover:bg-blue-50 text-[11px] font-semibold rounded-lg border border-slate-200 transition shadow-2xs"
                                            title="Full Details">
-                                            <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                            <svg class="h-3 w-3 text-slate-500" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                                                 <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
                                             </svg>
+                                            <span>View</span>
                                         </a>
                                     </div>
                                 </div>
@@ -1070,8 +1075,11 @@
                                 @csrf
                                 @method('PATCH')
                                 <button type="submit"
-                                        class="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 text-xs font-bold rounded-xl hover:bg-slate-50 cursor-pointer">
-                                    Reopen
+                                        class="inline-flex items-center gap-1 px-3 py-1.5 bg-white border border-slate-200 text-slate-600 text-xs font-bold rounded-xl hover:bg-slate-50 cursor-pointer shadow-sm">
+                                    <svg class="h-3.5 w-3.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 15 3 9m0 0 6-6M3 9h12a6 6 0 0 1 0 12h-3" />
+                                    </svg>
+                                    <span>Reopen</span>
                                 </button>
                             </form>
                         </template>

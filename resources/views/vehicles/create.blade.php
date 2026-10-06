@@ -6,10 +6,11 @@
         {{-- Sticky Top Header with Prominent Save Button --}}
         <div class="sticky top-0 z-10 bg-slate-50/95 backdrop-blur-xs py-3 mb-5 border-b border-slate-200/80 flex items-center justify-between gap-4">
             <div class="flex items-center gap-3">
-                <a href="{{ route('vehicles.index') }}" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors">
-                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                <a href="{{ route('vehicles.index') }}" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:text-slate-900 hover:bg-slate-50 transition-colors shadow-2xs" title="Back to vehicles">
+                    <svg class="h-4 w-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
                     </svg>
+                    <span>Back</span>
                 </a>
                 <div>
                     <h2 class="text-lg font-bold text-slate-800">Add New Vehicle</h2>
@@ -19,8 +20,11 @@
 
             <div class="flex items-center gap-2.5">
                 <a href="{{ route('vehicles.index') }}"
-                   class="px-4 py-2 bg-white border border-slate-300 text-slate-700 text-xs font-semibold rounded-lg hover:bg-slate-50 transition-colors shadow-xs">
-                    Cancel
+                   class="inline-flex items-center gap-1.5 px-4 py-2 bg-white border border-slate-300 text-slate-700 text-xs font-semibold rounded-lg hover:bg-slate-50 transition-colors shadow-xs">
+                    <svg class="h-3.5 w-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+                    </svg>
+                    <span>Cancel</span>
                 </a>
                 <button type="submit" form="vehicle-form"
                         class="inline-flex items-center gap-1.5 px-5 py-2 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-sm cursor-pointer">

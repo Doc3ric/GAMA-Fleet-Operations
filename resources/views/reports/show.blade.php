@@ -93,7 +93,10 @@
                             @csrf @method('PATCH')
                             <button type="submit"
                                 class="inline-flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-2 text-xs font-bold text-amber-800 hover:bg-amber-100 transition-colors cursor-pointer">
-                                Revert to Draft
+                                <svg class="h-3.5 w-3.5 text-amber-700" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 15 3 9m0 0 6-6M3 9h12a6 6 0 0 1 0 12h-3" />
+                                </svg>
+                                <span>Revert to Draft</span>
                             </button>
                         </form>
                     @endif
