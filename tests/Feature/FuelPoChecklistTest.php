@@ -458,9 +458,11 @@ class FuelPoChecklistTest extends TestCase
         $this->assertNotNull($rowChecked);
         $this->assertNotNull($rowUnchecked);
 
-        // Check checklist symbols
+        // Check checklist symbols and combined EQPT - PLATE format
         $this->assertEquals('☑', $rowChecked['checklist']);
         $this->assertEquals('☐', $rowUnchecked['checklist']);
+        $this->assertEquals('EX-CH-01 - XYZ-5678', $rowChecked['equipment_code']);
+        $this->assertContains('EQPT', $export->headings());
         $this->assertContains('CHECKLIST', $export->headings());
     }
 
@@ -1337,5 +1339,74 @@ class FuelPoChecklistTest extends TestCase
         $this->assertSame('multiply', $itinerary->calculation_method);
         // 10.0 * 2.0 = 20.0
         $this->assertEquals(20.0, $itinerary->fuel_liters_required);
+    }
+
+    public function test_storing_itinerary_with_dropdown_vehicle_without_average_consumption_updates_vehicle_and_calculates_liters(): void
+    {
+        $vehicle = Vehicle::factory()->create([
+            'equipment_code' => 'VH 9001',
+            'average_fuel_consumption' => null,
+        ]);
+
+        $response = $this->actingAs($this->purchasing)
+            ->post(route('fuel-po.store'), [
+                'itinerary_date' => '2026-10-06',
+                'vehicle_mode' => 'dropdown',
+                'vehicle_id' => $vehicle->id,
+                'custom_average_consumption' => 4.0,
+                'status' => 'FINALIZED',
+                'total_distance' => 20.0,
+                'destinations' => [
+                    ['name' => 'Depot to Site', 'distance' => 20.0, 'purpose' => 'Delivery'],
+                ],
+            ]);
+
+        $response->assertRedirect(route('fuel-po.index'));
+
+        // Vehicle master record should have its average fuel consumption updated
+        $vehicle->refresh();
+        $this->assertEquals(4.0, $vehicle->average_fuel_consumption);
+
+        // Itinerary should calculate fuel liters required: 20 / 4 = 5 liters
+        $itinerary = AdvancedItinerary::where('vehicle_id', $vehicle->id)->latest('id')->first();
+        $this->assertNotNull($itinerary);
+        $this->assertEquals(5.0, $itinerary->fuel_liters_required);
+    }
+
+    public function test_updating_itinerary_with_dropdown_vehicle_modifies_vehicle_average_consumption_and_recalculates_liters(): void
+    {
+        $vehicle = Vehicle::factory()->create([
+            'equipment_code' => 'VH 9002',
+            'average_fuel_consumption' => null,
+        ]);
+
+        $itinerary = AdvancedItinerary::factory()->create([
+            'vehicle_id' => $vehicle->id,
+            'itinerary_date' => '2026-10-06',
+            'total_distance' => 25.0,
+            'fuel_liters_required' => null,
+        ]);
+
+        $response = $this->actingAs($this->purchasing)
+            ->put(route('fuel-po.update', $itinerary), [
+                'itinerary_date' => '2026-10-06',
+                'vehicle_mode' => 'dropdown',
+                'vehicle_id' => $vehicle->id,
+                'custom_average_consumption' => 5.0,
+                'status' => 'FINALIZED',
+                'total_distance' => 25.0,
+                'destinations' => [
+                    ['name' => 'Site to Mill', 'distance' => 25.0, 'purpose' => 'Hauling'],
+                ],
+            ]);
+
+        $response->assertRedirect(route('fuel-po.show', $itinerary));
+
+        $vehicle->refresh();
+        $this->assertEquals(5.0, $vehicle->average_fuel_consumption);
+
+        $itinerary->refresh();
+        // 25 / 5 = 5.0 liters
+        $this->assertEquals(5.0, $itinerary->fuel_liters_required);
     }
 }

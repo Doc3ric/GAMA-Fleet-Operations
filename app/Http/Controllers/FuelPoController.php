@@ -127,6 +127,19 @@ class FuelPoController extends Controller
         }
 
         if (isset($data['vehicle_id']) && is_numeric($data['vehicle_id'])) {
+            $vehicle = Vehicle::find((int) $data['vehicle_id']);
+            if ($vehicle) {
+                $customAvg = isset($data['custom_average_consumption']) && is_numeric($data['custom_average_consumption'])
+                    ? (float) $data['custom_average_consumption']
+                    : null;
+                if ($customAvg !== null && (float) $customAvg > 0) {
+                    $existingAvg = $vehicle->average_fuel_consumption !== null ? round((float) $vehicle->average_fuel_consumption, 2) : null;
+                    if ($existingAvg === null || $existingAvg !== round($customAvg, 2)) {
+                        $vehicle->update(['average_fuel_consumption' => $customAvg]);
+                    }
+                }
+            }
+
             return (int) $data['vehicle_id'];
         }
 
@@ -315,7 +328,10 @@ class FuelPoController extends Controller
 
             // Safe Fuel Liter calculation: Distance / Average Consumption (Threshold Rounding: >= 0.10 rounds up)
             $vehicle = $itinerary->vehicle ?: $vehicle;
-            $avgConsumption = $vehicle?->average_fuel_consumption ?? $vehicle?->average_consumption;
+            $customAvg = isset($validated['custom_average_consumption']) && is_numeric($validated['custom_average_consumption'])
+                ? (float) $validated['custom_average_consumption']
+                : null;
+            $avgConsumption = $customAvg ?? $vehicle?->average_fuel_consumption ?? $vehicle?->average_consumption;
             $fuelLiters = AdvancedItinerary::calculateFuelLiters($totalDistance, $avgConsumption ? (float) $avgConsumption : null, $calculationMethod);
 
             $itinerary->update([
@@ -407,6 +423,18 @@ class FuelPoController extends Controller
 
         if (! $targetVehicleId) {
             $targetVehicleId = $advancedItinerary->vehicle_id;
+            if ($targetVehicleId) {
+                $vehicle = Vehicle::find($targetVehicleId);
+                $customAvg = isset($validated['custom_average_consumption']) && is_numeric($validated['custom_average_consumption'])
+                    ? (float) $validated['custom_average_consumption']
+                    : null;
+                if ($vehicle && $customAvg !== null && (float) $customAvg > 0) {
+                    $existingAvg = $vehicle->average_fuel_consumption !== null ? round((float) $vehicle->average_fuel_consumption, 2) : null;
+                    if ($existingAvg === null || $existingAvg !== round($customAvg, 2)) {
+                        $vehicle->update(['average_fuel_consumption' => $customAvg]);
+                    }
+                }
+            }
         }
 
         if (! $targetVehicleId) {
@@ -546,7 +574,10 @@ class FuelPoController extends Controller
 
             $advancedItinerary->load('vehicle');
             $vehicle = $advancedItinerary->vehicle ?: $vehicle;
-            $avgConsumption = $vehicle?->average_fuel_consumption ?? $vehicle?->average_consumption;
+            $customAvg = isset($validated['custom_average_consumption']) && is_numeric($validated['custom_average_consumption'])
+                ? (float) $validated['custom_average_consumption']
+                : null;
+            $avgConsumption = $customAvg ?? $vehicle?->average_fuel_consumption ?? $vehicle?->average_consumption;
             $fuelLiters = AdvancedItinerary::calculateFuelLiters($totalDistance, $avgConsumption ? (float) $avgConsumption : null, $calculationMethod);
 
             $advancedItinerary->update([

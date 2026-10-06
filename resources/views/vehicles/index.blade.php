@@ -125,6 +125,7 @@
                             <th scope="col" class="py-3 px-3 whitespace-nowrap">PLATE NUMBER</th>
                             <th scope="col" class="py-3 px-3 whitespace-nowrap">USER</th>
                             <th scope="col" class="py-3 px-3 whitespace-nowrap">PROJECT CODE</th>
+                            <th scope="col" class="py-3 px-3 text-center whitespace-nowrap">AVG FUEL CONSUMPTION</th>
                             <th scope="col" class="py-3 px-3 text-right whitespace-nowrap">ACTIONS</th>
                         </tr>
                     </thead>
@@ -175,6 +176,29 @@
                                     @endif
                                 </td>
 
+                                {{-- AVG FUEL CONSUMPTION --}}
+                                <td class="py-2.5 px-3 text-center whitespace-nowrap">
+                                    @if($vehicle->average_consumption)
+                                        <a href="{{ route('vehicles.edit', $vehicle) }}"
+                                           class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 font-mono hover:bg-blue-100 transition-colors"
+                                           title="Click to edit vehicle fuel consumption">
+                                            {{ number_format($vehicle->average_consumption, 2) }} KM/L
+                                        </a>
+                                    @elseif($vehicle->fuel_display)
+                                        <a href="{{ route('vehicles.edit', $vehicle) }}"
+                                           class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200 transition-colors"
+                                           title="Click to edit vehicle fuel rate">
+                                            {{ $vehicle->fuel_display }}
+                                        </a>
+                                    @else
+                                        <a href="{{ route('vehicles.edit', $vehicle) }}"
+                                           class="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-blue-600 font-medium transition-colors"
+                                           title="Click to set vehicle fuel consumption rate">
+                                            <span class="underline decoration-dotted">Set Rate</span>
+                                        </a>
+                                    @endif
+                                </td>
+
                                 {{-- Actions --}}
                                 <td class="py-2.5 px-3 text-right whitespace-nowrap">
                                     <div class="flex items-center justify-end gap-1">
@@ -207,7 +231,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="7" class="py-14 px-6 text-center">
+                                <td colspan="8" class="py-14 px-6 text-center">
                                     <div class="max-w-sm mx-auto space-y-3">
                                         <div class="h-12 w-12 mx-auto rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
                                             <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">

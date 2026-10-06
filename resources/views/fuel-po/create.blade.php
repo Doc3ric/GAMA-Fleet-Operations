@@ -115,8 +115,9 @@
             <input type="hidden" name="destination" :value="combinedDestination">
             <input type="hidden" name="total_distance" :value="totalCalculatedDistance">
 
-            {{-- Hidden vehicle mode --}}
+            {{-- Hidden vehicle mode & consumption --}}
             <input type="hidden" name="vehicle_mode" :value="vehicleMode">
+            <input type="hidden" name="custom_average_consumption" :value="effectiveAvgConsumption">
 
             {{-- MAIN FORM CARD --}}
             <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs space-y-6">
@@ -245,6 +246,62 @@
                             <span class="font-mono font-semibold text-slate-900" x-text="selectedVehicle?.project_code || '—'"></span>
                         </div>
                     </div>
+
+                    {{-- Editable Average Fuel Consumption Section for Dropdown Mode --}}
+                    <div class="pt-2 border-t border-blue-200/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white/90 rounded-lg p-2.5 border border-blue-200">
+                        <div class="flex items-center gap-2.5">
+                            <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-base"
+                                 :class="dropdownAvgConsumption ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'">
+                                ⛽
+                            </div>
+                            <div>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-xs font-bold text-slate-800 uppercase tracking-wide">
+                                        Average Fuel Consumption <span x-show="calculationMethod === 'multiply'">(Rate)</span><span x-show="calculationMethod !== 'multiply'">(KM/L)</span>
+                                    </span>
+                                    <template x-if="selectedVehicle && !selectedVehicle.average_consumption">
+                                        <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                                            ⚠️ Not Set in Masterlist
+                                        </span>
+                                    </template>
+                                    <template x-if="selectedVehicle && selectedVehicle.average_consumption && dropdownAvgConsumption && parseFloat(dropdownAvgConsumption) !== parseFloat(selectedVehicle.average_consumption)">
+                                        <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-300">
+                                            ✏️ Custom / Modified
+                                        </span>
+                                    </template>
+                                </div>
+                                <p class="text-[11px]">
+                                    <span x-show="selectedVehicle && !selectedVehicle.average_consumption" class="text-amber-700 font-medium">
+                                        No rate found. Enter rate to compute PO liters and save to vehicle record.
+                                    </span>
+                                    <span x-show="selectedVehicle && selectedVehicle.average_consumption" class="text-slate-500">
+                                        Auto-loaded from vehicle record. You can edit/modify rate anytime.
+                                    </span>
+                                </p>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center gap-2 self-start sm:self-center">
+                            <div class="relative w-44">
+                                <input type="number"
+                                       step="0.01"
+                                       min="0.01"
+                                       x-model="dropdownAvgConsumption"
+                                       placeholder="e.g. 5.50"
+                                       class="w-full rounded-lg border-2 px-3 py-1.5 text-xs font-mono font-bold outline-none text-slate-900 transition"
+                                       :class="dropdownAvgConsumption ? 'border-blue-400 bg-white focus:border-blue-600 focus:ring-1 focus:ring-blue-500' : 'border-amber-400 bg-amber-50/80 focus:border-amber-600 focus:bg-white focus:ring-1 focus:ring-amber-500'">
+                                <span class="absolute right-2.5 top-1.5 text-[10px] font-bold text-slate-500 pointer-events-none"
+                                      x-text="calculationMethod === 'multiply' ? 'Rate' : 'KM/L'"></span>
+                            </div>
+                            <button type="button"
+                                    x-show="selectedVehicle && selectedVehicle.average_consumption && dropdownAvgConsumption && parseFloat(dropdownAvgConsumption) !== parseFloat(selectedVehicle.average_consumption)"
+                                    @click="dropdownAvgConsumption = String(selectedVehicle.average_consumption)"
+                                    title="Reset to vehicle masterlist default rate"
+                                    class="text-[11px] text-slate-500 hover:text-blue-700 underline whitespace-nowrap cursor-pointer">
+                                Reset
+                            </button>
+                        </div>
+                    </div>
                 </div>
 
                 {{-- MANUAL SPECIFICATION PROFILE CARD (For Manual Mode) --}}
@@ -266,7 +323,7 @@
                             <label class="block text-[10px] text-slate-600 uppercase font-bold mb-1">
                                 Avg. Cons (KM/L) <span class="text-rose-500">*</span>
                             </label>
-                            <input type="number" step="0.01" min="0.01" name="custom_average_consumption" x-model="manualAvgConsumption" placeholder="e.g. 1.60"
+                            <input type="number" step="0.01" min="0.01" x-model="manualAvgConsumption" placeholder="e.g. 1.60"
                                    class="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900 focus:border-blue-500 outline-none">
                             <span class="text-[9px] text-slate-400 block mt-0.5">Used for Liter for PO</span>
                         </div>
@@ -473,7 +530,7 @@
                                         <span x-show="calculationMethod === 'multiply'">AVE. CONSUMPTION RATE</span>
                                     </td>
                                     <td class="px-4 py-3 font-bold text-blue-700 text-right text-sm">
-                                        <span x-text="averageConsumption ? (parseFloat(averageConsumption).toFixed(2) + (calculationMethod === 'multiply' ? ' (Rate)' : ' KM/L')) : 'Requires Vehicle'"></span>
+                                        <span x-text="averageConsumption ? (parseFloat(averageConsumption).toFixed(2) + (calculationMethod === 'multiply' ? ' (Rate)' : ' KM/L')) : (selectedVehicle || manualEquipmentCode ? '⚠️ Enter Avg Consumption' : 'Requires Vehicle')"></span>
                                     </td>
                                 </tr>
                                 <tr class="bg-amber-100/60">
@@ -528,11 +585,17 @@
                 manualUser: config.initialCustomUser || '',
                 manualProjectCode: config.initialCustomProjectCode || '',
                 manualAvgConsumption: config.initialCustomAvgConsumption || '',
+                dropdownAvgConsumption: config.initialCustomAvgConsumption || '',
                 driverName: config.initialDriverName || '',
                 calculationMethod: config.initialCalculationMethod || 'divide',
                 userOverrodeMethod: Boolean(config.initialCalculationMethod),
 
                 init() {
+                    if (this.vehicleMode === 'dropdown' && this.selectedVehicle) {
+                        if (!this.dropdownAvgConsumption && this.selectedVehicle.average_consumption) {
+                            this.dropdownAvgConsumption = String(this.selectedVehicle.average_consumption);
+                        }
+                    }
                     if (!this.userOverrodeMethod) {
                         const code = this.vehicleMode === 'manual'
                             ? this.manualEquipmentCode
@@ -571,6 +634,9 @@
                         if (!this.driverName || this.driverName.trim() === '') {
                             this.driverName = (this.selectedVehicle.driver_name && this.selectedVehicle.driver_name !== '—') ? this.selectedVehicle.driver_name : '';
                         }
+                        this.dropdownAvgConsumption = this.selectedVehicle.average_consumption ? String(this.selectedVehicle.average_consumption) : '';
+                    } else {
+                        this.dropdownAvgConsumption = '';
                     }
                 },
 
@@ -658,7 +724,18 @@
                         const val = parseFloat(this.manualAvgConsumption);
                         return (!isNaN(val) && val > 0) ? val : null;
                     }
+                    const entered = parseFloat(this.dropdownAvgConsumption);
+                    if (!isNaN(entered) && entered > 0) {
+                        return entered;
+                    }
                     return this.selectedVehicle?.average_consumption || null;
+                },
+
+                get effectiveAvgConsumption() {
+                    if (this.vehicleMode === 'manual') {
+                        return this.manualAvgConsumption || '';
+                    }
+                    return this.dropdownAvgConsumption || '';
                 },
 
                 get totalCalculatedDistance() {

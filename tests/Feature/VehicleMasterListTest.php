@@ -188,12 +188,19 @@ class VehicleMasterListTest extends TestCase
 
     public function test_can_edit_vehicle(): void
     {
-        $vehicle = Vehicle::create(['equipment_code' => 'BH 5', 'gps_status' => 'YES', 'created_by' => $this->user->id]);
+        $vehicle = Vehicle::create([
+            'equipment_code' => 'BH 5',
+            'average_fuel_consumption' => 4.25,
+            'gps_status' => 'YES',
+            'created_by' => $this->user->id,
+        ]);
 
         $response = $this->actingAs($this->user)->get(route('vehicles.edit', $vehicle));
 
         $response->assertOk();
         $response->assertSee('BH 5');
+        $response->assertSee('AVERAGE FUEL CONSUMPTION (KM/L)');
+        $response->assertSee('4.25');
     }
 
     public function test_can_update_vehicle(): void
@@ -213,6 +220,50 @@ class VehicleMasterListTest extends TestCase
 
         $response->assertRedirect(route('vehicles.index'));
         $this->assertDatabaseHas('vehicles', ['id' => $vehicle->id, 'gps_status' => 'EXPIRED', 'location' => 'New Site']);
+    }
+
+    public function test_can_update_vehicle_average_fuel_consumption(): void
+    {
+        $vehicle = Vehicle::create([
+            'equipment_code' => 'SV 12',
+            'average_fuel_consumption' => 3.00,
+            'gps_status' => 'NO',
+            'created_by' => $this->user->id,
+        ]);
+
+        $response = $this->actingAs($this->user)->put(route('vehicles.update', $vehicle), [
+            'equipment_code' => 'SV 12',
+            'average_fuel_consumption' => 4.50,
+            'fuel_min' => 12.0,
+            'fuel_max' => 15.0,
+            'fuel_unit' => 'LIT/HR',
+        ]);
+
+        $response->assertRedirect(route('vehicles.index'));
+        $this->assertDatabaseHas('vehicles', [
+            'id' => $vehicle->id,
+            'average_fuel_consumption' => 4.50,
+            'fuel_min' => 12.0,
+            'fuel_max' => 15.0,
+            'fuel_unit' => 'LIT/HR',
+        ]);
+    }
+
+    public function test_vehicles_index_shows_average_fuel_consumption(): void
+    {
+        Vehicle::create([
+            'equipment_code' => 'SV 12',
+            'model' => 'D-MAX',
+            'average_fuel_consumption' => 3.50,
+            'gps_status' => 'NO',
+            'created_by' => $this->user->id,
+        ]);
+
+        $response = $this->actingAs($this->user)->get(route('vehicles.index'));
+
+        $response->assertOk();
+        $response->assertSee('AVG FUEL CONSUMPTION');
+        $response->assertSee('3.50 KM/L');
     }
 
     public function test_can_delete_vehicle_moves_to_archive_bin(): void

@@ -40,11 +40,23 @@ class FuelPoExport implements FromCollection, WithColumnFormatting, WithColumnWi
 
             $checklistSymbol = $itinerary->po_checked ? '☑' : '☐';
 
+            $eqpt = trim((string) ($vehicle?->equipment_code ?? ''));
+            $plate = trim((string) ($vehicle?->plate_number ?? ''));
+
+            if ($eqpt !== '' && $plate !== '') {
+                $eqptAndPlate = "{$eqpt} - {$plate}";
+            } elseif ($eqpt !== '') {
+                $eqptAndPlate = $eqpt;
+            } elseif ($plate !== '') {
+                $eqptAndPlate = $plate;
+            } else {
+                $eqptAndPlate = '—';
+            }
+
             return [
-                'equipment_code' => $vehicle?->equipment_code ?? '—',
+                'equipment_code' => $eqptAndPlate,
                 'model' => $vehicle?->model ?? '—',
                 'driver' => $itinerary->driver_name,
-                'plate_number' => $vehicle?->plate_number ?? '—',
                 'user' => $vehicle?->user ?? '—',
                 'project_code' => $vehicle?->project_code ?? '—',
                 'destination' => $itinerary->destination_name,
@@ -62,10 +74,9 @@ class FuelPoExport implements FromCollection, WithColumnFormatting, WithColumnWi
     public function headings(): array
     {
         return [
-            'EQPT CODE',
+            'EQPT',
             'MODEL',
             'DRIVER',
-            'PLATE',
             'USER',
             'PROJECT',
             'DESTINATION',
@@ -95,17 +106,16 @@ class FuelPoExport implements FromCollection, WithColumnFormatting, WithColumnWi
     public function columnWidths(): array
     {
         return [
-            'A' => 16, // EQPT CODE
+            'A' => 22, // EQPT (EQPT - PLATE)
             'B' => 18, // MODEL
             'C' => 24, // DRIVER
-            'D' => 16, // PLATE
-            'E' => 18, // USER
-            'F' => 18, // PROJECT
-            'G' => 30, // DESTINATION
-            'H' => 16, // DISTANCE
-            'I' => 20, // AVG CONSUMPTION
-            'J' => 16, // LITER FOR PO
-            'K' => 14, // CHECKLIST
+            'D' => 18, // USER
+            'E' => 18, // PROJECT
+            'F' => 30, // DESTINATION
+            'G' => 16, // DISTANCE
+            'H' => 20, // AVG CONSUMPTION
+            'I' => 16, // LITER FOR PO
+            'J' => 14, // CHECKLIST
         ];
     }
 

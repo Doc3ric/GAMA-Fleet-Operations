@@ -22,6 +22,7 @@ class VehicleTemplateExport implements FromCollection, WithColumnWidths, WithHea
                 'plate_number' => 'KAF 6079',
                 'user' => 'PURCHASING',
                 'project_code' => 'UTILITY VAN',
+                'average_consumption' => '3.00',
             ],
             [
                 'equipment_code' => 'DT 01',
@@ -30,6 +31,7 @@ class VehicleTemplateExport implements FromCollection, WithColumnWidths, WithHea
                 'plate_number' => 'XYZ-5678',
                 'user' => 'OPERATIONS',
                 'project_code' => 'HAULING',
+                'average_consumption' => '2.50',
             ],
             [
                 'equipment_code' => 'BH 5',
@@ -38,6 +40,7 @@ class VehicleTemplateExport implements FromCollection, WithColumnWidths, WithHea
                 'plate_number' => 'ABC-1234',
                 'user' => 'ENGINEERING',
                 'project_code' => 'EXCAVATION',
+                'average_consumption' => '1.80',
             ],
         ]);
     }
@@ -51,6 +54,7 @@ class VehicleTemplateExport implements FromCollection, WithColumnWidths, WithHea
             'PLATE NUMBER',
             'USER',
             'PROJECT CODE',
+            'AVERAGE CONSUMPTION',
         ];
     }
 
@@ -73,6 +77,7 @@ class VehicleTemplateExport implements FromCollection, WithColumnWidths, WithHea
             'D' => 18, // PLATE NUMBER
             'E' => 18, // USER
             'F' => 20, // PROJECT CODE
+            'G' => 24, // AVERAGE CONSUMPTION
         ];
     }
 
