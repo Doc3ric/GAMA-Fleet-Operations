@@ -1409,4 +1409,67 @@ class FuelPoChecklistTest extends TestCase
         // 25 / 5 = 5.0 liters
         $this->assertEquals(5.0, $itinerary->fuel_liters_required);
     }
+
+    public function test_storing_and_updating_itinerary_with_destination_exceeding_255_characters_succeeds(): void
+    {
+        $vehicle = Vehicle::factory()->create([
+            'equipment_code' => 'VH 9003',
+            'average_fuel_consumption' => 4.0,
+        ]);
+
+        // Generate a combined destination string with 10 stops, each ~35 chars (total > 350 chars)
+        $stops = [];
+        $destRows = [];
+        for ($i = 1; $i <= 10; $i++) {
+            $stopName = "09/{$i}/26 - CENTRAL DEPOT OFFICE STOP {$i}";
+            $stops[] = $stopName;
+            $destRows[] = [
+                'name' => $stopName,
+                'distance' => 10.0,
+                'purpose' => "ADMIN WORKS {$i}",
+            ];
+        }
+        $longCombinedDestination = implode(' → ', $stops);
+        $this->assertGreaterThan(255, mb_strlen($longCombinedDestination));
+
+        // 1. Store with long destination
+        $storeResponse = $this->actingAs($this->purchasing)
+            ->post(route('fuel-po.store'), [
+                'itinerary_date' => '2026-10-06',
+                'vehicle_mode' => 'dropdown',
+                'vehicle_id' => $vehicle->id,
+                'destination' => $longCombinedDestination,
+                'total_distance' => 100.0,
+                'status' => 'FINALIZED',
+                'destinations' => $destRows,
+            ]);
+
+        $storeResponse->assertSessionHasNoErrors();
+        $storeResponse->assertRedirect(route('fuel-po.index'));
+
+        $itinerary = AdvancedItinerary::where('vehicle_id', $vehicle->id)->latest('id')->first();
+        $this->assertNotNull($itinerary);
+        $this->assertSame($longCombinedDestination, $itinerary->destination);
+
+        // 2. Update with another long destination (> 255 chars)
+        $updatedLongDestination = $longCombinedDestination.' → FINAL EXTENDED WAREHOUSE DROP POINT';
+        $updateResponse = $this->actingAs($this->purchasing)
+            ->put(route('fuel-po.update', $itinerary), [
+                'itinerary_date' => '2026-10-06',
+                'vehicle_mode' => 'dropdown',
+                'vehicle_id' => $vehicle->id,
+                'destination' => $updatedLongDestination,
+                'total_distance' => 110.0,
+                'status' => 'FINALIZED',
+                'destinations' => array_merge($destRows, [
+                    ['name' => 'FINAL EXTENDED WAREHOUSE DROP POINT', 'distance' => 10.0, 'purpose' => 'FINAL DROP'],
+                ]),
+            ]);
+
+        $updateResponse->assertSessionHasNoErrors();
+        $updateResponse->assertRedirect(route('fuel-po.show', $itinerary));
+
+        $itinerary->refresh();
+        $this->assertSame($updatedLongDestination, $itinerary->destination);
+    }
 }

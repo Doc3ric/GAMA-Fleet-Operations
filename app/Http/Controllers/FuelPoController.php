@@ -161,7 +161,7 @@ class FuelPoController extends Controller
             'custom_project_code' => ['nullable', 'string', 'max:50'],
             'custom_average_consumption' => ['nullable', 'numeric', 'min:0.01'],
             'driver_name' => ['nullable', 'string', 'max:255'],
-            'destination' => ['nullable', 'string', 'max:255'],
+            'destination' => ['nullable', 'string', 'max:65535'],
             'total_distance' => ['nullable', 'numeric', 'min:0'],
             'title' => ['nullable', 'string', 'max:255'],
             'notes' => ['nullable', 'string'],
@@ -244,8 +244,8 @@ class FuelPoController extends Controller
                 }
             }
 
-            if ($destination && mb_strlen($destination) > 255) {
-                $destination = mb_substr($destination, 0, 252).'...';
+            if ($destination && mb_strlen($destination) > 65000) {
+                $destination = mb_substr($destination, 0, 64997).'...';
             }
 
             $vehicle = Vehicle::find($targetVehicleId);
@@ -390,7 +390,7 @@ class FuelPoController extends Controller
             'custom_project_code' => ['nullable', 'string', 'max:50'],
             'custom_average_consumption' => ['nullable', 'numeric', 'min:0.01'],
             'driver_name' => ['nullable', 'string', 'max:255'],
-            'destination' => ['nullable', 'string', 'max:255'],
+            'destination' => ['nullable', 'string', 'max:65535'],
             'total_distance' => ['nullable', 'numeric', 'min:0'],
             'title' => ['nullable', 'string', 'max:255'],
             'notes' => ['nullable', 'string'],
@@ -489,8 +489,8 @@ class FuelPoController extends Controller
                 }
             }
 
-            if ($destination && mb_strlen($destination) > 255) {
-                $destination = mb_substr($destination, 0, 252).'...';
+            if ($destination && mb_strlen($destination) > 65000) {
+                $destination = mb_substr($destination, 0, 64997).'...';
             }
 
             $vehicle = Vehicle::find($targetVehicleId);
