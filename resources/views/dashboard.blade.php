@@ -341,91 +341,355 @@
             </div>
         </div>
 
-        {{-- Recent Reports Table --}}
-        <div class="rounded-2xl bg-white shadow-sm border border-slate-200 overflow-hidden">
-            <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+        {{-- Fuel PO & Consumption Overview Graph Chart --}}
+        <div class="rounded-2xl bg-white dark:bg-slate-900 shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden p-5 sm:p-6 space-y-5"
+             x-data="fuelPoDashboardChart(@js($fuelChartData))"
+             x-init="initChart()">
+
+            {{-- Card Header --}}
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
                 <div class="flex items-center gap-3">
-                    <h2 class="text-sm font-bold text-slate-800">Recent Reports</h2>
-                    <span class="inline-flex items-center rounded-full bg-slate-100 border border-slate-200 px-2.5 py-0.5 text-xs font-medium text-slate-500">
-                        {{ $recentReports->count() }} items logged
-                    </span>
-                </div>
-                <a href="{{ route('reports.index') }}" class="text-xs font-semibold text-blue-600 hover:text-blue-700 transition-colors">View all &rarr;</a>
-            </div>
-
-            @if($recentReports->count() > 0)
-            <div class="grid grid-cols-4 gap-4 px-6 py-2.5 bg-slate-50 border-b border-slate-100">
-                <div class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Report Date</div>
-                <div class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Total Records</div>
-                <div class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Status</div>
-                <div class="text-[10px] font-bold uppercase tracking-widest text-slate-400 text-right">Action</div>
-            </div>
-            @endif
-
-            <div class="divide-y divide-slate-100">
-                @forelse($recentReports as $report)
-                    <div class="grid grid-cols-4 gap-4 items-center px-6 py-4 hover:bg-slate-50/70 transition-colors">
-                        <div class="flex items-center gap-3">
-                            <div class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-500">
-                                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
-                                </svg>
-                            </div>
-                            <div>
-                                <div class="text-sm font-semibold text-slate-800">{{ $report->report_date->format('M j, Y') }}</div>
-                                <div class="text-xs text-slate-400">Processed at 18:30 PM</div>
-                            </div>
-                        </div>
-                        <div>
-                            <span class="inline-flex items-center rounded-lg bg-slate-100 border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600">
-                                {{ number_format($report->long_idling_records_count) }} records
+                    <div class="h-10 w-10 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0 border border-blue-100 dark:border-blue-900">
+                        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
+                        </svg>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h2 class="text-sm sm:text-base font-bold text-slate-900 dark:text-white">Fuel PO & Consumption Overview</h2>
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                                Operations Trend
                             </span>
                         </div>
-                        <div>
-                            @if($report->isCompleted())
-                                <span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1 text-xs font-semibold text-emerald-700">
-                                    <span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>Completed
-                                </span>
-                            @else
-                                <span class="inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-200 px-3 py-1 text-xs font-semibold text-amber-700">
-                                    <span class="h-1.5 w-1.5 rounded-full bg-amber-400"></span>Draft
-                                </span>
-                            @endif
-                        </div>
-                        <div class="flex justify-end">
-                            <a href="{{ route('reports.show', $report) }}"
-                               class="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors">
-                                Open
-                                <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
-                                </svg>
-                            </a>
-                        </div>
+                        <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                            Daily fuel allocation (Liters) vs total logged road distance (KM)
+                        </p>
                     </div>
-                @empty
-                    <div class="px-6 py-12 text-center">
-                        <div class="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-slate-100">
-                            <svg class="h-6 w-6 text-slate-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-                            </svg>
-                        </div>
-                        <p class="text-sm font-medium text-slate-500">No reports yet</p>
-                        <p class="text-xs text-slate-400 mt-1">Create your first Long Idling Report to get started.</p>
-                    </div>
-                @endforelse
-            </div>
+                </div>
 
-            @if($recentReports->count() > 0)
-            <div class="flex items-center justify-between px-6 py-3 border-t border-slate-100 bg-slate-50/50">
-                <p class="text-xs text-slate-400">Showing latest {{ $recentReports->count() }} report cycles</p>
-                <div class="flex items-center gap-1.5 text-xs font-semibold text-emerald-600">
-                    <span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
-                    Sync status: Synchronized
+                {{-- Range Toggles & Quick Actions --}}
+                <div class="flex items-center gap-2.5 flex-wrap">
+                    {{-- 7D / 14D / 30D Filter Pill --}}
+                    <div class="inline-flex rounded-xl p-1 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                        <button type="button"
+                                @click="setPeriod('7d')"
+                                :class="period === '7d' ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-2xs font-bold' : 'text-slate-600 dark:text-slate-400 font-medium hover:text-slate-900 dark:hover:text-white'"
+                                class="px-3 py-1 rounded-lg text-xs transition cursor-pointer">
+                            7 Days
+                        </button>
+                        <button type="button"
+                                @click="setPeriod('14d')"
+                                :class="period === '14d' ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-2xs font-bold' : 'text-slate-600 dark:text-slate-400 font-medium hover:text-slate-900 dark:hover:text-white'"
+                                class="px-3 py-1 rounded-lg text-xs transition cursor-pointer">
+                            14 Days
+                        </button>
+                        <button type="button"
+                                @click="setPeriod('30d')"
+                                :class="period === '30d' ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-2xs font-bold' : 'text-slate-600 dark:text-slate-400 font-medium hover:text-slate-900 dark:hover:text-white'"
+                                class="px-3 py-1 rounded-lg text-xs transition cursor-pointer">
+                            30 Days
+                        </button>
+                    </div>
+
+                    <a href="{{ route('fuel-po.index') }}"
+                       class="inline-flex items-center gap-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/60 transition shadow-2xs">
+                        <span>Checklist</span>
+                        <svg class="h-3 w-3 text-slate-400" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
+                        </svg>
+                    </a>
                 </div>
             </div>
-            @endif
+
+            {{-- Period Mini KPI Summary Cards --}}
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div class="rounded-xl border border-blue-100 dark:border-blue-900/60 bg-blue-50/40 dark:bg-blue-950/20 p-3.5 flex flex-col justify-between">
+                    <span class="text-[11px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-300">Fuel Required</span>
+                    <div class="mt-1 flex items-baseline gap-1">
+                        <span class="text-xl sm:text-2xl font-black font-mono text-blue-900 dark:text-blue-100" x-text="formatNum(activeData.total_liters)"></span>
+                        <span class="text-xs font-semibold text-blue-600 dark:text-blue-400">Liters</span>
+                    </div>
+                    <span class="text-[10px] text-blue-600/80 dark:text-blue-400/80 font-medium" x-text="'Avg ' + activeData.avg_daily_liters + ' L/day'"></span>
+                </div>
+
+                <div class="rounded-xl border border-emerald-100 dark:border-emerald-900/60 bg-emerald-50/40 dark:bg-emerald-950/20 p-3.5 flex flex-col justify-between">
+                    <span class="text-[11px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">Total Distance</span>
+                    <div class="mt-1 flex items-baseline gap-1">
+                        <span class="text-xl sm:text-2xl font-black font-mono text-emerald-900 dark:text-emerald-100" x-text="formatNum(activeData.total_distance)"></span>
+                        <span class="text-xs font-semibold text-emerald-600 dark:text-emerald-400">KM</span>
+                    </div>
+                    <span class="text-[10px] text-emerald-600/80 dark:text-emerald-400/80 font-medium">Logged road distance</span>
+                </div>
+
+                <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 p-3.5 flex flex-col justify-between">
+                    <span class="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Period Efficiency</span>
+                    <div class="mt-1 flex items-baseline gap-1">
+                        <span class="text-xl sm:text-2xl font-black font-mono text-slate-900 dark:text-slate-100" x-text="activeData.avg_efficiency"></span>
+                        <span class="text-xs font-semibold text-slate-500 dark:text-slate-400">km/L</span>
+                    </div>
+                    <span class="text-[10px] text-slate-400 dark:text-slate-500 font-medium">Distance &divide; Liters</span>
+                </div>
+
+                <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 p-3.5 flex flex-col justify-between">
+                    <span class="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Fuel PO Trips</span>
+                    <div class="mt-1 flex items-baseline gap-1">
+                        <span class="text-xl sm:text-2xl font-black font-mono text-slate-900 dark:text-slate-100" x-text="activeData.total_count"></span>
+                        <span class="text-xs font-semibold text-slate-500 dark:text-slate-400">records</span>
+                    </div>
+                    <span class="text-[10px] text-slate-400 dark:text-slate-500 font-medium" x-text="'Across ' + labelText"></span>
+                </div>
+            </div>
+
+            {{-- Chart Canvas --}}
+            <div class="relative w-full pt-2">
+                <div class="h-72 w-full">
+                    <canvas id="fuelPoTrendChart"></canvas>
+                </div>
+
+                {{-- Empty Indicator if all zeros --}}
+                <div x-show="activeData.total_count === 0" x-cloak
+                     class="absolute inset-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-2xs flex flex-col items-center justify-center text-center p-4 rounded-xl">
+                    <div class="h-10 w-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 mb-2">
+                        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
+                        </svg>
+                    </div>
+                    <p class="text-xs font-bold text-slate-700 dark:text-slate-200">No Fuel PO Trips In Selected Period</p>
+                    <p class="text-[11px] text-slate-400 mt-0.5">Create itineraries in Fuel PO Checklist to view live fuel consumption trends.</p>
+                    <a href="{{ route('fuel-po.create') }}"
+                       class="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-700 transition">
+                        + Create First Fuel PO
+                    </a>
+                </div>
+            </div>
+
+            {{-- Legend Footer --}}
+            <div class="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400">
+                <div class="flex items-center gap-4">
+                    <div class="flex items-center gap-1.5">
+                        <span class="h-3 w-3 rounded-sm bg-blue-600"></span>
+                        <span class="font-medium text-slate-700 dark:text-slate-300">Fuel PO Required (Liters)</span>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <span class="h-1 w-3 rounded-full bg-emerald-500"></span>
+                        <span class="font-medium text-slate-700 dark:text-slate-300">Total Distance (KM)</span>
+                    </div>
+                </div>
+
+                <a href="{{ route('fuel-po.index') }}"
+                   class="inline-flex items-center gap-1 font-semibold text-blue-600 dark:text-blue-400 hover:underline">
+                    <span>Manage all Fuel PO entries</span>
+                    <span aria-hidden="true">&rarr;</span>
+                </a>
+            </div>
+
         </div>
 
     </div>
+
+    @push('scripts')
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <script>
+        document.addEventListener('alpine:init', () => {
+            Alpine.data('fuelPoDashboardChart', (chartData) => ({
+                period: '14d',
+                data: chartData,
+                chartInstance: null,
+
+                get activeData() {
+                    return this.data[this.period] || this.data['14d'];
+                },
+
+                get labelText() {
+                    return this.period === '7d' ? 'last 7 days' : (this.period === '14d' ? 'last 14 days' : 'last 30 days');
+                },
+
+                formatNum(val) {
+                    if (!val) return '0';
+                    return Number(val).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 1 });
+                },
+
+                setPeriod(newPeriod) {
+                    this.period = newPeriod;
+                    this.updateChart();
+                },
+
+                isDarkMode() {
+                    return document.documentElement.classList.contains('dark');
+                },
+
+                initChart() {
+                    this.$nextTick(() => {
+                        const ctx = document.getElementById('fuelPoTrendChart');
+                        if (!ctx || typeof Chart === 'undefined') return;
+
+                        const dark = this.isDarkMode();
+                        const gridColor = dark ? 'rgba(51, 65, 85, 0.4)' : 'rgba(226, 232, 240, 0.8)';
+                        const textColor = dark ? '#94a3b8' : '#64748b';
+
+                        const current = this.activeData;
+
+                        this.chartInstance = new Chart(ctx, {
+                            type: 'bar',
+                            data: {
+                                labels: current.labels,
+                                datasets: [
+                                    {
+                                        type: 'bar',
+                                        label: 'Fuel Required',
+                                        data: current.liters,
+                                        backgroundColor: dark ? 'rgba(59, 130, 246, 0.85)' : 'rgba(37, 99, 235, 0.85)',
+                                        hoverBackgroundColor: dark ? '#60a5fa' : '#1d4ed8',
+                                        borderRadius: 6,
+                                        yAxisID: 'yLiters',
+                                        order: 2,
+                                        maxBarThickness: 32,
+                                    },
+                                    {
+                                        type: 'line',
+                                        label: 'Total Distance',
+                                        data: current.distance,
+                                        borderColor: dark ? '#34d399' : '#059669',
+                                        backgroundColor: dark ? 'rgba(16, 185, 129, 0.12)' : 'rgba(16, 185, 129, 0.08)',
+                                        borderWidth: 2.5,
+                                        tension: 0.35,
+                                        pointRadius: current.labels.length > 14 ? 2 : 4,
+                                        pointHoverRadius: 6,
+                                        pointBackgroundColor: dark ? '#34d399' : '#059669',
+                                        fill: true,
+                                        yAxisID: 'yDistance',
+                                        order: 1,
+                                    }
+                                ]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                interaction: {
+                                    mode: 'index',
+                                    intersect: false,
+                                },
+                                plugins: {
+                                    legend: {
+                                        display: false,
+                                    },
+                                    tooltip: {
+                                        backgroundColor: dark ? '#0f172a' : '#1e293b',
+                                        titleColor: '#ffffff',
+                                        bodyColor: '#e2e8f0',
+                                        borderColor: dark ? '#334155' : '#475569',
+                                        borderWidth: 1,
+                                        padding: 10,
+                                        boxPadding: 4,
+                                        usePointStyle: true,
+                                        callbacks: {
+                                            label: function(context) {
+                                                const label = context.dataset.label || '';
+                                                const val = Number(context.parsed.y).toLocaleString(undefined, { maximumFractionDigits: 1 });
+                                                if (context.datasetIndex === 0) {
+                                                    return ` ⛽ ${label}: ${val} L`;
+                                                }
+                                                return ` 🛣️ ${label}: ${val} km`;
+                                            }
+                                        }
+                                    }
+                                },
+                                scales: {
+                                    x: {
+                                        grid: {
+                                            display: false,
+                                        },
+                                        ticks: {
+                                            color: textColor,
+                                            font: {
+                                                size: 11,
+                                                weight: '500',
+                                            },
+                                            maxRotation: 0,
+                                        }
+                                    },
+                                    yLiters: {
+                                        type: 'linear',
+                                        display: true,
+                                        position: 'left',
+                                        beginAtZero: true,
+                                        grid: {
+                                            color: gridColor,
+                                            drawBorder: false,
+                                        },
+                                        ticks: {
+                                            color: textColor,
+                                            font: {
+                                                size: 10,
+                                            },
+                                            callback: (v) => v + ' L',
+                                        },
+                                        title: {
+                                            display: true,
+                                            text: 'Liters (L)',
+                                            color: dark ? '#60a5fa' : '#2563eb',
+                                            font: { size: 10, weight: 'bold' },
+                                        }
+                                    },
+                                    yDistance: {
+                                        type: 'linear',
+                                        display: true,
+                                        position: 'right',
+                                        beginAtZero: true,
+                                        grid: {
+                                            display: false,
+                                        },
+                                        ticks: {
+                                            color: textColor,
+                                            font: {
+                                                size: 10,
+                                            },
+                                            callback: (v) => v + ' km',
+                                        },
+                                        title: {
+                                            display: true,
+                                            text: 'Distance (KM)',
+                                            color: dark ? '#34d399' : '#059669',
+                                            font: { size: 10, weight: 'bold' },
+                                        }
+                                    }
+                                }
+                            }
+                        });
+
+                        // Theme change listener
+                        const observer = new MutationObserver(() => {
+                            this.updateTheme();
+                        });
+                        observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+                    });
+                },
+
+                updateChart() {
+                    if (!this.chartInstance) return;
+                    const current = this.activeData;
+                    this.chartInstance.data.labels = current.labels;
+                    this.chartInstance.data.datasets[0].data = current.liters;
+                    this.chartInstance.data.datasets[1].data = current.distance;
+                    this.chartInstance.data.datasets[1].pointRadius = current.labels.length > 14 ? 2 : 4;
+                    this.chartInstance.update();
+                },
+
+                updateTheme() {
+                    if (!this.chartInstance) return;
+                    const dark = this.isDarkMode();
+                    const gridColor = dark ? 'rgba(51, 65, 85, 0.4)' : 'rgba(226, 232, 240, 0.8)';
+                    const textColor = dark ? '#94a3b8' : '#64748b';
+
+                    this.chartInstance.options.scales.x.ticks.color = textColor;
+                    this.chartInstance.options.scales.yLiters.ticks.color = textColor;
+                    this.chartInstance.options.scales.yLiters.grid.color = gridColor;
+                    this.chartInstance.options.scales.yDistance.ticks.color = textColor;
+                    this.chartInstance.update();
+                }
+            }));
+        });
+    </script>
+    @endpush
 
 </x-app-layout>

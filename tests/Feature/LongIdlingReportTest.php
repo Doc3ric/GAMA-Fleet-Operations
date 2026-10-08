@@ -3,9 +3,11 @@
 namespace Tests\Feature;
 
 use App\Livewire\LongIdlingTable;
+use App\Models\AdvancedItinerary;
 use App\Models\LongIdlingRecord;
 use App\Models\Report;
 use App\Models\User;
+use App\Models\Vehicle;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -30,6 +32,39 @@ class LongIdlingReportTest extends TestCase
         $response->assertOk();
         $response->assertSee('GAMA');
         $response->assertSee('Fleet Operations');
+        $response->assertSee('Fuel PO & Consumption Overview', false);
+        $response->assertSee('fuelPoTrendChart');
+        $response->assertDontSee('Recent Reports');
+        $response->assertDontSee('items logged');
+        $response->assertViewHas('fuelChartData');
+    }
+
+    public function test_dashboard_fuel_chart_aggregates_recent_itineraries(): void
+    {
+        $vehicle = Vehicle::factory()->create();
+
+        // Create an itinerary for today
+        AdvancedItinerary::factory()->create([
+            'vehicle_id' => $vehicle->id,
+            'itinerary_date' => now()->toDateString(),
+            'total_distance' => 120.0,
+            'fuel_liters_required' => 35.0,
+        ]);
+
+        $response = $this->actingAs($this->user)->get(route('dashboard'));
+        $response->assertOk();
+
+        $chartData = $response->viewData('fuelChartData');
+        $this->assertIsArray($chartData);
+        $this->assertArrayHasKey('7d', $chartData);
+        $this->assertArrayHasKey('14d', $chartData);
+        $this->assertArrayHasKey('30d', $chartData);
+
+        // Verify the 7d period aggregates the created itinerary
+        $this->assertEquals(35.0, $chartData['7d']['total_liters']);
+        $this->assertEquals(120.0, $chartData['7d']['total_distance']);
+        $this->assertEquals(1, $chartData['7d']['total_count']);
+        $this->assertEquals(round(120.0 / 35.0, 2), $chartData['7d']['avg_efficiency']);
     }
 
     public function test_authenticated_user_can_view_reports_index(): void

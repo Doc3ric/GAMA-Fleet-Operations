@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AdvancedItinerary;
 use App\Models\FuelConsumptionTest;
 use App\Models\LongIdlingRecord;
 use App\Models\Report;
@@ -29,11 +30,62 @@ class DashboardController extends Controller
             ->whereDate('report_date', $today)
             ->count();
 
-        $recentReports = Report::where('created_by', $userId)
-            ->orderByDesc('report_date')
-            ->withCount('longIdlingRecords')
-            ->take(7)
+        // ─── Fuel PO & Consumption Trend Series (30D, 14D, 7D) ──────────────
+        $daysCount = 30;
+        $endDate = Carbon::today();
+        $startDate = $endDate->copy()->subDays($daysCount - 1);
+
+        $itineraries = AdvancedItinerary::whereDate('itinerary_date', '>=', $startDate)
+            ->whereDate('itinerary_date', '<=', $endDate)
+            ->with('vehicle')
             ->get();
+
+        $groupedByDate = $itineraries->groupBy(fn (AdvancedItinerary $it) => Carbon::parse($it->itinerary_date)->format('Y-m-d'));
+
+        $fullSeries = [];
+        for ($i = $daysCount - 1; $i >= 0; $i--) {
+            $currDate = $endDate->copy()->subDays($i);
+            $key = $currDate->format('Y-m-d');
+            $dayItineraries = $groupedByDate->get($key, collect());
+
+            $fuelLiters = (float) $dayItineraries->sum(fn (AdvancedItinerary $it) => $it->fuel_liters ?? 0.0);
+            $distance = (float) $dayItineraries->sum(fn (AdvancedItinerary $it) => $it->total_distance ?? 0.0);
+            $count = $dayItineraries->count();
+
+            $fullSeries[] = [
+                'date' => $key,
+                'short_label' => $currDate->format('M d'),
+                'day_name' => $currDate->format('D'),
+                'fuel_liters' => round($fuelLiters, 2),
+                'distance' => round($distance, 2),
+                'count' => $count,
+            ];
+        }
+
+        $buildPeriodData = function (int $sliceCount) use ($fullSeries): array {
+            $slice = array_slice($fullSeries, -$sliceCount);
+            $totalLiters = array_sum(array_column($slice, 'fuel_liters'));
+            $totalDistance = array_sum(array_column($slice, 'distance'));
+            $totalCount = array_sum(array_column($slice, 'count'));
+            $avgEfficiency = $totalLiters > 0 ? round($totalDistance / $totalLiters, 2) : 0.0;
+
+            return [
+                'labels' => array_column($slice, 'short_label'),
+                'liters' => array_column($slice, 'fuel_liters'),
+                'distance' => array_column($slice, 'distance'),
+                'total_liters' => round($totalLiters, 2),
+                'total_distance' => round($totalDistance, 2),
+                'total_count' => $totalCount,
+                'avg_efficiency' => $avgEfficiency,
+                'avg_daily_liters' => round($totalLiters / max(1, $sliceCount), 1),
+            ];
+        };
+
+        $fuelChartData = [
+            '7d' => $buildPeriodData(7),
+            '14d' => $buildPeriodData(14),
+            '30d' => $buildPeriodData(30),
+        ];
 
         $fuelTestCount = FuelConsumptionTest::count();
         $fleetAvgKmL = $fuelTestCount > 0 ? (float) FuelConsumptionTest::avg('average_fuel_consumption') : 0.0;
@@ -81,7 +133,7 @@ class DashboardController extends Controller
             'totalReports',
             'totalRecords',
             'completedToday',
-            'recentReports',
+            'fuelChartData',
             'fuelTestCount',
             'fleetAvgKmL',
             'latestFuelTest',
