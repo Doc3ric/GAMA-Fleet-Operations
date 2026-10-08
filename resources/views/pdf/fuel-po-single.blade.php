@@ -160,9 +160,10 @@
         <thead>
             <tr>
                 <th style="width: 5%; text-align: center;">#</th>
-                <th style="width: 25%;">Origin Location</th>
-                <th style="width: 25%;">Starting Point</th>
-                <th style="width: 25%;">Destination</th>
+                <th style="width: 20%;">Origin Location</th>
+                <th style="width: 20%;">Starting Point</th>
+                <th style="width: 20%;">Destination</th>
+                <th style="width: 15%;">Purpose / Cargo</th>
                 <th style="width: 10%; text-align: right;">Distance</th>
                 <th style="width: 10%; text-align: center;">Source</th>
             </tr>
@@ -174,12 +175,13 @@
                     <td>{{ $leg->origin?->official_name ?? '—' }}</td>
                     <td>{{ $leg->startingPoint?->official_name ?? '—' }}</td>
                     <td style="font-weight: bold;">{{ $leg->destination?->official_name ?? '—' }}</td>
+                    <td>{{ $leg->purpose ?? '—' }}</td>
                     <td style="text-align: right; font-family: monospace;">{{ $leg->total_distance !== null ? number_format($leg->total_distance, 2) . ' km' : '—' }}</td>
                     <td style="text-align: center; text-transform: uppercase;">{{ $leg->routing_source ?? 'manual' }}</td>
                 </tr>
             @empty
                 <tr>
-                    <td colspan="6" style="text-align: center; padding: 10px; color: #64748b;">No legs recorded.</td>
+                    <td colspan="7" style="text-align: center; padding: 10px; color: #64748b;">No legs recorded.</td>
                 </tr>
             @endforelse
         </tbody>

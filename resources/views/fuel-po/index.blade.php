@@ -1010,6 +1010,7 @@
                             <th class="px-3 py-3">Driver</th>
                             <th class="px-3 py-3">User</th>
                             <th class="px-3 py-3">Destination</th>
+                            <th class="px-3 py-3">Purpose / Cargo</th>
                             <th class="px-3 py-3 text-right">Distance</th>
                             <th class="px-3 py-3 text-right">Avg. Consumption</th>
                             <th class="px-3 py-3 text-right">Liter for PO</th>
@@ -1083,6 +1084,15 @@
                                     @endif
                                 </td>
 
+                                {{-- 5.1 Purpose / Cargo --}}
+                                <td class="px-3 py-3">
+                                    @if($po->purpose_cargo !== '—')
+                                        <span class="text-slate-800 font-medium block max-w-xs truncate" title="{{ $po->purpose_cargo }}">{{ $po->purpose_cargo }}</span>
+                                    @else
+                                        <span class="text-slate-400">—</span>
+                                    @endif
+                                </td>
+
                                 {{-- 6. Distance --}}
                                 <td class="px-3 py-3 text-right font-mono font-semibold text-slate-900">
                                     {{ number_format($po->total_distance, 2) }} KM
@@ -1131,16 +1141,16 @@
                                 <td class="px-4 py-3 text-right">
                                     <div class="flex items-center justify-end gap-1.5">
                                         <a href="{{ route('fuel-po.pdf', $po) }}" target="_blank"
-                                           class="inline-flex items-center gap-1 rounded-lg border border-red-200/60 bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100 transition shadow-2xs"
-                                           title="Download PDF (Will NOT check checklist)">
+                                            class="inline-flex items-center gap-1 rounded-lg border border-red-200/60 bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100 transition shadow-2xs"
+                                            title="Download PDF (Will NOT check checklist)">
                                             <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                                                 <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
                                             </svg>
                                             <span>PDF</span>
                                         </a>
                                         <a href="{{ route('fuel-po.show', $po) }}"
-                                           class="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition shadow-2xs"
-                                           title="View Details">
+                                            class="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition shadow-2xs"
+                                            title="View Details">
                                             <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                                                 <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
                                                 <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
@@ -1148,8 +1158,8 @@
                                             <span>View</span>
                                         </a>
                                         <a href="{{ route('fuel-po.edit', $po) }}"
-                                           class="inline-flex items-center gap-1 rounded-lg border border-blue-200/60 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100 transition shadow-2xs"
-                                           title="Edit Fuel PO">
+                                            class="inline-flex items-center gap-1 rounded-lg border border-blue-200/60 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100 transition shadow-2xs"
+                                            title="Edit Fuel PO">
                                             <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                                                 <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
                                             </svg>
@@ -1171,7 +1181,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="11" class="px-4 py-12 text-center text-slate-500">
+                                <td colspan="12" class="px-4 py-12 text-center text-slate-500">
                                     <div class="max-w-sm mx-auto space-y-2">
                                         <div class="h-12 w-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
                                             <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">

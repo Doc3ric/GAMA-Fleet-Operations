@@ -828,6 +828,9 @@ class FuelPoController extends Controller
                     })
                     ->orWhereHas('legs.destination', function (Builder $dq) use ($search) {
                         $dq->where('official_name', 'like', "%{$search}%");
+                    })
+                    ->orWhereHas('legs', function (Builder $lq) use ($search) {
+                        $lq->where('purpose', 'like', "%{$search}%");
                     });
             });
         }

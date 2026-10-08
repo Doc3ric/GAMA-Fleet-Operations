@@ -60,6 +60,7 @@ class FuelPoExport implements FromCollection, WithColumnFormatting, WithColumnWi
                 'user' => $vehicle?->user ?? '—',
                 'project_code' => $vehicle?->project_code ?? '—',
                 'destination' => $itinerary->destination_name,
+                'purpose_cargo' => $itinerary->purpose_cargo,
                 'distance' => number_format($itinerary->total_distance, 2).' KM',
                 'avg_consumption' => $avgConsumption !== null ? number_format($avgConsumption, 2).' KM/L' : '—',
                 'liter_for_po' => $fuelLiters !== null ? ((float) $fuelLiters == round($fuelLiters) ? number_format($fuelLiters, 0) : number_format($fuelLiters, 2)).' L' : '—',
@@ -80,6 +81,7 @@ class FuelPoExport implements FromCollection, WithColumnFormatting, WithColumnWi
             'USER',
             'PROJECT',
             'DESTINATION',
+            'PURPOSE / CARGO',
             'DISTANCE',
             'AVG CONSUMPTION',
             'LITER FOR PO',
@@ -112,10 +114,11 @@ class FuelPoExport implements FromCollection, WithColumnFormatting, WithColumnWi
             'D' => 18, // USER
             'E' => 18, // PROJECT
             'F' => 30, // DESTINATION
-            'G' => 16, // DISTANCE
-            'H' => 20, // AVG CONSUMPTION
-            'I' => 16, // LITER FOR PO
-            'J' => 14, // CHECKLIST
+            'G' => 32, // PURPOSE / CARGO
+            'H' => 16, // DISTANCE
+            'I' => 20, // AVG CONSUMPTION
+            'J' => 16, // LITER FOR PO
+            'K' => 14, // CHECKLIST
         ];
     }
 

@@ -463,7 +463,9 @@ class FuelPoChecklistTest extends TestCase
         $this->assertEquals('☐', $rowUnchecked['checklist']);
         $this->assertEquals('EX-CH-01 - XYZ-5678', $rowChecked['equipment_code']);
         $this->assertContains('EQPT', $export->headings());
+        $this->assertContains('PURPOSE / CARGO', $export->headings());
         $this->assertContains('CHECKLIST', $export->headings());
+        $this->assertArrayHasKey('purpose_cargo', $rowChecked);
     }
 
     public function test_vehicle_master_stores_user_and_average_fuel_consumption(): void
@@ -1616,5 +1618,86 @@ class FuelPoChecklistTest extends TestCase
 
         // Check dropdown has CHECKED selected
         $response->assertSee('<option value="checked" selected>☑ CHECKED Only</option>', false);
+    }
+
+    public function test_fuel_po_exports_and_table_include_purpose_cargo(): void
+    {
+        $vehicle = Vehicle::factory()->create([
+            'equipment_code' => 'VH-PURPOSE-01',
+            'plate_number' => 'PUR-1234',
+        ]);
+
+        $locA = Location::factory()->create(['official_name' => 'Depot Alpha']);
+        $locB = Location::factory()->create(['official_name' => 'Site Bravo']);
+
+        // Itinerary with multiple distinct leg purposes
+        $itinerary = AdvancedItinerary::factory()->create([
+            'vehicle_id' => $vehicle->id,
+            'driver_name' => 'Cargo Hauler',
+            'destination' => 'Depot Alpha → Site Bravo',
+            'fuel_liters_required' => 55.0,
+            'po_checked' => false,
+        ]);
+
+        AdvancedItineraryLeg::factory()->create([
+            'advanced_itinerary_id' => $itinerary->id,
+            'sort_order' => 0,
+            'destination_location_id' => $locA->id,
+            'purpose' => 'Deliver Bulk Feed',
+        ]);
+
+        AdvancedItineraryLeg::factory()->create([
+            'advanced_itinerary_id' => $itinerary->id,
+            'sort_order' => 1,
+            'destination_location_id' => $locB->id,
+            'purpose' => 'Pickup Raw Corn',
+        ]);
+
+        // Itinerary with purpose identical to destination (should fallback to em-dash)
+        $itineraryFallback = AdvancedItinerary::factory()->create([
+            'vehicle_id' => $vehicle->id,
+            'driver_name' => 'General Driver',
+            'destination' => 'Depot Alpha',
+            'fuel_liters_required' => 15.0,
+            'po_checked' => true,
+        ]);
+
+        AdvancedItineraryLeg::factory()->create([
+            'advanced_itinerary_id' => $itineraryFallback->id,
+            'sort_order' => 0,
+            'destination_location_id' => $locA->id,
+            'purpose' => 'Depot Alpha',
+        ]);
+
+        // 1. Verify model accessor
+        $this->assertEquals('Deliver Bulk Feed; Pickup Raw Corn', $itinerary->purpose_cargo);
+        $this->assertEquals('—', $itineraryFallback->purpose_cargo);
+
+        // 2. Verify Excel Export
+        $export = new FuelPoExport(AdvancedItinerary::query()->whereIn('id', [$itinerary->id, $itineraryFallback->id]));
+        $rows = $export->collection();
+        $this->assertContains('PURPOSE / CARGO', $export->headings());
+
+        $row1 = $rows->firstWhere('driver', 'Cargo Hauler');
+        $row2 = $rows->firstWhere('driver', 'General Driver');
+
+        $this->assertNotNull($row1);
+        $this->assertNotNull($row2);
+        $this->assertEquals('Deliver Bulk Feed; Pickup Raw Corn', $row1['purpose_cargo']);
+        $this->assertEquals('—', $row2['purpose_cargo']);
+
+        // 3. Verify Web Table (Index view)
+        $response = $this->actingAs($this->purchasing)
+            ->get(route('fuel-po.index', ['po_status' => 'all']));
+
+        $response->assertOk()
+            ->assertSee('Purpose / Cargo')
+            ->assertSee('Deliver Bulk Feed; Pickup Raw Corn');
+
+        // 4. Verify PDF export endpoint succeeds
+        $pdfResponse = $this->actingAs($this->purchasing)
+            ->get(route('fuel-po.export-pdf', ['ids' => "{$itinerary->id},{$itineraryFallback->id}"]));
+
+        $pdfResponse->assertOk();
     }
 }

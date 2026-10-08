@@ -188,18 +188,19 @@
     <table class="data-table">
         <thead>
             <tr>
-                <th style="width: 4%;" class="text-center">#</th>
-                <th style="width: 8%;">EQPT CODE</th>
-                <th style="width: 9%;">MODEL</th>
-                <th style="width: 12%;">DRIVER</th>
-                <th style="width: 9%;">PLATE</th>
-                <th style="width: 9%;">USER</th>
-                <th style="width: 10%;">PROJECT</th>
-                <th style="width: 15%;">DESTINATION</th>
-                <th style="width: 8%;" class="text-right">DISTANCE</th>
-                <th style="width: 8%;" class="text-right">AVG CONSUMP</th>
-                <th style="width: 8%;" class="text-right">LITER FOR PO</th>
-                <th style="width: 6%;" class="text-center">CHECKLIST</th>
+                <th style="width: 3%;" class="text-center">#</th>
+                <th style="width: 7%;">EQPT CODE</th>
+                <th style="width: 8%;">MODEL</th>
+                <th style="width: 10%;">DRIVER</th>
+                <th style="width: 8%;">PLATE</th>
+                <th style="width: 7%;">USER</th>
+                <th style="width: 7%;">PROJECT</th>
+                <th style="width: 14%;">DESTINATION</th>
+                <th style="width: 14%;">PURPOSE / CARGO</th>
+                <th style="width: 7%;" class="text-right">DISTANCE</th>
+                <th style="width: 7%;" class="text-right">AVG CONSUMP</th>
+                <th style="width: 5%;" class="text-right">LITER FOR PO</th>
+                <th style="width: 3%;" class="text-center">CHECKLIST</th>
             </tr>
         </thead>
         <tbody>
@@ -218,6 +219,7 @@
                     <td>{{ $vehicle?->user ?? '—' }}</td>
                     <td>{{ $vehicle?->project_code ?? '—' }}</td>
                     <td>{{ $itinerary->destination_name }}</td>
+                    <td>{{ $itinerary->purpose_cargo }}</td>
                     <td class="text-right font-mono">{{ number_format($itinerary->total_distance, 2) }} KM</td>
                     <td class="text-right font-mono">{{ $avgConsumption !== null ? number_format($avgConsumption, 2) . ' KM/L' : '—' }}</td>
                     <td class="text-right font-mono font-bold" style="color: #1e3a8a;">
@@ -233,7 +235,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="12" class="text-center" style="padding: 15px; color: #64748b;">
+                    <td colspan="13" class="text-center" style="padding: 15px; color: #64748b;">
                         No itinerary records found for fuel PO processing.
                     </td>
                 </tr>

@@ -144,6 +144,45 @@ class AdvancedItinerary extends Model
         return $lastLeg->destination?->official_name ?? $lastLeg->purpose ?? '—';
     }
 
+    public function getPurposeCargoAttribute(): string
+    {
+        $legs = $this->relationLoaded('legs') ? $this->legs : $this->legs()->with('destination')->get();
+
+        if ($legs->isEmpty()) {
+            return '—';
+        }
+
+        $destParts = $this->destination ? array_map('trim', explode(' → ', $this->destination)) : [];
+
+        $purposes = [];
+        foreach ($legs as $i => $leg) {
+            $rawPurpose = trim((string) ($leg->purpose ?? ''));
+            if ($rawPurpose === '') {
+                continue;
+            }
+
+            $destName = trim((string) ($leg->destination?->official_name ?? ($destParts[$i] ?? '')));
+
+            if ($destName !== '' && strcasecmp($rawPurpose, $destName) === 0) {
+                continue;
+            }
+
+            if ($this->destination && strcasecmp($rawPurpose, trim((string) $this->destination)) === 0) {
+                continue;
+            }
+
+            $purposes[] = $rawPurpose;
+        }
+
+        $unique = array_values(array_unique($purposes));
+
+        if (empty($unique)) {
+            return '—';
+        }
+
+        return implode('; ', $unique);
+    }
+
     public function getDriverNameAttribute(): string
     {
         if (! empty($this->attributes['driver_name'])) {
