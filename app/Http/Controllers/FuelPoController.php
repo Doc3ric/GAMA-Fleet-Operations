@@ -30,6 +30,15 @@ class FuelPoController extends Controller
 
         [$preloadedImport, $preloadedImportError] = $this->resolveBridgedImport($request);
 
+        $currentPoStatus = $request->input('po_status');
+        if (empty($currentPoStatus)) {
+            $currentPoStatus = 'unchecked';
+        }
+
+        // Precompute base metrics across all checklist states (honoring search, vehicle, dates)
+        $baseQuery = $this->buildFilterQuery($request, ignorePoStatus: true);
+        $baseMatching = (clone $baseQuery)->get();
+
         $query = $this->buildFilterQuery($request);
 
         // Precompute metrics before pagination
@@ -42,9 +51,9 @@ class FuelPoController extends Controller
         });
 
         $metrics = [
-            'total_count' => $allMatching->count(),
-            'checked_count' => $allMatching->where('po_checked', true)->count(),
-            'unchecked_count' => $allMatching->filter(fn (AdvancedItinerary $it) => ! $it->po_checked)->count(),
+            'total_count' => $baseMatching->count(),
+            'checked_count' => $baseMatching->where('po_checked', true)->count(),
+            'unchecked_count' => $baseMatching->filter(fn (AdvancedItinerary $it) => ! $it->po_checked)->count(),
             'total_fuel_liters' => $totalFuelLiters,
             'total_distance' => $totalDistance,
         ];
@@ -61,7 +70,7 @@ class FuelPoController extends Controller
         $records = $query->paginate($perPage)->withQueryString();
         $vehicles = Vehicle::orderBy('equipment_code')->get(['id', 'equipment_code', 'plate_number', 'model']);
 
-        return view('fuel-po.index', compact('records', 'vehicles', 'metrics', 'preloadedImport', 'preloadedImportError'));
+        return view('fuel-po.index', compact('records', 'vehicles', 'metrics', 'preloadedImport', 'preloadedImportError', 'currentPoStatus'));
     }
 
     public function create(): View
@@ -789,7 +798,7 @@ class FuelPoController extends Controller
      *
      * @return Builder<AdvancedItinerary>
      */
-    protected function buildFilterQuery(Request $request): Builder
+    protected function buildFilterQuery(Request $request, bool $ignorePoStatus = false): Builder
     {
         $query = AdvancedItinerary::with([
             'vehicle',
@@ -831,7 +840,15 @@ class FuelPoController extends Controller
             $query->where('status', $status);
         }
 
-        if ($poStatus = $request->input('po_status')) {
+        if (! $ignorePoStatus) {
+            $poStatus = $request->input('po_status');
+
+            if ($request->filled('ids') && empty($poStatus)) {
+                $poStatus = 'all';
+            } elseif (empty($poStatus)) {
+                $poStatus = 'unchecked';
+            }
+
             if ($poStatus === 'checked') {
                 $query->where('po_checked', true);
             } elseif ($poStatus === 'unchecked') {
@@ -839,6 +856,7 @@ class FuelPoController extends Controller
                     $q->where('po_checked', false)->orWhereNull('po_checked');
                 });
             }
+            // If $poStatus === 'all', no restriction is applied
         }
 
         if ($dateFrom = $request->input('date_from')) {

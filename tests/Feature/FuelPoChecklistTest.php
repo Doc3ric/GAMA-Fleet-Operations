@@ -1513,4 +1513,108 @@ class FuelPoChecklistTest extends TestCase
             $this->assertFalse((bool) $record->po_checked);
         }
     }
+
+    public function test_fuel_po_index_defaults_to_unchecked_only_filter(): void
+    {
+        $vehicle = Vehicle::factory()->create(['equipment_code' => 'VH-DEFAULT-TEST']);
+
+        $uncheckedItinerary = AdvancedItinerary::factory()->create([
+            'vehicle_id' => $vehicle->id,
+            'title' => 'Pending Trip For Review',
+            'po_checked' => false,
+        ]);
+
+        $checkedItinerary = AdvancedItinerary::factory()->create([
+            'vehicle_id' => $vehicle->id,
+            'title' => 'Completed Trip PO Done',
+            'po_checked' => true,
+        ]);
+
+        // Access route with NO query string parameters
+        $response = $this->actingAs($this->purchasing)
+            ->get(route('fuel-po.index'));
+
+        $response->assertOk();
+        $response->assertSee('Viewing UNCHECKED (Pending) Fuel PO Checklist');
+        $response->assertSee('Pending Trip For Review');
+        $response->assertDontSee('Completed Trip PO Done');
+
+        $records = $response->viewData('records');
+        $this->assertCount(1, $records);
+        $this->assertEquals($uncheckedItinerary->id, $records->first()->id);
+
+        $metrics = $response->viewData('metrics');
+        $this->assertEquals(2, $metrics['total_count']);
+        $this->assertEquals(1, $metrics['checked_count']);
+        $this->assertEquals(1, $metrics['unchecked_count']);
+
+        // Check dropdown has UNCHECKED selected by default
+        $response->assertSee('<option value="unchecked" selected>☐ UNCHECKED Only</option>', false);
+    }
+
+    public function test_fuel_po_index_can_view_all_statuses_via_filter(): void
+    {
+        $vehicle = Vehicle::factory()->create(['equipment_code' => 'VH-ALL-TEST']);
+
+        $uncheckedItinerary = AdvancedItinerary::factory()->create([
+            'vehicle_id' => $vehicle->id,
+            'title' => 'Pending Trip In All',
+            'po_checked' => false,
+        ]);
+
+        $checkedItinerary = AdvancedItinerary::factory()->create([
+            'vehicle_id' => $vehicle->id,
+            'title' => 'Completed Trip In All',
+            'po_checked' => true,
+        ]);
+
+        // Explicitly view all statuses
+        $response = $this->actingAs($this->purchasing)
+            ->get(route('fuel-po.index', ['po_status' => 'all']));
+
+        $response->assertOk();
+        $response->assertDontSee('Viewing UNCHECKED (Pending) Fuel PO Checklist');
+        $response->assertDontSee('Viewing CHECKED Fuel PO Checklist');
+        $response->assertSee('Pending Trip In All');
+        $response->assertSee('Completed Trip In All');
+
+        $records = $response->viewData('records');
+        $this->assertCount(2, $records);
+
+        // Check dropdown has All Statuses selected
+        $response->assertSee('<option value="all" selected>All Statuses</option>', false);
+    }
+
+    public function test_fuel_po_index_can_view_checked_only_via_filter(): void
+    {
+        $vehicle = Vehicle::factory()->create(['equipment_code' => 'VH-CHK-TEST']);
+
+        $uncheckedItinerary = AdvancedItinerary::factory()->create([
+            'vehicle_id' => $vehicle->id,
+            'title' => 'Pending Trip Excluded',
+            'po_checked' => false,
+        ]);
+
+        $checkedItinerary = AdvancedItinerary::factory()->create([
+            'vehicle_id' => $vehicle->id,
+            'title' => 'Completed Trip Included',
+            'po_checked' => true,
+        ]);
+
+        // Explicitly view checked only
+        $response = $this->actingAs($this->purchasing)
+            ->get(route('fuel-po.index', ['po_status' => 'checked']));
+
+        $response->assertOk();
+        $response->assertSee('Viewing CHECKED Fuel PO Checklist');
+        $response->assertDontSee('Pending Trip Excluded');
+        $response->assertSee('Completed Trip Included');
+
+        $records = $response->viewData('records');
+        $this->assertCount(1, $records);
+        $this->assertEquals($checkedItinerary->id, $records->first()->id);
+
+        // Check dropdown has CHECKED selected
+        $response->assertSee('<option value="checked" selected>☑ CHECKED Only</option>', false);
+    }
 }
