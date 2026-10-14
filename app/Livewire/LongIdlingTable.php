@@ -4,6 +4,7 @@ namespace App\Livewire;
 
 use App\Models\LongIdlingRecord;
 use App\Models\Report;
+use App\Models\Vehicle;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
 use Livewire\Component;
@@ -40,6 +41,34 @@ class LongIdlingTable extends Component
 
     public ?string $savedMessage = null;
 
+    public bool $showManualVehicleModal = false;
+
+    public ?int $manualVehicleId = null;
+
+    public string $manualVehicleSearch = '';
+
+    public string $manualStartTime = '';
+
+    public string $manualEndTime = '';
+
+    public string $manualStayTime = '';
+
+    public string $manualAddress = '';
+
+    public string $manualRemarks = '';
+
+    public string $manualState = 'Idling';
+
+    public bool $manualFocus = true;
+
+    public ?int $manualRowIndex = null;
+
+    public ?string $manualReportDate = null;
+
+    public ?string $manualRangeStart = null;
+
+    public ?string $manualRangeEnd = null;
+
     public function getHasDirtyProperty(): bool
     {
         foreach ($this->rows as $row) {
@@ -55,12 +84,19 @@ class LongIdlingTable extends Component
         ?int $reportId = null,
         ?string $startDate = null,
         ?string $endDate = null,
-        string $dateMode = 'single'
+        string $dateMode = 'single',
+        ?string $filterDevice = null
     ): void {
         $this->reportId = $reportId;
         $this->startDate = $startDate;
         $this->endDate = $endDate;
         $this->dateMode = $dateMode;
+
+        if ($filterDevice && $filterDevice !== 'all') {
+            $this->filterDevice = $filterDevice;
+        } elseif (request()->filled('device') && request()->query('device') !== 'all') {
+            $this->filterDevice = (string) request()->query('device');
+        }
 
         $this->loadAvailableDates();
 
@@ -332,6 +368,316 @@ class LongIdlingTable extends Component
         $this->dispatch('search-updated', search: $this->search);
     }
 
+    public function getFleetVehiclesProperty()
+    {
+        $query = Vehicle::with('device')->orderBy('equipment_code');
+
+        if (! empty($this->manualVehicleSearch)) {
+            $search = trim($this->manualVehicleSearch);
+            $query->where(function ($q) use ($search) {
+                $q->where('equipment_code', 'like', "%{$search}%")
+                    ->orWhere('plate_number', 'like', "%{$search}%")
+                    ->orWhere('model', 'like', "%{$search}%")
+                    ->orWhere('operator_driver', 'like', "%{$search}%")
+                    ->orWhereHas('device', function ($dq) use ($search) {
+                        $dq->where('device_name', 'like', "%{$search}%")
+                            ->orWhere('imei', 'like', "%{$search}%");
+                    });
+            });
+        }
+
+        return $query->get();
+    }
+
+    public function getSelectedVehicleModelProperty(): ?Vehicle
+    {
+        if (! $this->manualVehicleId) {
+            return null;
+        }
+
+        return Vehicle::with('device')->find($this->manualVehicleId);
+    }
+
+    public function openManualVehicleModal(?int $rowIndex = null): void
+    {
+        $this->manualRowIndex = $rowIndex;
+        $this->manualVehicleSearch = '';
+        $this->showManualVehicleModal = true;
+
+        if ($rowIndex !== null && isset($this->rows[$rowIndex])) {
+            $row = $this->rows[$rowIndex];
+            $this->manualStartTime = $row['start_time'] ?? '';
+            $this->manualEndTime = $row['end_time'] ?? '';
+            $this->manualStayTime = $row['stay_time'] ?? '';
+            $this->manualAddress = $row['address'] ?? '';
+            $this->manualRemarks = $row['remarks'] ?? '';
+            $this->manualState = $row['state'] ?: 'Idling';
+            $this->manualReportDate = $row['report_date'] ?? ($this->endDate ?? now()->toDateString());
+
+            $deviceName = $row['device_name'] ?? '';
+            $matched = Vehicle::whereHas('device', fn ($q) => $q->where('device_name', $deviceName))
+                ->orWhere('equipment_code', $deviceName)
+                ->orWhere('plate_number', $deviceName)
+                ->first();
+            $this->manualVehicleId = $matched?->id;
+        } else {
+            $this->manualVehicleId = null;
+            $this->manualStartTime = '';
+            $this->manualEndTime = '';
+            $this->manualStayTime = '';
+            $this->manualAddress = '';
+            $this->manualRemarks = '';
+            $this->manualState = 'Idling';
+            $this->manualFocus = true;
+            $this->manualReportDate = $this->endDate ?? now()->toDateString();
+        }
+
+        $this->manualRangeStart = $this->startDate ?? now()->subDays(3)->toDateString();
+        $this->manualRangeEnd = $this->endDate ?? now()->toDateString();
+    }
+
+    public function exploreVehicleMultiDate(): void
+    {
+        if (! $this->manualVehicleId) {
+            return;
+        }
+
+        $vehicle = Vehicle::with('device')->find($this->manualVehicleId);
+        if (! $vehicle) {
+            return;
+        }
+
+        $deviceName = $vehicle->device?->device_name ?: ($vehicle->equipment_code ?: $vehicle->plate_number);
+        $start = min($this->manualRangeStart ?? now()->subDays(3)->toDateString(), $this->manualRangeEnd ?? now()->toDateString());
+        $end = max($this->manualRangeStart ?? now()->subDays(3)->toDateString(), $this->manualRangeEnd ?? now()->toDateString());
+
+        if ($this->dateMode === 'range') {
+            $this->startDate = $start;
+            $this->endDate = $end;
+            $this->filterDevice = $deviceName;
+            $this->search = '';
+            $this->closeManualVehicleModal();
+            $this->loadRows();
+            $this->notifyFiltersUpdated();
+            $this->savedMessage = "Multi-Date Explorer loaded for {$vehicle->equipment_code} ({$start} to {$end}).";
+        } else {
+            $this->redirect(route('reports.range', [
+                'start_date' => $start,
+                'end_date' => $end,
+                'device' => $deviceName,
+            ]));
+        }
+    }
+
+    public function closeManualVehicleModal(): void
+    {
+        $this->showManualVehicleModal = false;
+        $this->manualRowIndex = null;
+        $this->manualVehicleId = null;
+        $this->manualVehicleSearch = '';
+    }
+
+    public function updatedManualVehicleId($value): void
+    {
+        if (! empty($value)) {
+            $vehicle = Vehicle::with('device')->find($value);
+            if ($vehicle) {
+                if (empty($this->manualAddress) && ! empty($vehicle->location)) {
+                    $this->manualAddress = $vehicle->location;
+                }
+                if (empty($this->manualState)) {
+                    $this->manualState = 'Idling';
+                }
+            }
+        }
+    }
+
+    public function updatedManualStartTime(): void
+    {
+        $this->recalcManualStayTime();
+    }
+
+    public function updatedManualEndTime(): void
+    {
+        $this->recalcManualStayTime();
+    }
+
+    protected function recalcManualStayTime(): void
+    {
+        if (! empty($this->manualStartTime) && ! empty($this->manualEndTime)) {
+            $this->manualStayTime = LongIdlingRecord::calculateStayTime($this->manualStartTime, $this->manualEndTime) ?? '';
+        }
+    }
+
+    public function focusOnVehicle(string $deviceName): void
+    {
+        $this->filterDevice = $deviceName;
+        $this->search = '';
+        $this->selectAll = false;
+        $this->notifyFiltersUpdated();
+    }
+
+    public function clearFocus(): void
+    {
+        $this->filterDevice = 'all';
+        $this->selectAll = false;
+        $this->notifyFiltersUpdated();
+    }
+
+    public function addManualVehicle(): void
+    {
+        if (! $this->manualVehicleId) {
+            return;
+        }
+
+        $vehicle = Vehicle::with('device')->find($this->manualVehicleId);
+        if (! $vehicle) {
+            return;
+        }
+
+        $deviceName = $vehicle->device?->device_name ?: ($vehicle->equipment_code ?: $vehicle->plate_number);
+        $driverName = $vehicle->operator_driver ?: '';
+        $imei = $vehicle->device?->imei ?: '';
+        $model = $vehicle->device?->model ?: ($vehicle->model ?: '');
+        $address = ! empty($this->manualAddress) ? $this->manualAddress : ($vehicle->location ?: '');
+
+        $existingIndex = null;
+        if ($this->manualRowIndex === null) {
+            foreach ($this->rows as $idx => $r) {
+                if (($r['device_name'] ?? '') === $deviceName) {
+                    $existingIndex = $idx;
+                    break;
+                }
+            }
+        }
+
+        if ($this->manualRowIndex !== null && isset($this->rows[$this->manualRowIndex])) {
+            $idx = $this->manualRowIndex;
+            $this->rows[$idx]['device_name'] = $deviceName;
+            $this->rows[$idx]['driver_name'] = $driverName;
+            $this->rows[$idx]['imei'] = $imei;
+            $this->rows[$idx]['model'] = $model;
+            if (! empty($this->manualStartTime)) {
+                $this->rows[$idx]['start_time'] = $this->manualStartTime;
+            }
+            if (! empty($this->manualEndTime)) {
+                $this->rows[$idx]['end_time'] = $this->manualEndTime;
+            }
+            if (! empty($this->manualStayTime)) {
+                $this->rows[$idx]['stay_time'] = $this->manualStayTime;
+            }
+            if (! empty($address)) {
+                $this->rows[$idx]['address'] = $address;
+            }
+            if (! empty($this->manualRemarks)) {
+                $this->rows[$idx]['remarks'] = $this->manualRemarks;
+            }
+            $this->rows[$idx]['state'] = $this->manualState ?: 'Idling';
+            $this->rows[$idx]['dirty'] = true;
+            $message = "Row updated with {$vehicle->equipment_code}.";
+        } elseif ($existingIndex !== null) {
+            $idx = $existingIndex;
+            if (! empty($this->manualStartTime)) {
+                $this->rows[$idx]['start_time'] = $this->manualStartTime;
+            }
+            if (! empty($this->manualEndTime)) {
+                $this->rows[$idx]['end_time'] = $this->manualEndTime;
+            }
+            if (! empty($this->manualStayTime)) {
+                $this->rows[$idx]['stay_time'] = $this->manualStayTime;
+            }
+            if (! empty($address)) {
+                $this->rows[$idx]['address'] = $address;
+            }
+            if (! empty($this->manualRemarks)) {
+                $this->rows[$idx]['remarks'] = $this->manualRemarks;
+            }
+            $this->rows[$idx]['dirty'] = true;
+            $message = "Vehicle {$vehicle->equipment_code} already exists in report &mdash; focused on this vehicle.";
+        } else {
+            $targetDate = ! empty($this->manualReportDate) ? $this->manualReportDate : ($this->endDate ?? now()->toDateString());
+            $targetReportId = $this->reportId;
+
+            $newRow = [
+                'id' => null,
+                'report_id' => $targetReportId,
+                'report_date' => $targetDate,
+                'formatted_date' => date('M j, Y', strtotime($targetDate)),
+                'device_name' => $deviceName,
+                'driver_name' => $driverName,
+                'imei' => $imei,
+                'model' => $model,
+                'state' => $this->manualState ?: 'Idling',
+                'start_time' => $this->manualStartTime ?: '',
+                'end_time' => $this->manualEndTime ?: '',
+                'stay_time' => $this->manualStayTime ?: '',
+                'latitude' => '',
+                'longitude' => '',
+                'coordinates' => '',
+                'address' => $address,
+                'remarks' => $this->manualRemarks ?: '',
+                'image' => null,
+                'image_url' => null,
+                'is_new' => true,
+                'dirty' => true,
+                '_key' => 'new-'.uniqid(),
+            ];
+
+            $targetReport = null;
+            if (! empty($this->reportId) && $this->dateMode === 'single') {
+                $targetReport = Report::find($this->reportId);
+            }
+
+            if (! $targetReport) {
+                $targetReport = Report::firstOrCreate(
+                    [
+                        'report_type' => 'long_idling',
+                        'report_date' => $targetDate,
+                        'created_by' => auth()->id(),
+                    ],
+                    [
+                        'status' => 'draft',
+                    ]
+                );
+            }
+
+            if ($targetReport) {
+                $created = $targetReport->longIdlingRecords()->create([
+                    'device_name' => $deviceName,
+                    'driver_name' => $driverName,
+                    'imei' => $imei,
+                    'model' => $model,
+                    'state' => $this->manualState ?: 'Idling',
+                    'start_time' => $this->manualStartTime ?: null,
+                    'end_time' => $this->manualEndTime ?: null,
+                    'stay_time' => $this->manualStayTime ?: null,
+                    'address' => $address,
+                    'remarks' => $this->manualRemarks ?: null,
+                    'sort_order' => count($this->rows),
+                ]);
+                $newRow['id'] = $created->id;
+                $newRow['report_id'] = $targetReport->id;
+                $newRow['report_date'] = $targetReport->report_date->format('Y-m-d');
+                $newRow['formatted_date'] = $targetReport->report_date->format('M j, Y');
+                $newRow['is_new'] = false;
+                $newRow['dirty'] = false;
+            }
+
+            $this->rows[] = $newRow;
+            $message = "Vehicle {$vehicle->equipment_code} added to report.";
+        }
+
+        if ($this->manualFocus) {
+            $this->filterDevice = $deviceName;
+            $this->search = '';
+            $message .= ' Report is focused on this vehicle.';
+        }
+
+        $this->closeManualVehicleModal();
+        $this->notifyFiltersUpdated();
+        $this->savedMessage = $message;
+    }
+
     public function getDeviceListProperty(): array
     {
         $devices = [];
@@ -340,6 +686,9 @@ class LongIdlingTable extends Component
             if ($name !== '') {
                 $devices[$name] = ($devices[$name] ?? 0) + 1;
             }
+        }
+        if ($this->filterDevice !== 'all' && ! empty($this->filterDevice) && ! isset($devices[$this->filterDevice])) {
+            $devices[$this->filterDevice] = 0;
         }
         ksort($devices, SORT_NATURAL | SORT_FLAG_CASE);
 

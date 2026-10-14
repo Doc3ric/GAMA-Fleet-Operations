@@ -8,6 +8,7 @@ use App\Http\Requests\StoreReportRequest;
 use App\Http\Requests\UpdateReportRequest;
 use App\Models\LongIdlingRecord;
 use App\Models\Report;
+use App\Models\Vehicle;
 use App\Services\LongIdlingImportService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
@@ -35,8 +36,9 @@ class ReportController extends Controller
         }
 
         $reports = $query->paginate(15)->withQueryString();
+        $vehicles = Vehicle::with('device')->orderBy('equipment_code')->get();
 
-        return view('reports.index', compact('reports'));
+        return view('reports.index', compact('reports', 'vehicles'));
     }
 
     public function create(): View
@@ -46,7 +48,9 @@ class ReportController extends Controller
             ->orderByDesc('report_date')
             ->first();
 
-        return view('reports.create', compact('previousReport'));
+        $vehicles = Vehicle::with('device')->orderBy('equipment_code')->get();
+
+        return view('reports.create', compact('previousReport', 'vehicles'));
     }
 
     public function store(StoreReportRequest $request): RedirectResponse
@@ -58,6 +62,31 @@ class ReportController extends Controller
             'status' => 'draft',
             'created_by' => auth()->id(),
         ]);
+
+        if ($request->filled('vehicle_id')) {
+            $vehicle = Vehicle::with('device')->find($request->vehicle_id);
+            if ($vehicle) {
+                $deviceName = $vehicle->device?->device_name ?: ($vehicle->equipment_code ?: $vehicle->plate_number);
+                $imei = $vehicle->device?->imei ?: '';
+                $model = $vehicle->device?->model ?: ($vehicle->model ?: '');
+                $driverName = $vehicle->operator_driver ?: '';
+                $location = $vehicle->location ?: '';
+
+                LongIdlingRecord::create([
+                    'report_id' => $report->id,
+                    'device_name' => $deviceName,
+                    'driver_name' => $driverName,
+                    'imei' => $imei,
+                    'model' => $model,
+                    'state' => 'Idling',
+                    'address' => $location,
+                    'sort_order' => 0,
+                ]);
+
+                return redirect()->route('reports.show', $report)
+                    ->with('success', "Report created focusing on vehicle {$vehicle->equipment_code}. Add idling times and details below.");
+            }
+        }
 
         if ($request->filled('duplicate_from')) {
             $source = Report::with('longIdlingRecords')->find($request->duplicate_from);
@@ -159,7 +188,10 @@ class ReportController extends Controller
             [$startDate, $endDate] = [$endDate, $startDate];
         }
 
-        return view('reports.range', compact('startDate', 'endDate', 'reports'));
+        $device = $request->query('device', 'all');
+        $vehicles = Vehicle::with('device')->orderBy('equipment_code')->get();
+
+        return view('reports.range', compact('startDate', 'endDate', 'reports', 'device', 'vehicles'));
     }
 
     public function generateRangePdf(Request $request)

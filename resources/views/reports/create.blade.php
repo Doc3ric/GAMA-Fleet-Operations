@@ -6,7 +6,7 @@
         <div class="rounded-xl bg-white shadow-sm border border-slate-200 p-6">
             <h2 class="text-base font-semibold text-slate-800 mb-5">Create Daily Report</h2>
 
-            <form method="POST" action="{{ route('reports.store') }}" x-data="{ duplicate: false }">
+            <form method="POST" action="{{ route('reports.store') }}" x-data="{ duplicate: false, focusVehicle: false, selectedVehicleId: '' }">
                 @csrf
 
                 {{-- Date --}}
@@ -32,11 +32,42 @@
                         placeholder="e.g. Heavy traffic day, Metro Manila routes">{{ old('remarks') }}</textarea>
                 </div>
 
+                {{-- Manual Select Vehicle (Focus Single Vehicle) --}}
+                <div class="mb-5 rounded-xl border border-indigo-200 bg-indigo-50/70 p-4">
+                    <label class="flex items-start gap-3 cursor-pointer">
+                        <input type="checkbox" x-model="focusVehicle" @change="if(focusVehicle) duplicate = false" name="manual_vehicle_toggle"
+                               class="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500">
+                        <div>
+                            <span class="text-sm font-semibold text-slate-800">
+                                Manual Select Vehicle (Focus Single Vehicle)
+                            </span>
+                            <p class="text-xs text-slate-500 mt-0.5">
+                                Put only one vehicle and focus this report specifically on its long idling incident.
+                            </p>
+                        </div>
+                    </label>
+
+                    <div x-show="focusVehicle" class="mt-3 pt-3 border-t border-indigo-200/80 space-y-2">
+                        <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1" for="vehicle_id">
+                            Select Vehicle (Dropdown List for Vehicle) <span class="text-red-500">*</span>
+                        </label>
+                        <select id="vehicle_id" name="vehicle_id" x-model="selectedVehicleId" :required="focusVehicle"
+                                class="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-xs font-semibold text-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none">
+                            <option value="">— Select Vehicle (Dropdown List) —</option>
+                            @foreach($vehicles ?? [] as $veh)
+                                <option value="{{ $veh->id }}" {{ old('vehicle_id') == $veh->id ? 'selected' : '' }}>
+                                    {{ $veh->equipment_code }} — {{ $veh->model ?: 'No model' }} {{ $veh->plate_number ? '('.$veh->plate_number.')' : '' }} {{ $veh->operator_driver ? '• Driver: '.$veh->operator_driver : '' }} {{ $veh->device ? '• GPS: '.$veh->device->device_name : '' }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+                </div>
+
                 {{-- Duplicate --}}
                 @if($previousReport)
-                <div class="mb-5 rounded-lg border border-blue-100 bg-blue-50 p-4">
+                <div class="mb-5 rounded-lg border border-blue-100 bg-blue-50 p-4" x-show="!focusVehicle">
                     <label class="flex items-start gap-3 cursor-pointer">
-                        <input type="checkbox" x-model="duplicate" name="duplicate_toggle"
+                        <input type="checkbox" x-model="duplicate" @change="if(duplicate) focusVehicle = false" name="duplicate_toggle"
                                class="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500">
                         <div>
                             <span class="text-sm font-medium text-slate-800">
@@ -51,7 +82,7 @@
                         </div>
                     </label>
                     <input type="hidden" name="duplicate_from"
-                           :value="duplicate ? {{ $previousReport->id }} : '"
+                           :value="duplicate ? {{ $previousReport->id }} : ''"
                            x-bind:disabled="!duplicate">
                 </div>
                 @endif

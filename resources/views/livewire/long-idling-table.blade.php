@@ -157,6 +157,14 @@
                     Saving...
                 </span>
             </button>
+            <button type="button" wire:click="openManualVehicleModal()"
+                class="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-3.5 py-2 text-sm font-semibold text-white hover:bg-indigo-700 transition-colors shadow-sm cursor-pointer"
+                title="Select a vehicle from fleet to focus on its long idling report">
+                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 18.75a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 0 1-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 0 0-3.213-9.193 2.056 2.056 0 0 0-1.58-.86H14.25M16.5 18.75h-2.25m0-11.175V3.75c0-.621-.504-1.125-1.125-1.125H2.25c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h2.25" />
+                </svg>
+                <span>Manual Select Vehicle</span>
+            </button>
             <button type="button" wire:click="addRow"
                 class="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 transition-colors shadow-sm cursor-pointer">
                 <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
@@ -202,8 +210,9 @@
                 @endif
 
                 @if($filterDevice !== 'all')
-                    <span class="inline-flex items-center gap-1 bg-cyan-100 text-cyan-900 font-bold px-2 py-0.5 rounded-md border border-cyan-300">
-                        📱 Device: {{ $filterDevice }}
+                    <span class="inline-flex items-center gap-1.5 bg-indigo-100 text-indigo-950 font-bold px-2.5 py-0.5 rounded-md border border-indigo-300">
+                        <span>🎯 Focused Vehicle: {{ $filterDevice }}</span>
+                        <button type="button" wire:click="clearFocus" class="ml-1 text-indigo-700 hover:text-indigo-950 font-extrabold text-xs cursor-pointer" title="Clear vehicle focus">&times;</button>
                     </span>
                 @endif
 
@@ -390,9 +399,18 @@
 
                             {{-- Device Name --}}
                             <td class="py-2 px-2.5">
-                                <input type="text" wire:model="rows.{{ $origIndex }}.device_name"
-                                       placeholder="Device name"
-                                       class="w-full rounded-lg border border-slate-200/90 bg-white/80 hover:bg-white hover:border-slate-300 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 text-xs font-bold text-slate-900 py-1.5 px-2.5 outline-none transition-all placeholder:text-slate-300">
+                                <div class="relative flex items-center">
+                                    <input type="text" wire:model="rows.{{ $origIndex }}.device_name"
+                                           placeholder="Device name"
+                                           class="w-full rounded-lg border border-slate-200/90 bg-white/80 hover:bg-white hover:border-slate-300 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 text-xs font-bold text-slate-900 py-1.5 pl-2.5 pr-7 outline-none transition-all placeholder:text-slate-300">
+                                    <button type="button" wire:click="openManualVehicleModal({{ $origIndex }})"
+                                            class="absolute right-1.5 text-slate-400 hover:text-indigo-600 p-0.5 rounded cursor-pointer transition-colors"
+                                            title="Select vehicle from fleet">
+                                        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 18.75a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 0 1-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 0 0-3.213-9.193 2.056 2.056 0 0 0-1.58-.86H14.25M16.5 18.75h-2.25m0-11.175V3.75c0-.621-.504-1.125-1.125-1.125H2.25c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h2.25" />
+                                        </svg>
+                                    </button>
+                                </div>
                             </td>
 
                             {{-- IMEI --}}
@@ -568,31 +586,45 @@
                                 </div>
                             </td>
 
-                            {{-- Delete --}}
-                            <td class="py-2 px-2 text-center">
-                                @if(($deleteConfirmId !== null && $deleteConfirmId === $rowId) ||
-                                    ($deleteConfirmIndex !== null && $deleteConfirmIndex === $origIndex && $rowIsNew))
-                                    <div class="flex items-center justify-center gap-1">
-                                        <button type="button" wire:click="deleteRow"
-                                            class="rounded-lg bg-red-600 px-2 py-1 text-[10px] font-bold text-white hover:bg-red-700 shadow-2xs cursor-pointer">Yes</button>
-                                        <button type="button" wire:click="cancelDelete"
-                                            class="rounded-lg bg-slate-200 px-2 py-1 text-[10px] font-semibold text-slate-700 hover:bg-slate-300 cursor-pointer">No</button>
-                                    </div>
-                                @else
-                                    @if($rowId)
-                                        <button type="button" wire:click="confirmDelete({{ $rowId }})"
-                                            class="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50 border border-transparent hover:border-rose-200/60 transition-colors cursor-pointer" title="Delete record">
-                                            <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" /></svg>
-                                            <span>Delete</span>
-                                        </button>
-                                    @else
-                                        <button type="button" wire:click="confirmDeleteNew({{ $origIndex }})"
-                                            class="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50 border border-transparent hover:border-rose-200/60 transition-colors cursor-pointer" title="Remove unsaved row">
-                                            <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
-                                            <span>Remove</span>
+                            {{-- Actions --}}
+                            <td class="py-2 px-2 text-center whitespace-nowrap">
+                                <div class="inline-flex items-center justify-center gap-1">
+                                    @if(!empty($row['device_name']))
+                                        <button type="button" wire:click="focusOnVehicle('{{ addslashes($row['device_name']) }}')"
+                                            class="inline-flex items-center gap-0.5 px-2 py-1 rounded-lg text-xs font-semibold {{ $filterDevice === $row['device_name'] ? 'bg-indigo-600 text-white shadow-2xs' : 'text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 border border-transparent hover:border-indigo-200/60' }} transition-colors cursor-pointer"
+                                            title="{{ $filterDevice === $row['device_name'] ? 'Currently focusing this vehicle' : 'Focus report on this vehicle' }}">
+                                            <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 2.25v2.25m0 15v2.25M2.25 12h2.25m15 0h2.25" />
+                                            </svg>
+                                            <span class="hidden md:inline">{{ $filterDevice === $row['device_name'] ? 'Focused' : 'Focus' }}</span>
                                         </button>
                                     @endif
-                                @endif
+
+                                    @if(($deleteConfirmId !== null && $deleteConfirmId === $rowId) ||
+                                        ($deleteConfirmIndex !== null && $deleteConfirmIndex === $origIndex && $rowIsNew))
+                                        <div class="flex items-center justify-center gap-1">
+                                            <button type="button" wire:click="deleteRow"
+                                                class="rounded-lg bg-red-600 px-2 py-1 text-[10px] font-bold text-white hover:bg-red-700 shadow-2xs cursor-pointer">Yes</button>
+                                            <button type="button" wire:click="cancelDelete"
+                                                class="rounded-lg bg-slate-200 px-2 py-1 text-[10px] font-semibold text-slate-700 hover:bg-slate-300 cursor-pointer">No</button>
+                                        </div>
+                                    @else
+                                        @if($rowId)
+                                            <button type="button" wire:click="confirmDelete({{ $rowId }})"
+                                                class="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50 border border-transparent hover:border-rose-200/60 transition-colors cursor-pointer" title="Delete record">
+                                                <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" /></svg>
+                                                <span>Delete</span>
+                                            </button>
+                                        @else
+                                            <button type="button" wire:click="confirmDeleteNew({{ $origIndex }})"
+                                                class="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50 border border-transparent hover:border-rose-200/60 transition-colors cursor-pointer" title="Remove unsaved row">
+                                                <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+                                                <span>Remove</span>
+                                            </button>
+                                        @endif
+                                    @endif
+                                </div>
                             </td>
                         </tr>
                     @empty
@@ -676,6 +708,182 @@
             </div>
         </div>
     </div>
+
+    {{-- Manual Select Vehicle Modal --}}
+    @if($showManualVehicleModal)
+        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 transition-opacity"
+             wire:keydown.escape="closeManualVehicleModal">
+            <div class="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl transition-all" @click.stop>
+                {{-- Modal Header --}}
+                <div class="flex items-center justify-between pb-4 border-b border-slate-100">
+                    <div class="flex items-center gap-2.5">
+                        <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+                            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 18.75a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 0 1-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 0 0-3.213-9.193 2.056 2.056 0 0 0-1.58-.86H14.25M16.5 18.75h-2.25m0-11.175V3.75c0-.621-.504-1.125-1.125-1.125H2.25c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h2.25" />
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 class="text-base font-bold text-slate-800">MANUAL SELECT VEHICLE</h3>
+                            <p class="text-xs text-slate-500">Put and focus on only one vehicle for Long Idling report</p>
+                        </div>
+                    </div>
+                    <button type="button" wire:click="closeManualVehicleModal" class="text-slate-400 hover:text-slate-600 cursor-pointer">
+                        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+                    </button>
+                </div>
+
+                <div class="mt-5 space-y-4">
+                    {{-- Dropdown for Vehicle --}}
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                            SELECT VEHICLE (DROPDOWN LIST FOR VEHICLE) <span class="text-red-500">*</span>
+                        </label>
+                        <select wire:model.live="manualVehicleId"
+                                class="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
+                            <option value="">— Select Vehicle (Dropdown List) —</option>
+                            @foreach($this->fleetVehicles as $v)
+                                <option value="{{ $v->id }}">
+                                    {{ $v->equipment_code }} — {{ $v->model ?: 'No Model' }} {{ $v->plate_number ? '('.$v->plate_number.')' : '' }} {{ $v->operator_driver ? '• Driver: '.$v->operator_driver : '' }} {{ $v->device ? '• GPS: '.$v->device->device_name : '' }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    {{-- Selected Vehicle Details Preview Card --}}
+                    @if($this->selectedVehicleModel)
+                        @php $selV = $this->selectedVehicleModel; @endphp
+                        <div class="rounded-xl bg-indigo-50/60 border border-indigo-200/80 p-3.5 space-y-2 text-xs">
+                            <div class="flex items-center justify-between">
+                                <span class="font-bold text-indigo-900 text-sm">{{ $selV->equipment_code }}</span>
+                                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white text-indigo-700 border border-indigo-200">
+                                    {{ $selV->plate_number ?: 'No Plate' }}
+                                </span>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2 text-[11px] text-slate-600 pt-1 border-t border-indigo-100">
+                                <div>
+                                    <span class="text-slate-400 font-semibold block">Driver / Operator:</span>
+                                    <span class="font-bold text-slate-800">{{ $selV->operator_driver ?: 'Not assigned' }}</span>
+                                </div>
+                                <div>
+                                    <span class="text-slate-400 font-semibold block">Model:</span>
+                                    <span class="font-bold text-slate-800">{{ $selV->model ?: '—' }}</span>
+                                </div>
+                                <div>
+                                    <span class="text-slate-400 font-semibold block">GPS Device Name:</span>
+                                    <span class="font-bold text-slate-800">{{ $selV->device?->device_name ?: ($selV->equipment_code ?: '—') }}</span>
+                                </div>
+                                <div>
+                                    <span class="text-slate-400 font-semibold block">IMEI:</span>
+                                    <span class="font-mono text-slate-700">{{ $selV->device?->imei ?: '—' }}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {{-- Multi-Date Explorer Section for this Vehicle --}}
+                        <div class="rounded-xl bg-gradient-to-r from-slate-900 via-indigo-950 to-blue-950 text-white p-3.5 space-y-2 border border-slate-700/60 shadow-xs">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-2">
+                                    <span class="inline-flex items-center justify-center h-6 w-6 rounded-lg bg-blue-500/30 text-blue-300">
+                                        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+                                        </svg>
+                                    </span>
+                                    <span class="text-xs font-bold text-white">Multi-Date Explorer for this Vehicle</span>
+                                </div>
+                                <span class="text-[10px] font-semibold text-blue-300 bg-blue-500/20 px-2 py-0.5 rounded-full border border-blue-400/30">
+                                    Cross-Date History
+                                </span>
+                            </div>
+                            <p class="text-[11px] text-slate-300">
+                                View and checklist this vehicle's long idling incidents across multiple dates:
+                            </p>
+                            <div class="flex items-center gap-2 pt-1 flex-wrap sm:flex-nowrap">
+                                <div class="flex items-center gap-1.5 bg-slate-800/90 px-2.5 py-1.5 rounded-lg border border-slate-700 text-xs w-full sm:w-auto">
+                                    <span class="text-slate-400 text-[10px] font-semibold">From:</span>
+                                    <input type="date" wire:model.live="manualRangeStart" class="bg-slate-900 border border-slate-700 rounded text-[11px] text-white px-1.5 py-0.5 outline-none focus:border-blue-500">
+                                    <span class="text-slate-400 text-[10px] font-semibold">To:</span>
+                                    <input type="date" wire:model.live="manualRangeEnd" class="bg-slate-900 border border-slate-700 rounded text-[11px] text-white px-1.5 py-0.5 outline-none focus:border-blue-500">
+                                </div>
+                                <button type="button" wire:click="exploreVehicleMultiDate"
+                                        class="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs shrink-0 cursor-pointer">
+                                    <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+                                    </svg>
+                                    <span>Explore in Multi-Date &rarr;</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        {{-- Incident Inputs (Optional) --}}
+                        <div class="pt-2 border-t border-slate-100 space-y-3">
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-[11px] font-semibold text-slate-600 mb-1">Incident Report Date</label>
+                                    <input type="date" wire:model="manualReportDate"
+                                           class="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs text-slate-800 focus:ring-1 focus:ring-indigo-500 outline-none">
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-semibold text-slate-600 mb-1">Address / Location</label>
+                                    <input type="text" wire:model="manualAddress" placeholder="e.g. Warehouse Yard, Taguig Depot"
+                                           class="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs text-slate-800 focus:ring-1 focus:ring-indigo-500 outline-none">
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-[11px] font-semibold text-slate-600 mb-1">Start Time</label>
+                                    <input type="time" step="1" wire:model.live="manualStartTime"
+                                           class="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-mono text-slate-800 focus:ring-1 focus:ring-indigo-500 outline-none">
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-semibold text-slate-600 mb-1">End Time</label>
+                                    <input type="time" step="1" wire:model.live="manualEndTime"
+                                           class="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-mono text-slate-800 focus:ring-1 focus:ring-indigo-500 outline-none">
+                                </div>
+                            </div>
+
+                            @if($manualStayTime)
+                                <div class="flex items-center gap-2 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-lg text-xs">
+                                    <span class="text-amber-700 font-semibold">Calculated Stay Time:</span>
+                                    <span class="font-mono font-bold text-amber-900">{{ $manualStayTime }}</span>
+                                </div>
+                            @endif
+
+                            <div>
+                                <label class="block text-[11px] font-semibold text-slate-600 mb-1">Remarks</label>
+                                <input type="text" wire:model="manualRemarks" placeholder="e.g. Excessive idling incident reported"
+                                       class="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs text-slate-800 focus:ring-1 focus:ring-indigo-500 outline-none">
+                            </div>
+
+                            {{-- Focus Toggle --}}
+                            <div class="pt-1">
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" wire:model="manualFocus" class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4">
+                                    <span class="text-xs font-semibold text-slate-700">Focus report on this vehicle immediately</span>
+                                </label>
+                            </div>
+                        </div>
+                    @endif
+
+                    {{-- Actions --}}
+                    <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                        <button type="button" wire:click="closeManualVehicleModal"
+                                class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer">
+                            Cancel
+                        </button>
+                        <button type="button" wire:click="addManualVehicle"
+                                @if(!$manualVehicleId) disabled @endif
+                                class="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-50 cursor-pointer shadow-sm">
+                            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                            </svg>
+                            <span>{{ $manualRowIndex !== null ? 'Apply to Row' : 'Put Vehicle & Focus' }}</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    @endif
 
     {{-- Lightbox Modal --}}
     <div x-data="{ open: false, src: '' }"

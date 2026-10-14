@@ -1055,4 +1055,218 @@ class LongIdlingReportTest extends TestCase
         $this->assertEquals('application/pdf', $response->headers->get('content-type'));
         $this->assertStringContainsString('Long-Idling-Report-2026-09-22-to-2026-09-24-BT-06.pdf', (string) $response->headers->get('content-disposition'));
     }
+
+    public function test_authenticated_user_can_create_report_focused_on_single_vehicle(): void
+    {
+        $vehicle = Vehicle::factory()->create([
+            'equipment_code' => 'DT-99',
+            'plate_number' => 'XYZ-9999',
+            'operator_driver' => 'Juan Dela Cruz',
+            'model' => 'Isuzu Giga',
+            'location' => 'Taguig Depot',
+        ]);
+
+        $date = now()->toDateString();
+
+        $response = $this->actingAs($this->user)->post(route('reports.store'), [
+            'report_date' => $date,
+            'remarks' => 'Single vehicle focus report',
+            'vehicle_id' => $vehicle->id,
+            'manual_vehicle_toggle' => '1',
+        ]);
+
+        $report = Report::whereDate('report_date', $date)->first();
+        $this->assertNotNull($report);
+        $response->assertRedirect(route('reports.show', $report));
+
+        $this->assertDatabaseHas('long_idling_records', [
+            'report_id' => $report->id,
+            'device_name' => 'DT-99',
+            'driver_name' => 'Juan Dela Cruz',
+            'model' => 'Isuzu Giga',
+            'address' => 'Taguig Depot',
+            'state' => 'Idling',
+        ]);
+    }
+
+    public function test_livewire_manual_select_vehicle_adds_and_focuses_single_vehicle(): void
+    {
+        $report = Report::create([
+            'report_type' => 'long_idling',
+            'report_date' => now()->toDateString(),
+            'status' => 'draft',
+            'created_by' => $this->user->id,
+        ]);
+
+        $vehicle = Vehicle::factory()->create([
+            'equipment_code' => 'TRUCK-77',
+            'plate_number' => 'ABC-7777',
+            'operator_driver' => 'Driver Mario',
+            'model' => 'Hino 500',
+            'location' => 'Cavite Plant',
+        ]);
+
+        Livewire::actingAs($this->user)
+            ->test(LongIdlingTable::class, ['reportId' => $report->id])
+            ->assertSee('Manual Select Vehicle')
+            ->call('openManualVehicleModal')
+            ->assertSet('showManualVehicleModal', true)
+            ->set('manualVehicleId', $vehicle->id)
+            ->set('manualStartTime', '10:00:00')
+            ->set('manualEndTime', '11:45:00')
+            ->assertSet('manualStayTime', '01:45:00')
+            ->call('addManualVehicle')
+            ->assertSet('showManualVehicleModal', false)
+            ->assertSet('filterDevice', 'TRUCK-77')
+            ->assertSet('rows.0.device_name', 'TRUCK-77')
+            ->assertSet('rows.0.driver_name', 'Driver Mario')
+            ->assertSee('01:45:00');
+
+        $this->assertDatabaseHas('long_idling_records', [
+            'report_id' => $report->id,
+            'device_name' => 'TRUCK-77',
+            'driver_name' => 'Driver Mario',
+            'stay_time' => '01:45:00',
+        ]);
+    }
+
+    public function test_livewire_focus_and_clear_focus_on_vehicle(): void
+    {
+        $report = Report::create([
+            'report_type' => 'long_idling',
+            'report_date' => now()->toDateString(),
+            'status' => 'draft',
+            'created_by' => $this->user->id,
+        ]);
+
+        LongIdlingRecord::create([
+            'report_id' => $report->id,
+            'device_name' => 'CAR-01',
+            'driver_name' => 'Driver One',
+            'imei' => '111111111111111',
+            'model' => 'Model-1',
+            'stay_time' => '01:00:00',
+        ]);
+
+        LongIdlingRecord::create([
+            'report_id' => $report->id,
+            'device_name' => 'CAR-02',
+            'driver_name' => 'Driver Two',
+            'imei' => '222222222222222',
+            'model' => 'Model-2',
+            'stay_time' => '02:00:00',
+        ]);
+
+        Livewire::actingAs($this->user)
+            ->test(LongIdlingTable::class, ['reportId' => $report->id])
+            ->assertViewHas('filteredRows', fn ($rows) => count($rows) === 2)
+            ->call('focusOnVehicle', 'CAR-01')
+            ->assertSet('filterDevice', 'CAR-01')
+            ->assertViewHas('filteredRows', fn ($rows) => count($rows) === 1 && $rows[0]['device_name'] === 'CAR-01')
+            ->assertSee('Focused Vehicle: CAR-01')
+            ->call('clearFocus')
+            ->assertSet('filterDevice', 'all')
+            ->assertViewHas('filteredRows', fn ($rows) => count($rows) === 2);
+    }
+
+    public function test_range_view_accepts_device_query_parameter_and_passes_to_view(): void
+    {
+        $vehicle = Vehicle::factory()->create([
+            'equipment_code' => 'DT-55',
+            'plate_number' => 'ABC-5555',
+        ]);
+
+        $response = $this->actingAs($this->user)->get(route('reports.range', [
+            'start_date' => '2026-09-20',
+            'end_date' => '2026-09-25',
+            'device' => 'DT-55',
+        ]));
+
+        $response->assertOk();
+        $response->assertViewHas('device', 'DT-55');
+        $response->assertViewHas('vehicles');
+    }
+
+    public function test_livewire_manual_select_vehicle_explore_multi_date_redirects_in_single_mode(): void
+    {
+        $report = Report::create([
+            'report_type' => 'long_idling',
+            'report_date' => '2026-09-25',
+            'status' => 'draft',
+            'created_by' => $this->user->id,
+        ]);
+
+        $vehicle = Vehicle::factory()->create([
+            'equipment_code' => 'DT-88',
+            'plate_number' => 'XYZ-8888',
+        ]);
+
+        Livewire::actingAs($this->user)
+            ->test(LongIdlingTable::class, ['reportId' => $report->id])
+            ->call('openManualVehicleModal')
+            ->set('manualVehicleId', $vehicle->id)
+            ->set('manualRangeStart', '2026-09-20')
+            ->set('manualRangeEnd', '2026-09-25')
+            ->call('exploreVehicleMultiDate')
+            ->assertRedirect(route('reports.range', [
+                'start_date' => '2026-09-20',
+                'end_date' => '2026-09-25',
+                'device' => 'DT-88',
+            ]));
+    }
+
+    public function test_livewire_manual_select_vehicle_explore_multi_date_updates_state_in_range_mode(): void
+    {
+        $report1 = Report::create([
+            'report_type' => 'long_idling',
+            'report_date' => '2026-09-21',
+            'status' => 'completed',
+            'created_by' => $this->user->id,
+        ]);
+
+        LongIdlingRecord::create([
+            'report_id' => $report1->id,
+            'device_name' => 'DT-11',
+            'imei' => '111111111111111',
+            'model' => 'Model-1',
+            'stay_time' => '01:00:00',
+        ]);
+
+        $report2 = Report::create([
+            'report_type' => 'long_idling',
+            'report_date' => '2026-09-22',
+            'status' => 'completed',
+            'created_by' => $this->user->id,
+        ]);
+
+        LongIdlingRecord::create([
+            'report_id' => $report2->id,
+            'device_name' => 'DT-22',
+            'imei' => '222222222222222',
+            'model' => 'Model-2',
+            'stay_time' => '02:00:00',
+        ]);
+
+        $vehicle = Vehicle::factory()->create([
+            'equipment_code' => 'DT-11',
+            'plate_number' => 'ABC-1111',
+        ]);
+
+        Livewire::actingAs($this->user)
+            ->test(LongIdlingTable::class, [
+                'dateMode' => 'range',
+                'startDate' => '2026-09-20',
+                'endDate' => '2026-09-25',
+                'filterDevice' => 'all',
+            ])
+            ->assertViewHas('filteredRows', fn ($rows) => count($rows) === 2)
+            ->call('openManualVehicleModal')
+            ->set('manualVehicleId', $vehicle->id)
+            ->set('manualRangeStart', '2026-09-20')
+            ->set('manualRangeEnd', '2026-09-25')
+            ->call('exploreVehicleMultiDate')
+            ->assertSet('filterDevice', 'DT-11')
+            ->assertSet('showManualVehicleModal', false)
+            ->assertViewHas('filteredRows', fn ($rows) => count($rows) === 1 && $rows[0]['device_name'] === 'DT-11');
+    }
 }

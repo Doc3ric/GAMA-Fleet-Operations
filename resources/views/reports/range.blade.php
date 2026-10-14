@@ -42,6 +42,7 @@
             'startDate' => $startDate,
             'endDate' => $endDate,
             'dateMode' => 'range',
+            'filterDevice' => $device ?? 'all',
         ])
     </div>
 </x-app-layout>

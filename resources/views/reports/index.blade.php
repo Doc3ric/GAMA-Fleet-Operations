@@ -41,9 +41,19 @@
                 </p>
             </div>
 
-            <form method="GET" action="{{ route('reports.range') }}" class="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+            <form method="GET" action="{{ route('reports.range') }}" class="flex items-center gap-2 flex-wrap">
                 <div class="flex items-center gap-1.5 bg-slate-800/90 px-3 py-1.5 rounded-xl border border-slate-700 text-xs">
-                    <span class="text-slate-400 font-semibold">From:</span>
+                    <span class="text-slate-400 font-semibold">Vehicle:</span>
+                    <select name="device" class="bg-slate-900 border border-slate-700 rounded-lg text-xs text-white px-2 py-1 outline-none focus:border-blue-500 max-w-[150px]">
+                        <option value="all">All Vehicles</option>
+                        @foreach($vehicles ?? [] as $veh)
+                            @php $devName = $veh->device?->device_name ?: ($veh->equipment_code ?: $veh->plate_number); @endphp
+                            <option value="{{ $devName }}">
+                                {{ $veh->equipment_code }} — {{ $veh->model ?: 'No model' }}
+                            </option>
+                        @endforeach
+                    </select>
+                    <span class="text-slate-400 font-semibold ml-1">From:</span>
                     <input type="date" name="start_date" required
                            value="{{ request('start_date', $reports->first()?->report_date?->copy()->subDays(2)->format('Y-m-d') ?? now()->subDays(2)->format('Y-m-d')) }}"
                            class="bg-slate-900 border border-slate-700 rounded-lg text-xs text-white px-2 py-1 outline-none focus:border-blue-500">

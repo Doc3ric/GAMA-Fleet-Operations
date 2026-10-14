@@ -25,6 +25,7 @@ class StoreReportRequest extends FormRequest
             ],
             'remarks' => 'nullable|string|max:1000',
             'duplicate_from' => 'nullable|exists:reports,id',
+            'vehicle_id' => 'nullable|exists:vehicles,id',
         ];
     }
 
