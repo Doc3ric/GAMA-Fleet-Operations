@@ -214,8 +214,10 @@ class VehicleDeviceLinkService
     /**
      * Clean alphanumeric string for fuzzy matching.
      */
-    protected function normalizeString(string $val): string
+    public function normalizeString(string $val): string
     {
-        return strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $val));
+        $clean = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $val));
+
+        return preg_replace('/(?<=[a-z])0+([0-9]+)/', '$1', $clean);
     }
 }

@@ -79,7 +79,7 @@
                         </svg>
                     </div>
                     <input type="text" name="search" value="{{ request('search') }}"
-                           placeholder="Search deleted vehicles by EGTP code, model, driver name, plate number, user..."
+                           placeholder="Search deleted vehicles by EQTP code, model, driver name, plate number, user..."
                            class="w-full pl-9 pr-3 py-2 bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 rounded-lg text-xs placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors">
                 </div>
                 <button type="submit"
@@ -101,7 +101,7 @@
                 <table class="w-full text-xs text-left divide-y divide-slate-200">
                     <thead class="bg-slate-50/90 text-slate-600 font-semibold tracking-wider uppercase text-[10px]">
                         <tr>
-                            <th scope="col" class="py-3 px-3.5 whitespace-nowrap">EGTP CODE</th>
+                            <th scope="col" class="py-3 px-3.5 whitespace-nowrap">EQTP CODE</th>
                             <th scope="col" class="py-3 px-3 whitespace-nowrap">MODEL</th>
                             <th scope="col" class="py-3 px-3 whitespace-nowrap">DRIVER NAME</th>
                             <th scope="col" class="py-3 px-3 whitespace-nowrap">PLATE NUMBER</th>
@@ -114,7 +114,7 @@
                     <tbody class="divide-y divide-slate-100 bg-white">
                         @forelse($vehicles as $vehicle)
                             <tr class="hover:bg-amber-50/40 transition-colors">
-                                {{-- EGTP CODE --}}
+                                {{-- EQTP CODE --}}
                                 <td class="py-2.5 px-3.5 font-bold text-slate-900 whitespace-nowrap">
                                     {{ $vehicle->equipment_code }}
                                 </td>

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Exports\VehicleExport;
 use App\Models\User;
 use App\Models\Vehicle;
 use App\Models\VehicleType;
@@ -86,7 +87,7 @@ class VehicleMasterListTest extends TestCase
         $response = $this->actingAs($this->user)->get(route('vehicles.create'));
 
         $response->assertOk();
-        $response->assertSee('EGTP CODE');
+        $response->assertSee('EQTP CODE');
         $response->assertSee('MODEL');
         $response->assertSee('DRIVER NAME');
         $response->assertSee('PLATE NUMBER');
@@ -457,5 +458,202 @@ class VehicleMasterListTest extends TestCase
         $vehicle->refresh();
         $this->assertNotNull($vehicle->image);
         Storage::disk('public')->assertExists($vehicle->image);
+    }
+
+    public function test_guest_cannot_export_vehicles_to_excel(): void
+    {
+        $response = $this->get(route('vehicles.exportExcel'));
+        $response->assertRedirect(route('login'));
+    }
+
+    public function test_authenticated_user_can_export_vehicles_to_excel(): void
+    {
+        Vehicle::create([
+            'equipment_code' => 'SV 12',
+            'model' => 'D-MAX',
+            'operator_driver' => 'JOSEPH HENEDO',
+            'plate_number' => 'KAF 6079',
+            'user' => 'PURCHASING',
+            'project_code' => 'UTILITY VAN',
+            'average_fuel_consumption' => 3.00,
+            'gps_status' => 'YES',
+            'created_by' => $this->user->id,
+        ]);
+
+        $response = $this->actingAs($this->user)->get(route('vehicles.exportExcel'));
+
+        $response->assertOk();
+        $disposition = $response->headers->get('content-disposition');
+        $this->assertNotNull($disposition);
+        $this->assertStringContainsString('Vehicle-Master-List-', $disposition);
+        $this->assertStringContainsString('.xlsx', $disposition);
+    }
+
+    public function test_vehicle_export_route_alias_also_works(): void
+    {
+        Vehicle::create([
+            'equipment_code' => 'SV 12',
+            'created_by' => $this->user->id,
+        ]);
+
+        $response = $this->actingAs($this->user)->get(route('vehicles.export'));
+
+        $response->assertOk();
+        $this->assertStringContainsString('.xlsx', (string) $response->headers->get('content-disposition'));
+    }
+
+    public function test_vehicle_export_respects_search_and_filters(): void
+    {
+        Vehicle::create([
+            'equipment_code' => 'BH 5',
+            'model' => 'CAT 320',
+            'created_by' => $this->user->id,
+        ]);
+        Vehicle::create([
+            'equipment_code' => 'DT 01',
+            'model' => 'HINO 700',
+            'created_by' => $this->user->id,
+        ]);
+
+        $response = $this->actingAs($this->user)->get(route('vehicles.exportExcel', ['search' => 'CAT 320']));
+        $response->assertOk();
+    }
+
+    public function test_vehicles_index_contains_export_to_excel_button(): void
+    {
+        $response = $this->actingAs($this->user)->get(route('vehicles.index'));
+
+        $response->assertOk();
+        $response->assertSee('Export to Excel');
+        $response->assertSee(route('vehicles.exportExcel'));
+    }
+
+    public function test_vehicle_export_class_returns_correct_headings_and_data(): void
+    {
+        $backhoe = VehicleType::where('code', 'BH')->first();
+        Vehicle::create([
+            'equipment_code' => 'BH 5',
+            'vehicle_type_id' => $backhoe->id,
+            'model' => 'CAT 320',
+            'operator_driver' => 'JUAN DELA CRUZ',
+            'plate_number' => 'ABC-1234',
+            'user' => 'ENGINEERING',
+            'project_code' => 'EXCAVATION',
+            'average_fuel_consumption' => 2.50,
+            'location' => 'Yard A',
+            'status_label' => 'RUNNING',
+            'status_value' => 0.8,
+            'fuel_min' => 15.0,
+            'fuel_max' => 20.0,
+            'fuel_unit' => 'LIT/HR',
+            'gps_status' => 'YES',
+            'date_acquired' => '2024-01-15',
+            'helper' => 'PEDRO PENDUKO',
+            'notes' => 'Priority machine',
+            'created_by' => $this->user->id,
+        ]);
+
+        $export = new VehicleExport;
+        $headings = $export->headings();
+
+        $this->assertContains('EQTP CODE', $headings);
+        $this->assertContains('MODEL', $headings);
+        $this->assertContains('DRIVER NAME', $headings);
+        $this->assertContains('PLATE NUMBER', $headings);
+        $this->assertContains('USER', $headings);
+        $this->assertContains('PROJECT CODE', $headings);
+        $this->assertContains('AVERAGE CONSUMPTION', $headings);
+        $this->assertContains('FUEL LIMIT', $headings);
+
+        $collection = $export->collection();
+        $this->assertCount(1, $collection);
+
+        $row = $collection->first();
+        $this->assertSame('BH 5', $row['equipment_code']);
+        $this->assertSame('CAT 320', $row['model']);
+        $this->assertSame('JUAN DELA CRUZ', $row['operator_driver']);
+        $this->assertSame('ABC-1234', $row['plate_number']);
+        $this->assertSame('ENGINEERING', $row['user']);
+        $this->assertSame('EXCAVATION', $row['project_code']);
+        $this->assertEquals(2.50, $row['average_consumption']);
+        $this->assertSame('BACKHOE', $row['vehicle_type']);
+        $this->assertSame('Yard A', $row['location']);
+        $this->assertSame('0.8 / RUNNING', $row['status']);
+        $this->assertSame('15–20 LIT/HR', $row['fuel_rate']);
+        $this->assertSame('YES', $row['gps_status']);
+        $this->assertSame('2024-01-15', $row['date_acquired']);
+        $this->assertSame('PEDRO PENDUKO', $row['helper']);
+        $this->assertSame('Priority machine', $row['notes']);
+        $this->assertSame('Vehicle Master List', $export->title());
+    }
+
+    public function test_vehicles_index_shows_fuel_limit_beside_average_fuel_consumption(): void
+    {
+        Vehicle::create([
+            'equipment_code' => 'SV 12',
+            'model' => 'D-MAX',
+            'average_fuel_consumption' => 3.50,
+            'fuel_limit' => 65.00,
+            'gps_status' => 'NO',
+            'created_by' => $this->user->id,
+        ]);
+
+        $response = $this->actingAs($this->user)->get(route('vehicles.index'));
+
+        $response->assertOk();
+        $response->assertSee('AVG FUEL CONSUMPTION');
+        $response->assertSee('FUEL LIMIT');
+        $response->assertSee('65.00 L');
+    }
+
+    public function test_can_update_vehicle_fuel_limit(): void
+    {
+        $vehicle = Vehicle::create([
+            'equipment_code' => 'SV 12',
+            'gps_status' => 'NO',
+            'created_by' => $this->user->id,
+        ]);
+
+        $response = $this->actingAs($this->user)->patch(route('vehicles.updateFuelLimit', $vehicle), [
+            'fuel_limit' => 55.50,
+        ]);
+
+        $response->assertRedirect();
+        $this->assertDatabaseHas('vehicles', [
+            'id' => $vehicle->id,
+            'fuel_limit' => 55.50,
+        ]);
+
+        // Can clear fuel limit
+        $response2 = $this->actingAs($this->user)->patch(route('vehicles.updateFuelLimit', $vehicle), [
+            'fuel_limit' => '',
+        ]);
+
+        $response2->assertRedirect();
+        $this->assertDatabaseHas('vehicles', [
+            'id' => $vehicle->id,
+            'fuel_limit' => null,
+        ]);
+    }
+
+    public function test_can_create_and_update_vehicle_with_fuel_limit_in_form(): void
+    {
+        $response = $this->actingAs($this->user)->post(route('vehicles.store'), [
+            'equipment_code' => 'VH 101',
+            'average_fuel_consumption' => 4.0,
+            'fuel_limit' => 80.0,
+        ]);
+
+        $response->assertRedirect(route('vehicles.index'));
+        $vehicle = Vehicle::where('equipment_code', 'VH 101')->firstOrFail();
+        $this->assertEquals(80.0, $vehicle->fuel_limit);
+
+        $response2 = $this->actingAs($this->user)->put(route('vehicles.update', $vehicle), [
+            'equipment_code' => 'VH 101',
+            'fuel_limit' => 95.0,
+        ]);
+
+        $response2->assertRedirect(route('vehicles.index'));
+        $this->assertEquals(95.0, $vehicle->fresh()->fuel_limit);
     }
 }

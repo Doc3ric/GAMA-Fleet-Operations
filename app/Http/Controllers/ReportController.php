@@ -14,7 +14,6 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
 use Maatwebsite\Excel\Facades\Excel;
@@ -141,9 +140,7 @@ class ReportController extends Controller
         $this->authorizeReport($report);
 
         $report->longIdlingRecords->each(function ($record) {
-            if ($record->image) {
-                Storage::disk('public')->delete($record->image);
-            }
+            $record->deleteAllImages();
         });
 
         $report->delete();
@@ -248,7 +245,12 @@ class ReportController extends Controller
             })->with('report');
 
             if ($device && $device !== 'all') {
-                $recordsQuery->where('device_name', $device);
+                $variants = self::getDeviceNameVariants($device);
+                if (count($variants) > 1) {
+                    $recordsQuery->whereIn('device_name', $variants);
+                } else {
+                    $recordsQuery->where('device_name', $device);
+                }
                 $filterLabel = "Device: {$device}";
                 $cleanDevice = preg_replace('/[^A-Za-z0-9\-]/', '', str_replace(' ', '-', $device));
                 $suffix = "-{$cleanDevice}";
@@ -274,7 +276,12 @@ class ReportController extends Controller
             $recordsQuery = $report->longIdlingRecords()->with('report');
 
             if ($device && $device !== 'all') {
-                $recordsQuery->where('device_name', $device);
+                $variants = self::getDeviceNameVariants($device);
+                if (count($variants) > 1) {
+                    $recordsQuery->whereIn('device_name', $variants);
+                } else {
+                    $recordsQuery->where('device_name', $device);
+                }
                 $filterLabel = "Device: {$device}";
                 $cleanDevice = preg_replace('/[^A-Za-z0-9\-]/', '', str_replace(' ', '-', $device));
                 $suffix = "-{$cleanDevice}";
@@ -420,5 +427,38 @@ class ReportController extends Controller
         if ($report->created_by !== auth()->id()) {
             abort(403);
         }
+    }
+
+    public static function normalizeDeviceCode(?string $code): string
+    {
+        if (! $code) {
+            return '';
+        }
+
+        $clean = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $code));
+
+        return preg_replace('/(?<=[a-z])0+([0-9]+)/', '$1', $clean);
+    }
+
+    public static function getDeviceNameVariants(string $device): array
+    {
+        $norm = self::normalizeDeviceCode($device);
+        if (empty($norm)) {
+            return [$device];
+        }
+
+        $allNames = LongIdlingRecord::distinct()->pluck('device_name')->filter()->toArray();
+        $matches = [];
+        foreach ($allNames as $name) {
+            if (self::normalizeDeviceCode($name) === $norm) {
+                $matches[] = $name;
+            }
+        }
+
+        if (empty($matches)) {
+            $matches = [$device];
+        }
+
+        return array_values(array_unique($matches));
     }
 }

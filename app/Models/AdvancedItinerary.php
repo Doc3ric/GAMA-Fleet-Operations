@@ -73,6 +73,11 @@ class AdvancedItinerary extends Model
         return $this->hasMany(AdvancedItineraryLeg::class, 'advanced_itinerary_id')->orderBy('sort_order');
     }
 
+    public function dispatches(): HasMany
+    {
+        return $this->hasMany(FleetDispatch::class, 'advanced_itinerary_id');
+    }
+
     public function vehicle(): BelongsTo
     {
         return $this->belongsTo(Vehicle::class);

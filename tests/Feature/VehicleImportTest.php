@@ -242,4 +242,53 @@ class VehicleImportTest extends TestCase
         $this->assertEquals('UTILITY VAN', $vehicle->project_code);
         $this->assertEquals(3.00, (float) $vehicle->average_fuel_consumption);
     }
+
+    public function test_can_import_vehicles_with_fuel_limit(): void
+    {
+        $csvContent = "EQTP CODE,MODEL,DRIVER NAME,PLATE NUMBER,USER,PROJECT CODE,AVERAGE CONSUMPTION,FUEL LIMIT\n";
+        $csvContent .= "SV 12,D-MAX,JOSEPH HENEDO,KAF 6079,PURCHASING,UTILITY VAN,3.00 KM/L,60.50 L\n";
+        $csvContent .= "DT 01,HINO 700,MARIO GOMEZ,XYZ-5678,OPERATIONS,HAULING,2.50,180.00\n";
+
+        $file = UploadedFile::fake()->createWithContent('vehicles.csv', $csvContent);
+
+        $response = $this->actingAs($this->user)->post(route('vehicles.importData'), [
+            'file' => $file,
+            'mode' => 'update',
+        ]);
+
+        $response->assertRedirect(route('vehicles.index'));
+        $response->assertSessionHas('success');
+
+        $v1 = Vehicle::where('equipment_code', 'SV 12')->firstOrFail();
+        $this->assertEquals(60.50, (float) $v1->fuel_limit);
+        $this->assertEquals(3.00, (float) $v1->average_fuel_consumption);
+
+        $v2 = Vehicle::where('equipment_code', 'DT 01')->firstOrFail();
+        $this->assertEquals(180.00, (float) $v2->fuel_limit);
+        $this->assertEquals(2.50, (float) $v2->average_fuel_consumption);
+    }
+
+    public function test_import_preserves_existing_fuel_limit_when_column_omitted(): void
+    {
+        $vehicle = Vehicle::create([
+            'equipment_code' => 'SV 12',
+            'fuel_limit' => 75.00,
+            'created_by' => $this->user->id,
+        ]);
+
+        $csvContent = "EQTP CODE,MODEL,DRIVER NAME,PLATE NUMBER\n";
+        $csvContent .= "SV 12,D-MAX 2026,JOSEPH,KAF 6079\n";
+
+        $file = UploadedFile::fake()->createWithContent('vehicles.csv', $csvContent);
+
+        $response = $this->actingAs($this->user)->post(route('vehicles.importData'), [
+            'file' => $file,
+            'mode' => 'update',
+        ]);
+
+        $response->assertRedirect(route('vehicles.index'));
+        $vehicle->refresh();
+        $this->assertEquals(75.00, (float) $vehicle->fuel_limit);
+        $this->assertEquals('D-MAX 2026', $vehicle->model);
+    }
 }

@@ -6,16 +6,20 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DeviceController;
 use App\Http\Controllers\DriverItineraryController;
 use App\Http\Controllers\ExcelViewerController;
+use App\Http\Controllers\FleetDispatchController;
 use App\Http\Controllers\FuelConsumptionController;
 use App\Http\Controllers\FuelPoController;
 use App\Http\Controllers\FuelPoImportController;
 use App\Http\Controllers\LocationController;
 use App\Http\Controllers\LongIdlingRecordController;
+use App\Http\Controllers\MileageReconciliationController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReportController;
+use App\Http\Controllers\TrackSolidImportController;
 use App\Http\Controllers\VehicleController;
 use App\Http\Controllers\WorkNoteController;
 use App\Http\Controllers\WorkTaskController;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', fn () => redirect()->route('dashboard'));
@@ -50,11 +54,28 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('vehicles/{id}/restore', [VehicleController::class, 'restore'])->name('vehicles.restore');
     Route::delete('vehicles/{id}/force-delete', [VehicleController::class, 'forceDelete'])->name('vehicles.forceDelete');
     Route::get('vehicles/template/download', [VehicleController::class, 'downloadTemplate'])->name('vehicles.downloadTemplate');
+    Route::get('vehicles/export/excel', [VehicleController::class, 'exportExcel'])->name('vehicles.exportExcel');
+    Route::get('vehicles/export', [VehicleController::class, 'exportExcel'])->name('vehicles.export');
     Route::post('vehicles/import', [VehicleController::class, 'importData'])->name('vehicles.importData');
     Route::resource('vehicles', VehicleController::class);
+    Route::match(['patch', 'post'], 'vehicles/{vehicle}/fuel-limit', [VehicleController::class, 'updateFuelLimit'])->name('vehicles.updateFuelLimit');
     Route::post('vehicles/{vehicle}/image', [VehicleController::class, 'uploadImage'])->name('vehicles.uploadImage');
 
-    // GPS Device Monitoring
+    // GPS Device Monitoring & Telematics Tracking
+    Route::get('gps-map', fn () => view('gps-map.index'))->name('gps-map.index');
+    Route::get('idling-parking', fn () => view('idling-parking.index'))->name('idling-parking.index');
+    Route::get('trip-history', fn () => view('trip-history.index'))->name('trip-history.index');
+    Route::get('trip-history/points/{key}', function (string $key) {
+        // Serve cached track points as JSON for the Trip History Route Replay map.
+        // Points are stored server-side to avoid embedding large coordinate arrays in Livewire payloads.
+        $allowed = preg_match('/^[a-f0-9]{32}$/', $key);
+        if (! $allowed) {
+            return response()->json(['error' => 'Invalid key'], 400);
+        }
+        $points = Cache::get("trip_points_{$key}", []);
+
+        return response()->json(['points' => $points]);
+    })->name('trip-history.points');
     Route::get('devices/template/download', [DeviceController::class, 'downloadTemplate'])->name('devices.downloadTemplate');
     Route::get('devices/pdf', [DeviceController::class, 'generatePdf'])->name('devices.pdf');
     Route::get('devices/export', [DeviceController::class, 'export'])->name('devices.export');
@@ -128,6 +149,34 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // My Work — Operational Notes & Reminders
     Route::patch('work-notes/{work_note}/toggle-pin', [WorkNoteController::class, 'togglePin'])->name('work-notes.toggle-pin');
     Route::resource('work-notes', WorkNoteController::class)->only(['index', 'store', 'update', 'destroy']);
+
+    // Fleet Dispatch Monitoring & On-Time Dispatch Rate Dashboard
+    Route::get('fleet-dispatches/export/excel', [FleetDispatchController::class, 'exportExcel'])->name('fleet-dispatches.export-excel');
+    Route::get('fleet-dispatches/export/pdf', [FleetDispatchController::class, 'exportPdf'])->name('fleet-dispatches.export-pdf');
+    Route::post('fleet-dispatches/generate-from-itineraries', [FleetDispatchController::class, 'generateFromItineraries'])->name('fleet-dispatches.generate-from-itineraries');
+    Route::post('fleet-dispatches/{dispatch}/depart-now', [FleetDispatchController::class, 'departNow'])->name('fleet-dispatches.depart-now');
+    Route::post('fleet-dispatches/{dispatch}/record-departure', [FleetDispatchController::class, 'recordDeparture'])->name('fleet-dispatches.record-departure');
+    Route::resource('fleet-dispatches', FleetDispatchController::class)->only(['index', 'store']);
+
+    // Mileage Reconciliation Integration & Controls
+    Route::get('mileage-reconciliations/export/excel', [MileageReconciliationController::class, 'exportExcel'])->name('mileage-reconciliations.export-excel');
+    Route::get('mileage-reconciliations/export/pdf', [MileageReconciliationController::class, 'exportPdf'])->name('mileage-reconciliations.export-pdf');
+    Route::get('mileage-reconciliations/evidence/{evidence}/download', [MileageReconciliationController::class, 'downloadEvidence'])->name('mileage-reconciliations.evidence.download');
+    Route::post('mileage-reconciliations/{mileage_reconciliation}/sync-gps', [MileageReconciliationController::class, 'syncGps'])->name('mileage-reconciliations.sync-gps');
+    Route::post('mileage-reconciliations/{mileage_reconciliation}/submit', [MileageReconciliationController::class, 'submit'])->name('mileage-reconciliations.submit');
+    Route::post('mileage-reconciliations/{mileage_reconciliation}/approve', [MileageReconciliationController::class, 'approve'])->name('mileage-reconciliations.approve');
+    Route::post('mileage-reconciliations/{mileage_reconciliation}/reject', [MileageReconciliationController::class, 'reject'])->name('mileage-reconciliations.reject');
+    Route::post('mileage-reconciliations/{mileage_reconciliation}/reopen', [MileageReconciliationController::class, 'reopen'])->name('mileage-reconciliations.reopen');
+    Route::post('mileage-reconciliations/{mileage_reconciliation}/evidence', [MileageReconciliationController::class, 'uploadEvidence'])->name('mileage-reconciliations.evidence.upload');
+    Route::post('mileage-reconciliations/exceptions/{exception}/resolve', [MileageReconciliationController::class, 'resolveException'])->name('mileage-reconciliations.exceptions.resolve');
+    Route::post('mileage-reconciliations/exceptions/{exception}/waive', [MileageReconciliationController::class, 'waiveException'])->name('mileage-reconciliations.exceptions.waive');
+    Route::resource('mileage-reconciliations', MileageReconciliationController::class)->only(['index', 'show', 'update']);
+
+    // TrackSolid Pro Report Import & API Sync Workflow
+    Route::get('tracksolid-reports', [TrackSolidImportController::class, 'index'])->name('tracksolid-reports.index');
+    Route::post('tracksolid-reports/sync-devices-api', [TrackSolidImportController::class, 'syncDevicesApi'])->name('tracksolid-reports.sync-devices-api');
+    Route::post('tracksolid-reports/preview', [TrackSolidImportController::class, 'preview'])->name('tracksolid-reports.preview');
+    Route::post('tracksolid-reports/confirm', [TrackSolidImportController::class, 'confirm'])->name('tracksolid-reports.confirm');
 
 });
 

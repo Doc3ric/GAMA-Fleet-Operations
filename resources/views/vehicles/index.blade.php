@@ -9,7 +9,19 @@
             this.deleteId = id;
             this.deleteForm = document.getElementById('delete-form-' + id);
         },
-        showImportModal: false
+        showImportModal: false,
+        showFuelLimitModal: false,
+        fuelLimitVehicleId: null,
+        fuelLimitCode: '',
+        fuelLimitValue: '',
+        fuelLimitAction: '',
+        openFuelLimitModal(id, code, limit, action) {
+            this.fuelLimitVehicleId = id;
+            this.fuelLimitCode = code;
+            this.fuelLimitValue = limit;
+            this.fuelLimitAction = action;
+            this.showFuelLimitModal = true;
+        }
     }">
 
         {{-- Top Action Header --}}
@@ -60,6 +72,16 @@
                     <span>Import Data</span>
                 </button>
 
+                {{-- Export to Excel Button --}}
+                <a href="{{ route('vehicles.exportExcel', request()->query()) }}"
+                   class="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 shadow-xs hover:bg-emerald-100 transition-colors"
+                   title="Export vehicles to Excel">
+                    <svg class="h-4 w-4 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                    </svg>
+                    <span>Export to Excel</span>
+                </a>
+
                 {{-- Add Vehicle Button --}}
                 <a href="{{ route('vehicles.create') }}"
                    class="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-blue-700 transition-colors cursor-pointer">
@@ -81,7 +103,7 @@
                         </svg>
                     </div>
                     <input type="text" name="search" value="{{ request('search') }}"
-                           placeholder="Search EGTP code, model, driver name, plate number, user, project code..."
+                           placeholder="Search EQTP code, model, driver name, plate number, user, project code..."
                            class="w-full pl-9 pr-3 py-2 bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 rounded-lg text-xs placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors">
                 </div>
 
@@ -119,20 +141,21 @@
                 <table class="w-full text-xs text-left divide-y divide-slate-200">
                     <thead class="bg-slate-50/90 text-slate-600 font-semibold tracking-wider uppercase text-[10px]">
                         <tr>
-                            <th scope="col" class="py-3 px-3.5 whitespace-nowrap">EGTP CODE</th>
+                            <th scope="col" class="py-3 px-3.5 whitespace-nowrap">EQTP CODE</th>
                             <th scope="col" class="py-3 px-3 whitespace-nowrap">MODEL</th>
                             <th scope="col" class="py-3 px-3 whitespace-nowrap">DRIVER NAME</th>
                             <th scope="col" class="py-3 px-3 whitespace-nowrap">PLATE NUMBER</th>
                             <th scope="col" class="py-3 px-3 whitespace-nowrap">USER</th>
                             <th scope="col" class="py-3 px-3 whitespace-nowrap">PROJECT CODE</th>
                             <th scope="col" class="py-3 px-3 text-center whitespace-nowrap">AVG FUEL CONSUMPTION</th>
+                            <th scope="col" class="py-3 px-3 text-center whitespace-nowrap">FUEL LIMIT</th>
                             <th scope="col" class="py-3 px-3 text-right whitespace-nowrap">ACTIONS</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100 bg-white">
                         @forelse($vehicles as $vehicle)
                             <tr class="hover:bg-slate-50/80 transition-colors">
-                                {{-- EGTP CODE --}}
+                                {{-- EQTP CODE --}}
                                 <td class="py-2.5 px-3.5 font-bold text-slate-900 whitespace-nowrap">
                                     <a href="{{ route('vehicles.show', $vehicle) }}" class="text-blue-600 hover:text-blue-800 hover:underline">
                                         {{ $vehicle->equipment_code }}
@@ -199,6 +222,25 @@
                                     @endif
                                 </td>
 
+                                {{-- FUEL LIMIT --}}
+                                <td class="py-2.5 px-3 text-center whitespace-nowrap">
+                                    @if($vehicle->fuel_limit !== null && (float) $vehicle->fuel_limit > 0)
+                                        <button type="button"
+                                                @click="openFuelLimitModal('{{ $vehicle->id }}', '{{ $vehicle->equipment_code }}', '{{ $vehicle->fuel_limit }}', '{{ route('vehicles.updateFuelLimit', $vehicle) }}')"
+                                                class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200 font-mono hover:bg-amber-100 transition-colors cursor-pointer"
+                                                title="Click to edit vehicle fuel limit">
+                                            {{ number_format($vehicle->fuel_limit, 2) }} L
+                                        </button>
+                                    @else
+                                        <button type="button"
+                                                @click="openFuelLimitModal('{{ $vehicle->id }}', '{{ $vehicle->equipment_code }}', '', '{{ route('vehicles.updateFuelLimit', $vehicle) }}')"
+                                                class="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-amber-600 font-medium transition-colors cursor-pointer"
+                                                title="Click to set vehicle fuel limit">
+                                            <span class="underline decoration-dotted">Set Limit</span>
+                                        </button>
+                                    @endif
+                                </td>
+
                                 {{-- Actions --}}
                                 <td class="py-2.5 px-3 text-right whitespace-nowrap">
                                     <div class="flex items-center justify-end gap-1">
@@ -231,7 +273,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="8" class="py-14 px-6 text-center">
+                                <td colspan="9" class="py-14 px-6 text-center">
                                     <div class="max-w-sm mx-auto space-y-3">
                                         <div class="h-12 w-12 mx-auto rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
                                             <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
@@ -370,12 +412,14 @@
                             </a>
                         </div>
                         <div class="flex flex-wrap gap-1 text-[10px] text-slate-600 font-mono">
-                            <span class="rounded bg-blue-50 border border-blue-200 text-blue-800 font-bold px-1.5 py-0.5">EGTP CODE</span>
+                            <span class="rounded bg-blue-50 border border-blue-200 text-blue-800 font-bold px-1.5 py-0.5">EQTP CODE</span>
                             <span class="rounded bg-white border border-slate-200 px-1.5 py-0.5">MODEL</span>
                             <span class="rounded bg-white border border-slate-200 px-1.5 py-0.5">DRIVER NAME</span>
                             <span class="rounded bg-white border border-slate-200 px-1.5 py-0.5">PLATE NUMBER</span>
                             <span class="rounded bg-blue-50 border border-blue-200 text-blue-800 font-bold px-1.5 py-0.5">USER</span>
                             <span class="rounded bg-white border border-slate-200 px-1.5 py-0.5">PROJECT CODE</span>
+                            <span class="rounded bg-blue-50 border border-blue-200 text-blue-800 font-bold px-1.5 py-0.5">AVERAGE CONSUMPTION</span>
+                            <span class="rounded bg-amber-50 border border-amber-200 text-amber-800 font-bold px-1.5 py-0.5">FUEL LIMIT</span>
                         </div>
                     </div>
 
@@ -433,6 +477,69 @@
                                 </svg>
                                 Importing...
                             </span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        {{-- Quick Set/Edit Fuel Limit Modal --}}
+        <div x-show="showFuelLimitModal"
+             x-transition:enter="transition ease-out duration-150"
+             x-transition:enter-start="opacity-0"
+             x-transition:enter-end="opacity-100"
+             x-transition:leave="transition ease-in duration-100"
+             x-transition:leave-start="opacity-100"
+             x-transition:leave-end="opacity-0"
+             @keydown.escape.window="showFuelLimitModal = false"
+             @click.self="showFuelLimitModal = false"
+             class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+             style="display: none;">
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6" @click.stop>
+                <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                    <div class="flex items-center gap-2.5">
+                        <div class="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-50 text-amber-600 font-bold">
+                            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 class="text-sm font-bold text-slate-800">Set Fuel Limit</h3>
+                            <p class="text-[11px] text-slate-500">Vehicle: <span class="font-bold text-slate-700" x-text="fuelLimitCode"></span></p>
+                        </div>
+                    </div>
+                    <button type="button" @click="showFuelLimitModal = false" class="text-slate-400 hover:text-slate-600 cursor-pointer">
+                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+                    </button>
+                </div>
+
+                <form :action="fuelLimitAction" method="POST" class="mt-4 space-y-4">
+                    @csrf
+                    @method('PATCH')
+
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                            Fuel Limit (Liters)
+                        </label>
+                        <div class="relative">
+                            <input type="number" name="fuel_limit" x-model="fuelLimitValue"
+                                   placeholder="e.g. 50.00" step="0.01" min="0" max="99999.99"
+                                   class="w-full pl-3.5 pr-12 py-2.5 border border-slate-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-amber-500">
+                            <span class="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-xs font-bold text-slate-400">
+                                L
+                            </span>
+                        </div>
+                        <p class="text-[11px] text-slate-400 mt-1">Leave blank to clear the fuel limit.</p>
+                    </div>
+
+                    <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                        <button type="button" @click="showFuelLimitModal = false"
+                                class="rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer">
+                            Cancel
+                        </button>
+                        <button type="submit"
+                                class="rounded-xl bg-amber-600 px-4 py-2 text-xs font-semibold text-white hover:bg-amber-700 cursor-pointer shadow-xs">
+                            Save Fuel Limit
                         </button>
                     </div>
                 </form>

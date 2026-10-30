@@ -23,6 +23,7 @@ class VehicleTemplateExport implements FromCollection, WithColumnWidths, WithHea
                 'user' => 'PURCHASING',
                 'project_code' => 'UTILITY VAN',
                 'average_consumption' => '3.00',
+                'fuel_limit' => '50.00',
             ],
             [
                 'equipment_code' => 'DT 01',
@@ -32,6 +33,7 @@ class VehicleTemplateExport implements FromCollection, WithColumnWidths, WithHea
                 'user' => 'OPERATIONS',
                 'project_code' => 'HAULING',
                 'average_consumption' => '2.50',
+                'fuel_limit' => '200.00',
             ],
             [
                 'equipment_code' => 'BH 5',
@@ -41,6 +43,7 @@ class VehicleTemplateExport implements FromCollection, WithColumnWidths, WithHea
                 'user' => 'ENGINEERING',
                 'project_code' => 'EXCAVATION',
                 'average_consumption' => '1.80',
+                'fuel_limit' => '150.00',
             ],
         ]);
     }
@@ -48,13 +51,14 @@ class VehicleTemplateExport implements FromCollection, WithColumnWidths, WithHea
     public function headings(): array
     {
         return [
-            'EGTP CODE',
+            'EQTP CODE',
             'MODEL',
             'DRIVER NAME',
             'PLATE NUMBER',
             'USER',
             'PROJECT CODE',
             'AVERAGE CONSUMPTION',
+            'FUEL LIMIT',
         ];
     }
 
@@ -71,13 +75,14 @@ class VehicleTemplateExport implements FromCollection, WithColumnWidths, WithHea
     public function columnWidths(): array
     {
         return [
-            'A' => 18, // EGTP CODE
+            'A' => 18, // EQTP CODE
             'B' => 18, // MODEL
             'C' => 24, // DRIVER NAME
             'D' => 18, // PLATE NUMBER
             'E' => 18, // USER
             'F' => 20, // PROJECT CODE
             'G' => 24, // AVERAGE CONSUMPTION
+            'H' => 18, // FUEL LIMIT
         ];
     }
 

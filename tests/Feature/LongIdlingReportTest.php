@@ -1269,4 +1269,117 @@ class LongIdlingReportTest extends TestCase
             ->assertSet('showManualVehicleModal', false)
             ->assertViewHas('filteredRows', fn ($rows) => count($rows) === 1 && $rows[0]['device_name'] === 'DT-11');
     }
+
+    public function test_can_upload_multiple_screenshots_to_record(): void
+    {
+        Storage::fake('public');
+
+        $report = Report::create([
+            'report_type' => 'long_idling',
+            'report_date' => now()->toDateString(),
+            'status' => 'draft',
+            'created_by' => $this->user->id,
+        ]);
+
+        $record = LongIdlingRecord::create([
+            'report_id' => $report->id,
+            'device_name' => 'MULTI-IMG-01',
+            'imei' => '123456789012345',
+            'model' => 'Model-X',
+            'stay_time' => '01:00:00',
+        ]);
+
+        $file1 = UploadedFile::fake()->image('screenshot1.png', 400, 300);
+        $file2 = UploadedFile::fake()->image('screenshot2.png', 400, 300);
+
+        $response = $this->actingAs($this->user)->postJson(route('reports.uploadGenericScreenshot'), [
+            'record_id' => $record->id,
+            'report_id' => $report->id,
+            'images' => [$file1, $file2],
+        ]);
+
+        $response->assertOk();
+        $response->assertJson([
+            'success' => true,
+        ]);
+
+        $data = $response->json();
+        $this->assertCount(2, $data['all_images']);
+        $this->assertCount(2, $data['all_image_urls']);
+
+        $record->refresh();
+        $this->assertCount(2, $record->getAllImages());
+        $this->assertCount(2, $record->getAllImageUrls());
+        $this->assertNotNull($record->image);
+    }
+
+    public function test_can_generate_pdf_report_with_multiple_screenshots_attached(): void
+    {
+        Storage::fake('public');
+
+        $report = Report::create([
+            'report_type' => 'long_idling',
+            'report_date' => now()->toDateString(),
+            'status' => 'completed',
+            'created_by' => $this->user->id,
+        ]);
+
+        $file1 = UploadedFile::fake()->image('img1.png', 300, 200);
+        $file2 = UploadedFile::fake()->image('img2.png', 300, 200);
+
+        $path1 = 'screenshots/'.$report->id.'/img1.png';
+        $path2 = 'screenshots/'.$report->id.'/img2.png';
+
+        Storage::disk('public')->put($path1, file_get_contents($file1->getRealPath()));
+        Storage::disk('public')->put($path2, file_get_contents($file2->getRealPath()));
+
+        LongIdlingRecord::create([
+            'report_id' => $report->id,
+            'device_name' => 'DT-MULTI-01',
+            'imei' => '999888777666555',
+            'model' => 'Hino 700',
+            'state' => 'Idling',
+            'start_time' => '09:00:00',
+            'end_time' => '11:00:00',
+            'stay_time' => '02:00:00',
+            'image' => $path1,
+            'images' => [$path1, $path2],
+            'sort_order' => 1,
+        ]);
+
+        $response = $this->actingAs($this->user)->get(route('reports.generatePdf', $report));
+        $response->assertOk();
+        $this->assertEquals('application/pdf', $response->headers->get('content-type'));
+    }
+
+    public function test_livewire_can_append_and_remove_individual_images_for_row(): void
+    {
+        $report = Report::create([
+            'report_type' => 'long_idling',
+            'report_date' => now()->toDateString(),
+            'status' => 'draft',
+            'created_by' => $this->user->id,
+        ]);
+
+        $record = LongIdlingRecord::create([
+            'report_id' => $report->id,
+            'device_name' => 'DT-ROW-TEST',
+            'imei' => '888777666555444',
+            'model' => 'Isuzu Elf',
+            'stay_time' => '01:30:00',
+        ]);
+
+        Livewire::actingAs($this->user)
+            ->test(LongIdlingTable::class, ['reportId' => $report->id])
+            ->assertCount('rows', 1)
+            ->call('appendRowImages', 0, ['screenshots/1/a.png', 'screenshots/1/b.png'], ['http://url/a.png', 'http://url/b.png'])
+            ->assertSet('rows.0.images', ['screenshots/1/a.png', 'screenshots/1/b.png'])
+            ->assertSet('rows.0.image', 'screenshots/1/a.png')
+            ->call('removeRowImageAtIndex', 0, 0)
+            ->assertSet('rows.0.images', ['screenshots/1/b.png'])
+            ->assertSet('rows.0.image', 'screenshots/1/b.png')
+            ->call('removeRowImage', 0)
+            ->assertSet('rows.0.images', [])
+            ->assertSet('rows.0.image', null);
+    }
 }

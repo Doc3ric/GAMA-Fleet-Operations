@@ -23,6 +23,7 @@ class LongIdlingRecord extends Model
         'longitude',
         'address',
         'image',
+        'images',
         'remarks',
         'sort_order',
     ];
@@ -31,6 +32,7 @@ class LongIdlingRecord extends Model
         'latitude' => 'float',
         'longitude' => 'float',
         'sort_order' => 'integer',
+        'images' => 'array',
     ];
 
     public function report(): BelongsTo
@@ -38,13 +40,88 @@ class LongIdlingRecord extends Model
         return $this->belongsTo(Report::class);
     }
 
-    public function getImageUrlAttribute(): ?string
+    /**
+     * Get all image paths as an array.
+     *
+     * @return array<int, string>
+     */
+    public function getAllImages(): array
     {
-        if (! $this->image) {
-            return null;
+        $list = [];
+        if (is_array($this->images)) {
+            $list = $this->images;
+        } elseif (is_string($this->images) && ! empty($this->images)) {
+            $decoded = json_decode($this->images, true);
+            if (is_array($decoded)) {
+                $list = $decoded;
+            }
         }
 
-        return Storage::disk('public')->url($this->image);
+        if (empty($list) && ! empty($this->image)) {
+            $list = [$this->image];
+        }
+
+        return array_values(array_filter($list));
+    }
+
+    /**
+     * Get all full URLs for images.
+     *
+     * @return array<int, string>
+     */
+    public function getAllImageUrls(): array
+    {
+        return array_values(array_map(function ($img) {
+            return Storage::disk('public')->url($img);
+        }, $this->getAllImages()));
+    }
+
+    /**
+     * Accessor for all_images attribute
+     *
+     * @return array<int, string>
+     */
+    public function getAllImagesAttribute(): array
+    {
+        return $this->getAllImages();
+    }
+
+    /**
+     * Accessor for all_image_urls attribute
+     *
+     * @return array<int, string>
+     */
+    public function getAllImageUrlsAttribute(): array
+    {
+        return $this->getAllImageUrls();
+    }
+
+    public function getImageUrlAttribute(): ?string
+    {
+        if ($this->image) {
+            return Storage::disk('public')->url($this->image);
+        }
+
+        $all = $this->getAllImages();
+        if (! empty($all)) {
+            return Storage::disk('public')->url($all[0]);
+        }
+
+        return null;
+    }
+
+    /**
+     * Delete all images belonging to this record from disk.
+     */
+    public function deleteAllImages(): void
+    {
+        foreach ($this->getAllImages() as $img) {
+            Storage::disk('public')->delete($img);
+        }
+
+        if (! empty($this->image)) {
+            Storage::disk('public')->delete($this->image);
+        }
     }
 
     public function getCoordinatesAttribute(): ?string

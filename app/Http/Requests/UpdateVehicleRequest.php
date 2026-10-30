@@ -30,6 +30,7 @@ class UpdateVehicleRequest extends FormRequest
             'user' => ['nullable', 'string', 'max:100'],
             'project_code' => ['nullable', 'string', 'max:50'],
             'average_fuel_consumption' => ['nullable', 'numeric', 'min:0.01', 'max:999.99'],
+            'fuel_limit' => ['nullable', 'numeric', 'min:0', 'max:99999.99'],
             'vehicle_type_id' => ['nullable', 'exists:vehicle_types,id'],
             'date_acquired' => ['nullable', 'date'],
             'fuel_min' => ['nullable', 'numeric', 'min:0', 'max:9999.99'],

@@ -226,12 +226,158 @@
             margin: 0 auto;
             border: none;
         }
+
+        /* Multiple Screenshots Grid Table */
+        .screenshots-multi-table {
+            width: 100%;
+            border-collapse: collapse;
+            border-top: 1px solid #cbd5e1;
+            background: #ffffff;
+            margin: 0;
+            table-layout: fixed;
+        }
+        .screenshots-multi-table td {
+            padding: 4px;
+            vertical-align: top;
+            text-align: center;
+            border: none;
+            background: #ffffff;
+        }
+        .screenshot-card-cell {
+            border: 1px solid #e2e8f0;
+            background: #f8fafc;
+            padding: 3px;
+        }
+        .screenshot-caption {
+            font-size: 7.5px;
+            font-weight: bold;
+            color: #475569;
+            background: #f1f5f9;
+            padding: 2px 4px;
+            margin-bottom: 3px;
+            border-bottom: 1px solid #e2e8f0;
+            text-align: left;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+        .screenshot-multi-img {
+            max-width: 100%;
+            max-height: 250pt;
+            height: auto;
+            display: block;
+            margin: 0 auto;
+            border: 1px solid #cbd5e1;
+        }
     </style>
 </head>
 <body>
 
     @php
-        $recordsWithImages = $report->longIdlingRecords->filter(fn($r) => !empty($r->image) && (\Illuminate\Support\Facades\Storage::disk('public')->exists($r->image) || file_exists(\Illuminate\Support\Facades\Storage::disk('public')->path($r->image))));
+        ini_set('memory_limit', '512M');
+        set_time_limit(300);
+
+        /**
+         * Resize and compress an image using GD, returning a base64 data URI.
+         * Downscales to max 1200px wide/tall and compresses as JPEG at 70% quality.
+         * Falls back to raw base64 if GD is not available or the image type is unsupported.
+         *
+         * @param string $diskPath Absolute path to the source image file
+         * @return array{mime: string, data: string} mime type and base64-encoded data
+         */
+        $compressImageForPdf = function(string $diskPath): array {
+            $maxDimension = 1200;
+            $jpegQuality  = 70;
+
+            $mime = mime_content_type($diskPath) ?: 'image/jpeg';
+
+            if (!extension_loaded('gd')) {
+                return ['mime' => $mime, 'data' => base64_encode(file_get_contents($diskPath))];
+            }
+
+            try {
+                [$srcW, $srcH, $type] = getimagesize($diskPath);
+
+                // Only resize if larger than max dimension
+                if ($srcW <= $maxDimension && $srcH <= $maxDimension) {
+                    // Still re-encode as JPEG to shrink file size
+                    $src = match ($type) {
+                        IMAGETYPE_JPEG => imagecreatefromjpeg($diskPath),
+                        IMAGETYPE_PNG  => imagecreatefrompng($diskPath),
+                        IMAGETYPE_GIF  => imagecreatefromgif($diskPath),
+                        IMAGETYPE_WEBP => imagecreatefromwebp($diskPath),
+                        default        => null,
+                    };
+
+                    if (!$src) {
+                        return ['mime' => $mime, 'data' => base64_encode(file_get_contents($diskPath))];
+                    }
+
+                    ob_start();
+                    imagejpeg($src, null, $jpegQuality);
+                    $data = ob_get_clean();
+                    imagedestroy($src);
+
+                    return ['mime' => 'image/jpeg', 'data' => base64_encode($data)];
+                }
+
+                // Scale down proportionally
+                $ratio  = min($maxDimension / $srcW, $maxDimension / $srcH);
+                $dstW   = (int) round($srcW * $ratio);
+                $dstH   = (int) round($srcH * $ratio);
+
+                $src = match ($type) {
+                    IMAGETYPE_JPEG => imagecreatefromjpeg($diskPath),
+                    IMAGETYPE_PNG  => imagecreatefrompng($diskPath),
+                    IMAGETYPE_GIF  => imagecreatefromgif($diskPath),
+                    IMAGETYPE_WEBP => imagecreatefromwebp($diskPath),
+                    default        => null,
+                };
+
+                if (!$src) {
+                    return ['mime' => $mime, 'data' => base64_encode(file_get_contents($diskPath))];
+                }
+
+                $dst = imagecreatetruecolor($dstW, $dstH);
+
+                // Preserve transparency for PNG/GIF source images
+                if (in_array($type, [IMAGETYPE_PNG, IMAGETYPE_GIF])) {
+                    imagefilledrectangle($dst, 0, 0, $dstW, $dstH, imagecolorallocate($dst, 255, 255, 255));
+                }
+
+                imagecopyresampled($dst, $src, 0, 0, 0, 0, $dstW, $dstH, $srcW, $srcH);
+                imagedestroy($src);
+
+                ob_start();
+                imagejpeg($dst, null, $jpegQuality);
+                $data = ob_get_clean();
+                imagedestroy($dst);
+
+                return ['mime' => 'image/jpeg', 'data' => base64_encode($data)];
+
+            } catch (\Throwable $e) {
+                // Graceful fallback: embed the raw file
+                return ['mime' => $mime, 'data' => base64_encode(file_get_contents($diskPath))];
+            }
+        };
+
+        $getDiskImages = function($rec) {
+            $imgs = method_exists($rec, 'getAllImages') ? $rec->getAllImages() : (!empty($rec->images) ? (is_array($rec->images) ? $rec->images : json_decode($rec->images, true)) : (!empty($rec->image) ? [$rec->image] : []));
+            $valid = [];
+            foreach ((array)$imgs as $img) {
+                if (!empty($img)) {
+                    $diskPath = \Illuminate\Support\Facades\Storage::disk('public')->path($img);
+                    if (file_exists($diskPath)) {
+                        $valid[] = [
+                            'path' => $img,
+                            'diskPath' => $diskPath,
+                        ];
+                    }
+                }
+            }
+            return $valid;
+        };
+
+        $recordsWithImages = $report->longIdlingRecords->filter(fn($r) => !empty($getDiskImages($r)));
         $hasAnyImages = $recordsWithImages->isNotEmpty();
         $allHaveImages = $recordsWithImages->count() === $report->longIdlingRecords->count() && $report->longIdlingRecords->count() > 0;
         $useCardLayout = $allHaveImages && $report->longIdlingRecords->count() <= 5;
@@ -324,16 +470,47 @@
                 </table>
 
                 @php
-                    $diskPath = \Illuminate\Support\Facades\Storage::disk('public')->path($record->image ?? '');
+                    $diskImages = $getDiskImages($record);
                 @endphp
-                @if($record->image && file_exists($diskPath))
-                    <div class="screenshot-container">
+                @if(!empty($diskImages))
+                    @if(count($diskImages) === 1)
                         @php
-                            $imgData = base64_encode(file_get_contents($diskPath));
-                            $imgMime = mime_content_type($diskPath);
+                            $imgItem = $diskImages[0];
+                            $compressed = $compressImageForPdf($imgItem['diskPath']);
+                            $imgData = $compressed['data'];
+                            $imgMime = $compressed['mime'];
                         @endphp
-                        <img src="data:{{ $imgMime }};base64,{{ $imgData }}" class="screenshot-img" alt="Captured image">
-                    </div>
+                        <div class="screenshot-container">
+                            <img src="data:{{ $imgMime }};base64,{{ $imgData }}" class="screenshot-img" alt="Captured image">
+                        </div>
+                    @else
+                        @php
+                            $chunks = array_chunk($diskImages, 2);
+                        @endphp
+                        <table class="screenshots-multi-table">
+                            @foreach($chunks as $chunk)
+                                <tr>
+                                    @foreach($chunk as $cIndex => $imgItem)
+                                        @php
+                                            $compressed = $compressImageForPdf($imgItem['diskPath']);
+                                            $imgData = $compressed['data'];
+                                            $imgMime = $compressed['mime'];
+                                            $currentNum = ($loop->parent->index * 2) + $cIndex + 1;
+                                        @endphp
+                                        <td style="width: 50%;">
+                                            <div class="screenshot-card-cell">
+                                                <div class="screenshot-caption">Screenshot {{ $currentNum }} of {{ count($diskImages) }}</div>
+                                                <img src="data:{{ $imgMime }};base64,{{ $imgData }}" class="screenshot-multi-img" alt="Captured image {{ $currentNum }}">
+                                            </div>
+                                        </td>
+                                    @endforeach
+                                    @if(count($chunk) === 1)
+                                        <td style="width: 50%;"></td>
+                                    @endif
+                                </tr>
+                            @endforeach
+                        </table>
+                    @endif
                 @endif
             </div>
         @endforeach
@@ -395,9 +572,17 @@
             </div>
 
             @foreach($recordsWithImages as $index => $record)
+                @php
+                    $diskImages = $getDiskImages($record);
+                @endphp
                 <div class="record-block">
                     <div class="record-header">
                         Record #{{ $index + 1 }} &mdash; {{ $record->device_name }}
+                        @if(count($diskImages) > 1)
+                            <span style="float: right; font-size: 7.5px; opacity: 0.9; text-transform: none; font-weight: normal;">
+                                ({{ count($diskImages) }} Screenshots attached)
+                            </span>
+                        @endif
                     </div>
                     <table class="record-table">
                         @if(!empty($isMultiDate) && $record->report?->report_date)
@@ -422,17 +607,45 @@
                         @endif
                     </table>
 
-                    @php
-                        $diskPath = \Illuminate\Support\Facades\Storage::disk('public')->path($record->image ?? '');
-                    @endphp
-                    @if(file_exists($diskPath))
-                        <div class="screenshot-container">
+                    @if(!empty($diskImages))
+                        @if(count($diskImages) === 1)
                             @php
-                                $imgData = base64_encode(file_get_contents($diskPath));
-                                $imgMime = mime_content_type($diskPath);
+                                $imgItem = $diskImages[0];
+                                $compressed = $compressImageForPdf($imgItem['diskPath']);
+                                $imgData = $compressed['data'];
+                                $imgMime = $compressed['mime'];
                             @endphp
-                            <img src="data:{{ $imgMime }};base64,{{ $imgData }}" class="screenshot-img" alt="Captured image">
-                        </div>
+                            <div class="screenshot-container">
+                                <img src="data:{{ $imgMime }};base64,{{ $imgData }}" class="screenshot-img" alt="Captured image">
+                            </div>
+                        @else
+                            @php
+                                $chunks = array_chunk($diskImages, 2);
+                            @endphp
+                            <table class="screenshots-multi-table">
+                                @foreach($chunks as $chunk)
+                                    <tr>
+                                        @foreach($chunk as $cIndex => $imgItem)
+                                            @php
+                                                $compressed = $compressImageForPdf($imgItem['diskPath']);
+                                                $imgData = $compressed['data'];
+                                                $imgMime = $compressed['mime'];
+                                                $currentNum = ($loop->parent->index * 2) + $cIndex + 1;
+                                            @endphp
+                                            <td style="width: 50%;">
+                                                <div class="screenshot-card-cell">
+                                                    <div class="screenshot-caption">Screenshot {{ $currentNum }} of {{ count($diskImages) }}</div>
+                                                    <img src="data:{{ $imgMime }};base64,{{ $imgData }}" class="screenshot-multi-img" alt="Captured image {{ $currentNum }}">
+                                                </div>
+                                            </td>
+                                        @endforeach
+                                        @if(count($chunk) === 1)
+                                            <td style="width: 50%;"></td>
+                                        @endif
+                                    </tr>
+                                @endforeach
+                            </table>
+                        @endif
                     @endif
                 </div>
             @endforeach

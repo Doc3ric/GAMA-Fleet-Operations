@@ -41,6 +41,7 @@ class VehicleFactory extends Factory
             'operator_driver' => $this->faker->name(),
             'user' => $this->faker->randomElement(['Purchasing', 'Operations', 'Engineering', 'Logistics', 'Admin']),
             'average_fuel_consumption' => $this->faker->randomFloat(2, 3.0, 12.0),
+            'fuel_limit' => $this->faker->optional()->randomFloat(2, 40.0, 300.0),
             'helper' => $this->faker->optional()->name(),
             'gps_status' => $this->faker->randomElement(Vehicle::GPS_STATUSES),
             'image' => null,

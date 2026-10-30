@@ -6,7 +6,6 @@ use App\Models\LongIdlingRecord;
 use App\Models\Report;
 use Carbon\Carbon;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Storage;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 
 class LongIdlingImportService
@@ -67,9 +66,7 @@ class LongIdlingImportService
         // 2. Handle replace mode
         if ($mode === 'replace') {
             $report->longIdlingRecords->each(function ($rec) {
-                if ($rec->image) {
-                    Storage::disk('public')->delete($rec->image);
-                }
+                $rec->deleteAllImages();
             });
             $report->longIdlingRecords()->delete();
         }

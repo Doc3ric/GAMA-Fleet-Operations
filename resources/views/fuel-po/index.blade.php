@@ -252,6 +252,15 @@
             this.importError = null;
 
             try {
+                const tablesPayload = (this.importPreview.tables || []).map((t, idx) => ({
+                    table_index: t.table_index ?? idx,
+                    vehicle_id: t.vehicle_match?.vehicle_id ?? this.importPreview.vehicle_match?.vehicle_id ?? null,
+                    driver_name: t.header?.driver_name || (idx === 0 ? this.importPreview.header?.driver_name : null) || null,
+                    custom_equipment_code: t.vehicle_match?.equipment_code ?? this.importPreview.vehicle_match?.equipment_code ?? null,
+                    custom_plate_number: t.vehicle_match?.plate_number ?? this.importPreview.vehicle_match?.plate_number ?? null,
+                    custom_average_consumption: t.vehicle_match?.avg_consumption ?? this.importPreview.vehicle_match?.avg_consumption ?? null,
+                }));
+
                 const response = await fetch('{{ route('fuel-po.import.confirm') }}', {
                     method: 'POST',
                     headers: {
@@ -262,11 +271,12 @@
                     body: JSON.stringify({
                         import_token: this.importPreview.import_token,
                         extension: this.importPreview.extension,
-                        vehicle_id: this.importPreview.vehicle_match.vehicle_id,
-                        driver_name: this.importPreview.header.driver_name,
-                        custom_equipment_code: this.importPreview.vehicle_match.equipment_code,
-                        custom_plate_number: this.importPreview.vehicle_match.plate_number,
-                        custom_average_consumption: this.importPreview.vehicle_match.avg_consumption
+                        vehicle_id: this.importPreview.vehicle_match?.vehicle_id ?? null,
+                        driver_name: this.importPreview.header?.driver_name ?? null,
+                        custom_equipment_code: this.importPreview.vehicle_match?.equipment_code ?? null,
+                        custom_plate_number: this.importPreview.vehicle_match?.plate_number ?? null,
+                        custom_average_consumption: this.importPreview.vehicle_match?.avg_consumption ?? null,
+                        tables: tablesPayload.length > 0 ? tablesPayload : undefined
                     })
                 });
 
@@ -1395,12 +1405,20 @@
                                                 ⚠ Custom / Unregistered Vehicle
                                             </span>
                                         </template>
+                                        <template x-if="(importPreview?.tables?.length || 0) > 1">
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800 font-mono">
+                                                <span x-text="importPreview.tables.length"></span> Tables Detected
+                                            </span>
+                                        </template>
                                         <span class="text-xs text-slate-500 font-mono" x-text="importPreview?.file_name"></span>
                                     </div>
                                     <h4 class="text-sm font-bold text-slate-900 mt-1">
                                         <span x-text="importPreview?.vehicle_match?.equipment_code || 'No EQT Code'"></span>
                                         <span class="text-slate-400 font-normal" x-text="'• ' + (importPreview?.vehicle_match?.plate_number || 'No Plate')"></span>
                                         <span class="text-slate-400 font-normal" x-show="importPreview?.vehicle_match?.model" x-text="'(' + importPreview?.vehicle_match?.model + ')'"></span>
+                                        <template x-if="(importPreview?.tables?.length || 0) > 1">
+                                            <span class="text-xs font-normal text-indigo-600 ml-1">(Primary Table)</span>
+                                        </template>
                                     </h4>
                                 </div>
 
@@ -1428,8 +1446,8 @@
                                 <span class="font-semibold text-slate-800 block mt-0.5 truncate" x-text="importPreview?.header?.week_label || '—'"></span>
                             </div>
                             <div class="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                                <span class="block text-[10px] uppercase font-bold text-slate-400">PO Records (Days)</span>
-                                <span class="font-extrabold text-slate-900 block mt-0.5 text-base" x-text="(importPreview?.summary?.total_dates || 0) + ' PO Record(s)'"></span>
+                                <span class="block text-[10px] uppercase font-bold text-slate-400">PO Checklist Records</span>
+                                <span class="font-extrabold text-slate-900 block mt-0.5 text-base" x-text="(importPreview?.tables?.length || importPreview?.summary?.total_dates || 1) + ' Record(s)'"></span>
                             </div>
                             <div class="p-3 bg-slate-50 rounded-xl border border-slate-200">
                                 <span class="block text-[10px] uppercase font-bold text-slate-400">Total Distance</span>
@@ -1441,43 +1459,109 @@
                             </div>
                         </div>
 
-                        {{-- Date-by-Date PO Breakdown --}}
-                        <div class="space-y-3">
-                            <h4 class="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center justify-between">
-                                <span>PO Records to be Created (<span x-text="importPreview?.date_groups?.length || 0"></span>)</span>
-                                <span class="text-[11px] text-slate-400 font-normal lowercase">1 Fuel PO per date</span>
-                            </h4>
+                        {{-- Itinerary Tables Breakdown (1 Fuel PO Record per Table) --}}
+                        <template x-if="importPreview?.tables && importPreview.tables.length > 0">
+                            <div class="space-y-3">
+                                <h4 class="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center justify-between">
+                                    <span>PO Checklist Records to be Created (<span x-text="importPreview.tables.length"></span>)</span>
+                                    <span class="text-[11px] text-slate-400 font-normal lowercase">1 Fuel PO checklist entry per table</span>
+                                </h4>
 
-                            <div class="divide-y divide-slate-100 rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-2xs">
-                                <template x-for="(group, gIdx) in importPreview?.date_groups" :key="gIdx">
-                                    <div class="p-4 hover:bg-slate-50/50 transition">
-                                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                                            <div>
-                                                <div class="flex items-center gap-2">
-                                                    <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-100 text-blue-800 font-mono" x-text="group.date"></span>
-                                                    <h5 class="text-xs font-bold text-slate-900" x-text="group.formatted_date"></h5>
+                                <div class="space-y-3">
+                                    <template x-for="(tbl, tIdx) in importPreview.tables" :key="tIdx">
+                                        <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs hover:border-slate-300 transition space-y-3">
+                                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
+                                                <div class="flex items-center gap-2 flex-wrap">
+                                                    <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider"
+                                                          :class="tbl.vehicle_match?.is_matched ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'"
+                                                          x-text="tbl.vehicle_match?.is_matched ? '✓ Matched Vehicle' : '⚠ Custom Vehicle'"></span>
+                                                    <span class="text-xs font-extrabold text-slate-900" x-text="tbl.vehicle_match?.equipment_code || '—'"></span>
+                                                    <span class="text-xs text-slate-500 font-mono" x-text="tbl.vehicle_match?.plate_number ? '• ' + tbl.vehicle_match.plate_number : ''"></span>
+                                                    <span class="text-[11px] text-slate-400 font-mono" x-text="'[' + (tbl.sheet_name || 'Sheet') + ' #' + (tIdx + 1) + ']'"></span>
                                                 </div>
-                                                <p class="text-[11px] text-slate-500 mt-1">
-                                                    <span class="font-medium text-slate-700" x-text="group.legs.length + ' stop(s): '"></span>
-                                                    <span x-text="group.legs.map(l => l.destination).join(' &rarr; ')"></span>
-                                                </p>
+
+                                                <div class="flex items-center gap-2">
+                                                    <span class="text-[10px] uppercase font-bold text-slate-400">Driver:</span>
+                                                    <input type="text"
+                                                           x-model="tbl.header.driver_name"
+                                                           placeholder="Driver name"
+                                                           class="text-xs font-semibold text-slate-800 border border-slate-200 rounded-lg px-2 py-0.5 text-right focus:border-indigo-500 outline-none w-36">
+                                                </div>
                                             </div>
 
-                                            <div class="flex items-center gap-4 text-xs font-mono shrink-0">
-                                                <div>
-                                                    <span class="block text-[9px] uppercase font-bold text-slate-400 font-sans">Distance</span>
-                                                    <span class="font-bold text-slate-800" x-text="group.total_distance + ' KM'"></span>
+                                            {{-- Table Metrics (TOTAL DISTANCE, Avg. Consumption, Liter for PO) --}}
+                                            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                                                <div class="p-2.5 bg-slate-50 rounded-xl border border-slate-100">
+                                                    <span class="block text-[9px] uppercase font-bold text-slate-400">Week Period</span>
+                                                    <span class="font-semibold text-slate-800 truncate block mt-0.5" x-text="tbl.header?.week_label || 'Weekly Itinerary'"></span>
                                                 </div>
+                                                <div class="p-2.5 bg-slate-50 rounded-xl border border-slate-100">
+                                                    <span class="block text-[9px] uppercase font-bold text-slate-400">Total Distance</span>
+                                                    <span class="font-mono font-bold text-slate-900 block mt-0.5" x-text="(tbl.summary?.total_distance || 0) + ' KM'"></span>
+                                                </div>
+                                                <div class="p-2.5 bg-blue-50/70 rounded-xl border border-blue-100">
+                                                    <span class="block text-[9px] uppercase font-bold text-blue-600">Avg. Consumption</span>
+                                                    <span class="font-mono font-bold text-blue-900 block mt-0.5" x-text="tbl.summary?.avg_consumption ? (tbl.summary.avg_consumption + ' KM/L') : 'Not set'"></span>
+                                                </div>
+                                                <div class="p-2.5 bg-emerald-50/70 rounded-xl border border-emerald-100">
+                                                    <span class="block text-[9px] uppercase font-bold text-emerald-700">Liter for PO</span>
+                                                    <span class="font-mono font-extrabold text-emerald-900 block mt-0.5" x-text="tbl.summary?.liter_for_po ? (tbl.summary.liter_for_po + ' L') : '—'"></span>
+                                                </div>
+                                            </div>
+
+                                            {{-- Itinerary Legs / Stops preview --}}
+                                            <div class="text-[11px] text-slate-500 bg-slate-50/60 rounded-lg p-2.5 flex items-center justify-between">
+                                                <span class="truncate">
+                                                    <strong class="text-slate-700" x-text="(tbl.summary?.total_stops || 0) + ' stop(s): '"></strong>
+                                                    <span x-text="(tbl.date_groups || []).map(g => g.formatted_date + ' (' + g.legs.length + ')').join(' • ')"></span>
+                                                </span>
+                                                <span class="font-mono font-semibold text-slate-600 shrink-0 ml-2" x-text="(tbl.date_groups || []).length + ' Day(s)'"></span>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                        </template>
+
+                        {{-- Fallback: Date-by-Date PO Breakdown (if no tables array) --}}
+                        <template x-if="!importPreview?.tables || importPreview.tables.length === 0">
+                            <div class="space-y-3">
+                                <h4 class="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center justify-between">
+                                    <span>PO Records to be Created (<span x-text="importPreview?.date_groups?.length || 0"></span>)</span>
+                                    <span class="text-[11px] text-slate-400 font-normal lowercase">1 Fuel PO per date</span>
+                                </h4>
+
+                                <div class="divide-y divide-slate-100 rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-2xs">
+                                    <template x-for="(group, gIdx) in importPreview?.date_groups" :key="gIdx">
+                                        <div class="p-4 hover:bg-slate-50/50 transition">
+                                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                                                 <div>
-                                                    <span class="block text-[9px] uppercase font-bold text-indigo-700 font-sans">Liter for PO</span>
-                                                    <span class="font-extrabold text-indigo-900" x-text="group.fuel_liters_required ? (group.fuel_liters_required + ' L') : '—'"></span>
+                                                    <div class="flex items-center gap-2">
+                                                        <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-100 text-blue-800 font-mono" x-text="group.date"></span>
+                                                        <h5 class="text-xs font-bold text-slate-900" x-text="group.formatted_date"></h5>
+                                                    </div>
+                                                    <p class="text-[11px] text-slate-500 mt-1">
+                                                        <span class="font-medium text-slate-700" x-text="group.legs.length + ' stop(s): '"></span>
+                                                        <span x-text="group.legs.map(l => l.destination).join(' &rarr; ')"></span>
+                                                    </p>
+                                                </div>
+
+                                                <div class="flex items-center gap-4 text-xs font-mono shrink-0">
+                                                    <div>
+                                                        <span class="block text-[9px] uppercase font-bold text-slate-400 font-sans">Distance</span>
+                                                        <span class="font-bold text-slate-800" x-text="group.total_distance + ' KM'"></span>
+                                                    </div>
+                                                    <div>
+                                                        <span class="block text-[9px] uppercase font-bold text-indigo-700 font-sans">Liter for PO</span>
+                                                        <span class="font-extrabold text-indigo-900" x-text="group.fuel_liters_required ? (group.fuel_liters_required + ' L') : '—'"></span>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
-                                    </div>
-                                </template>
+                                    </template>
+                                </div>
                             </div>
-                        </div>
+                        </template>
                     </div>
                 </div>
 
@@ -1510,7 +1594,7 @@
                                 <svg class="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
                                 </svg>
-                                <span>SAVE TO PO CHECKLIST (<span x-text="importPreview?.summary?.total_dates || 1"></span> Record)</span>
+                                <span>SAVE TO PO CHECKLIST (<span x-text="(importPreview?.tables?.length || importPreview?.summary?.total_dates || 1) + ' Record' + ((importPreview?.tables?.length || importPreview?.summary?.total_dates || 1) > 1 ? 's' : '')"></span>)</span>
                             </span>
                             <span x-show="isImportSaving" x-cloak class="flex items-center gap-2">
                                 <svg class="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">

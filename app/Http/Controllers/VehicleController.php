@@ -2,12 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Exports\VehicleExport;
 use App\Exports\VehicleTemplateExport;
 use App\Http\Requests\StoreVehicleRequest;
 use App\Http\Requests\UpdateVehicleRequest;
 use App\Models\Vehicle;
 use App\Models\VehicleType;
 use App\Services\VehicleImportService;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -20,39 +22,7 @@ class VehicleController extends Controller
 {
     public function index(Request $request): View
     {
-        $query = Vehicle::with(['vehicleType', 'device'])
-            ->orderBy('equipment_code');
-
-        if ($search = $request->input('search')) {
-            $query->where(function ($q) use ($search) {
-                $q->where('equipment_code', 'like', "%{$search}%")
-                    ->orWhere('model', 'like', "%{$search}%")
-                    ->orWhere('plate_number', 'like', "%{$search}%")
-                    ->orWhere('operator_driver', 'like', "%{$search}%")
-                    ->orWhere('user', 'like', "%{$search}%")
-                    ->orWhere('project_code', 'like', "%{$search}%");
-            });
-        }
-
-        if ($typeId = $request->input('vehicle_type_id')) {
-            $query->where('vehicle_type_id', $typeId);
-        }
-
-        if ($gpsStatus = $request->input('gps_status')) {
-            $query->where('gps_status', $gpsStatus);
-        }
-
-        if ($statusLabel = $request->input('status_label')) {
-            $query->where('status_label', $statusLabel);
-        }
-
-        if ($location = $request->input('location')) {
-            $query->where('location', $location);
-        }
-
-        if ($projectCode = $request->input('project_code')) {
-            $query->where('project_code', $projectCode);
-        }
+        $query = $this->buildVehiclesQuery($request);
 
         $vehicles = $query->paginate(20)->withQueryString();
         $archivedCount = Vehicle::onlyTrashed()->count();
@@ -227,9 +197,38 @@ class VehicleController extends Controller
         return back()->with('success', 'Image updated successfully.');
     }
 
+    public function updateFuelLimit(Request $request, Vehicle $vehicle): RedirectResponse
+    {
+        $validated = $request->validate([
+            'fuel_limit' => ['nullable', 'numeric', 'min:0', 'max:99999.99'],
+        ]);
+
+        $limit = isset($validated['fuel_limit']) && $validated['fuel_limit'] !== null && $validated['fuel_limit'] !== ''
+            ? (float) $validated['fuel_limit']
+            : null;
+
+        $vehicle->update([
+            'fuel_limit' => $limit,
+        ]);
+
+        $msg = $vehicle->fuel_limit !== null
+            ? "Fuel limit for {$vehicle->equipment_code} set to ".number_format($vehicle->fuel_limit, 2).' L.'
+            : "Fuel limit for {$vehicle->equipment_code} cleared.";
+
+        return redirect()->back()->with('success', $msg);
+    }
+
     public function downloadTemplate(): BinaryFileResponse
     {
         return Excel::download(new VehicleTemplateExport, 'Vehicle-Master-List-Template.xlsx');
+    }
+
+    public function exportExcel(Request $request): BinaryFileResponse
+    {
+        $query = $this->buildVehiclesQuery($request);
+        $filename = 'Vehicle-Master-List-'.now()->format('Y-m-d').'.xlsx';
+
+        return Excel::download(new VehicleExport($query), $filename);
     }
 
     public function importData(Request $request, VehicleImportService $importService): RedirectResponse
@@ -256,5 +255,47 @@ class VehicleController extends Controller
 
         return redirect()->route('vehicles.index')
             ->with('error', $result['message']);
+    }
+
+    /**
+     * Build the filtered vehicle query according to request parameters.
+     */
+    protected function buildVehiclesQuery(Request $request): Builder
+    {
+        $query = Vehicle::with(['vehicleType', 'device'])
+            ->orderBy('equipment_code');
+
+        if ($search = $request->input('search')) {
+            $query->where(function ($q) use ($search) {
+                $q->where('equipment_code', 'like', "%{$search}%")
+                    ->orWhere('model', 'like', "%{$search}%")
+                    ->orWhere('plate_number', 'like', "%{$search}%")
+                    ->orWhere('operator_driver', 'like', "%{$search}%")
+                    ->orWhere('user', 'like', "%{$search}%")
+                    ->orWhere('project_code', 'like', "%{$search}%");
+            });
+        }
+
+        if ($typeId = $request->input('vehicle_type_id')) {
+            $query->where('vehicle_type_id', $typeId);
+        }
+
+        if ($gpsStatus = $request->input('gps_status')) {
+            $query->where('gps_status', $gpsStatus);
+        }
+
+        if ($statusLabel = $request->input('status_label')) {
+            $query->where('status_label', $statusLabel);
+        }
+
+        if ($location = $request->input('location')) {
+            $query->where('location', $location);
+        }
+
+        if ($projectCode = $request->input('project_code')) {
+            $query->where('project_code', $projectCode);
+        }
+
+        return $query;
     }
 }

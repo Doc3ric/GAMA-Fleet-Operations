@@ -511,11 +511,12 @@
                                        id="file-input-{{ $origIndex }}"
                                        class="hidden"
                                        accept="image/jpeg,image/jpg,image/png,image/webp"
+                                       multiple
                                        @change="
-                                           const f = $event.target.files[0];
-                                           if (!f) return;
+                                           const fl = $event.target.files;
+                                           if (!fl || fl.length === 0) return;
                                            uploading = true;
-                                           uploadScreenshotFile(f, {{ $origIndex }}, {{ $rowId ?? 'null' }})
+                                           uploadScreenshotFiles(fl, {{ $origIndex }}, {{ $rowId ?? 'null' }})
                                                .finally(() => {
                                                    uploading = false;
                                                    $event.target.value = '';
@@ -534,30 +535,56 @@
 
                                     {{-- Image Display or Upload Buttons --}}
                                     <div x-show="!uploading" class="flex items-center justify-center">
-                                        @if(!empty($row['image_url']))
-                                            <div class="relative group flex items-center gap-1.5">
-                                                <button type="button"
-                                                    @click="$dispatch('open-lightbox', '{{ $row['image_url'] }}')"
-                                                    class="block w-12 h-8 rounded-lg overflow-hidden border border-slate-200 hover:border-blue-500 shadow-2xs hover:shadow transition-all cursor-pointer"
-                                                    title="Click to preview full size">
-                                                    <img src="{{ $row['image_url'] }}" class="w-full h-full object-cover group-hover:scale-105 transition-transform" alt="screenshot">
-                                                </button>
+                                        @php
+                                            $rowImageUrls = !empty($row['image_urls']) ? (array)$row['image_urls'] : (!empty($row['image_url']) ? [$row['image_url']] : []);
+                                        @endphp
 
-                                                <div class="flex items-center gap-1 opacity-70 group-hover:opacity-100 transition-opacity">
+                                        @if(!empty($rowImageUrls))
+                                            <div class="flex items-center gap-1.5 flex-wrap justify-center max-w-[240px]">
+                                                @foreach($rowImageUrls as $imgIdx => $imgUrl)
+                                                    <div class="relative group/thumb inline-block">
+                                                        <button type="button"
+                                                            @click="$dispatch('open-lightbox', '{{ $imgUrl }}')"
+                                                            class="block w-9 h-7 rounded-md overflow-hidden border border-slate-200 hover:border-blue-500 shadow-2xs hover:shadow transition-all cursor-pointer bg-slate-100"
+                                                            title="Screenshot #{{ $imgIdx + 1 }} (Click to enlarge)">
+                                                            <img src="{{ $imgUrl }}" class="w-full h-full object-cover group-hover/thumb:scale-105 transition-transform" alt="screenshot #{{ $imgIdx + 1 }}">
+                                                        </button>
+                                                        <button type="button"
+                                                            wire:click="removeRowImageAtIndex({{ $origIndex }}, {{ $imgIdx }})"
+                                                            class="absolute -top-1.5 -right-1.5 hidden group-hover/thumb:flex h-4 w-4 items-center justify-center rounded-full bg-red-600 text-white shadow-xs hover:bg-red-700 cursor-pointer"
+                                                            title="Remove this screenshot">
+                                                            <svg class="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke-width="3" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+                                                        </button>
+                                                    </div>
+                                                @endforeach
+
+                                                {{-- Quick Add / Paste Controls --}}
+                                                <div class="inline-flex items-center gap-1">
                                                     <button type="button"
                                                         onclick="document.getElementById('file-input-{{ $origIndex }}').click()"
-                                                        class="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[11px] font-semibold text-slate-600 hover:text-blue-700 hover:bg-blue-50 rounded transition-colors cursor-pointer"
-                                                        title="Replace screenshot">
-                                                        <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" /></svg>
-                                                        <span>Replace</span>
+                                                        class="inline-flex items-center justify-center h-7 px-1.5 rounded-md border border-slate-200 bg-white hover:bg-blue-50 hover:border-blue-300 text-slate-600 hover:text-blue-700 text-[11px] font-semibold transition-colors shadow-2xs cursor-pointer"
+                                                        title="Upload more screenshots">
+                                                        <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+                                                        <span class="ml-0.5">+Add</span>
                                                     </button>
                                                     <button type="button"
-                                                        wire:click="removeRowImage({{ $origIndex }})"
-                                                        class="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[11px] font-semibold text-slate-600 hover:text-red-700 hover:bg-red-50 rounded transition-colors cursor-pointer"
-                                                        title="Remove screenshot">
-                                                        <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
-                                                        <span>Remove</span>
+                                                        @click="
+                                                            uploading = true;
+                                                            pasteScreenshotFromClipboard({{ $origIndex }}, {{ $rowId ?? 'null' }})
+                                                                .finally(() => uploading = false);
+                                                        "
+                                                        class="inline-flex items-center justify-center h-7 px-1.5 rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-slate-500 hover:text-slate-800 text-[11px] font-medium transition-colors shadow-2xs cursor-pointer"
+                                                        title="Paste another screenshot from clipboard (Ctrl+V)">
+                                                        <svg class="h-3 w-3 text-slate-400" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0 0 13.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 0 1-.75.75H9a.75.75 0 0 1-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 0 1-2.25 2.25H6.75A2.25 2.25 0 0 1 4.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 0 1 1.927-.184" /></svg>
                                                     </button>
+                                                    @if(count($rowImageUrls) > 1)
+                                                        <button type="button"
+                                                            wire:click="removeRowImage({{ $origIndex }})"
+                                                            class="inline-flex items-center justify-center h-7 px-1 text-[10px] font-semibold text-slate-400 hover:text-red-600 rounded transition-colors cursor-pointer"
+                                                            title="Remove all screenshots for this vehicle">
+                                                            Clear
+                                                        </button>
+                                                    @endif
                                                 </div>
                                             </div>
                                         @else
@@ -565,7 +592,7 @@
                                                 <button type="button"
                                                     onclick="document.getElementById('file-input-{{ $origIndex }}').click()"
                                                     class="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 px-2 py-1 text-[11px] font-semibold text-slate-600 shadow-2xs transition-all cursor-pointer"
-                                                    title="Upload image from computer">
+                                                    title="Upload screenshot(s) from computer (multiple allowed)">
                                                     <svg class="h-3 w-3 text-slate-400" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" /></svg>
                                                     Upload
                                                 </button>
@@ -909,9 +936,15 @@
     </div>
 
 <script>
-async function uploadScreenshotFile(file, rowIndex, recordId = null) {
+async function uploadScreenshotFiles(files, rowIndex, recordId = null) {
+    if (!files || files.length === 0) return;
     const fd = new FormData();
-    fd.append('image', file);
+    for (let i = 0; i < files.length; i++) {
+        fd.append('images[]', files[i]);
+    }
+    // Backward compatibility for single-image consumers
+    fd.append('image', files[0]);
+
     if (recordId && recordId !== 'null') {
         fd.append('record_id', recordId);
     }
@@ -933,10 +966,12 @@ async function uploadScreenshotFile(file, rowIndex, recordId = null) {
             if (wireId && window.Livewire) {
                 const comp = window.Livewire.find(wireId);
                 if (comp) {
+                    const newImages = data.new_images || [data.image];
+                    const newUrls = data.new_image_urls || [data.image_url];
                     if (typeof comp.call === 'function') {
-                        comp.call('updateRowImage', rowIndex, data.image_url, data.image);
-                    } else if (typeof comp.updateRowImage === 'function') {
-                        comp.updateRowImage(rowIndex, data.image_url, data.image);
+                        comp.call('appendRowImages', rowIndex, newImages, newUrls);
+                    } else if (typeof comp.appendRowImages === 'function') {
+                        comp.appendRowImages(rowIndex, newImages, newUrls);
                     }
                 }
             }
@@ -947,6 +982,10 @@ async function uploadScreenshotFile(file, rowIndex, recordId = null) {
         console.error(e);
         alert('Image upload failed.');
     }
+}
+
+async function uploadScreenshotFile(file, rowIndex, recordId = null) {
+    return uploadScreenshotFiles([file], rowIndex, recordId);
 }
 
 async function pasteScreenshotFromClipboard(rowIndex, recordId = null) {
@@ -975,15 +1014,18 @@ async function pasteScreenshotFromClipboard(rowIndex, recordId = null) {
 function handleRowPaste(event, rowIndex, recordId = null) {
     const items = (event.clipboardData || (event.originalEvent && event.originalEvent.clipboardData))?.items;
     if (!items) return;
+    const files = [];
     for (let i = 0; i < items.length; i++) {
         if (items[i].type && items[i].type.startsWith('image/')) {
-            event.preventDefault();
             const file = items[i].getAsFile();
             if (file) {
-                uploadScreenshotFile(file, rowIndex, recordId);
+                files.push(file);
             }
-            return;
         }
+    }
+    if (files.length > 0) {
+        event.preventDefault();
+        uploadScreenshotFiles(files, rowIndex, recordId);
     }
 }
 </script>

@@ -23,10 +23,10 @@
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-        {{-- EGTP CODE --}}
+        {{-- EQTP CODE --}}
         <div>
             <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                EGTP CODE <span class="text-red-500">*</span>
+                EQTP CODE <span class="text-red-500">*</span>
             </label>
             <input type="text" name="equipment_code" value="{{ old('equipment_code', $v?->equipment_code) }}"
                    placeholder="e.g. SV 12" required autofocus
@@ -105,6 +105,24 @@
             </div>
             <p class="text-[11px] text-slate-400 mt-1">Benchmark rate for Fuel PO checklist calculation (Distance &divide; Rate = Liters).</p>
             @error('average_fuel_consumption') <p class="text-xs text-red-500 mt-1">{{ $message }}</p> @enderror
+        </div>
+
+        {{-- FUEL LIMIT (L) --}}
+        <div>
+            <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                FUEL LIMIT (L)
+            </label>
+            <div class="relative">
+                <input type="number" name="fuel_limit"
+                       value="{{ old('fuel_limit', $v?->fuel_limit) }}"
+                       placeholder="e.g. 50.00" step="0.01" min="0" max="99999.99"
+                       class="w-full pl-3.5 pr-12 py-2.5 border border-slate-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 @error('fuel_limit') border-red-400 @enderror">
+                <span class="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-xs font-bold text-slate-400">
+                    L
+                </span>
+            </div>
+            <p class="text-[11px] text-slate-400 mt-1">Maximum fuel allocation / limit in liters for this vehicle.</p>
+            @error('fuel_limit') <p class="text-xs text-red-500 mt-1">{{ $message }}</p> @enderror
         </div>
 
         {{-- FUEL RATE STANDARD (MIN – MAX / UNIT) --}}

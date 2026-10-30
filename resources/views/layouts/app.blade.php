@@ -84,6 +84,41 @@
                 @endif
             </a>
 
+            {{-- Live GPS Map --}}
+            <a href="{{ route('gps-map.index') }}"
+               class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150
+                      {{ request()->routeIs('gps-map.*') ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:bg-slate-800 hover:text-white' }}">
+                <svg class="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
+                </svg>
+                Live GPS Map
+                <span class="ml-auto inline-flex items-center gap-1 rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-bold text-emerald-400 border border-emerald-500/30">
+                    <span class="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                    Live
+                </span>
+            </a>
+
+            {{-- Idling & Parking Monitor --}}
+            <a href="{{ route('idling-parking.index') }}"
+               class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150
+                      {{ request()->routeIs('idling-parking.*') ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:bg-slate-800 hover:text-white' }}">
+                <svg class="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                </svg>
+                Idling & Parking
+            </a>
+
+            {{-- Trip History & Route Replay --}}
+            <a href="{{ route('trip-history.index') }}"
+               class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150
+                      {{ request()->routeIs('trip-history.*') ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:bg-slate-800 hover:text-white' }}">
+                <svg class="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
+                </svg>
+                Trip Route Replay
+            </a>
+
             {{-- Location Directory --}}
             <a href="{{ route('locations.index') }}"
                class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150
@@ -94,6 +129,54 @@
                 </svg>
                 Location Directory
                 @if(request()->routeIs('locations.*'))
+                    <span class="ml-auto h-2 w-2 rounded-full bg-red-500"></span>
+                @endif
+            </a>
+
+            {{-- Section Label --}}
+            <div class="pt-5 pb-2 px-3 text-[10px] uppercase tracking-widest font-semibold text-slate-500">Dispatch & Reconciliation</div>
+
+            {{-- On-Time Dispatch --}}
+            @php
+                $sidebarDelayedCount = \App\Models\FleetDispatch::where('dispatch_status', \App\Models\FleetDispatch::STATUS_DELAYED)
+                    ->whereDate('trip_date', \Carbon\Carbon::today())
+                    ->count();
+            @endphp
+            <a href="{{ route('fleet-dispatches.index') }}"
+               class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150
+                      {{ request()->routeIs('fleet-dispatches.*') ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:bg-slate-800 hover:text-white' }}">
+                <svg class="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                </svg>
+                Fleet Dispatch
+                @if($sidebarDelayedCount > 0)
+                    <span class="ml-auto inline-flex items-center rounded-full bg-red-500/20 px-2 py-0.5 text-[10px] font-bold text-red-400 border border-red-500/30 animate-pulse" title="{{ $sidebarDelayedCount }} delayed trips today">
+                        {{ $sidebarDelayedCount }}
+                    </span>
+                @elseif(request()->routeIs('fleet-dispatches.*'))
+                    <span class="ml-auto h-2 w-2 rounded-full bg-red-500"></span>
+                @endif
+            </a>
+
+            {{-- Mileage Reconciliation --}}
+            @php
+                $sidebarPendingRecCount = \App\Models\MileageReconciliation::whereIn('status', [
+                    \App\Models\MileageReconciliation::STATUS_SUBMITTED,
+                    \App\Models\MileageReconciliation::STATUS_FOR_REVIEW
+                ])->count();
+            @endphp
+            <a href="{{ route('mileage-reconciliations.index') }}"
+               class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150
+                      {{ request()->routeIs('mileage-reconciliations.*') ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:bg-slate-800 hover:text-white' }}">
+                <svg class="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
+                </svg>
+                Mileage Reconciliation
+                @if($sidebarPendingRecCount > 0)
+                    <span class="ml-auto inline-flex items-center rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-400 border border-amber-500/30" title="{{ $sidebarPendingRecCount }} reconciliations pending review">
+                        {{ $sidebarPendingRecCount }}
+                    </span>
+                @elseif(request()->routeIs('mileage-reconciliations.*'))
                     <span class="ml-auto h-2 w-2 rounded-full bg-red-500"></span>
                 @endif
             </a>
@@ -206,6 +289,21 @@
                     <span class="ml-auto h-2 w-2 rounded-full bg-red-500"></span>
                 @else
                     <span class="ml-auto inline-flex items-center rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-400 border border-emerald-500/30">XLSB</span>
+                @endif
+            </a>
+
+            {{-- TrackSolid GPS Reports --}}
+            <a href="{{ route('tracksolid-reports.index') }}"
+               class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150
+                      {{ request()->routeIs('tracksolid-reports.*') ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:bg-slate-800 hover:text-white' }}">
+                <svg class="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+                </svg>
+                TrackSolid Uploads
+                @if(request()->routeIs('tracksolid-reports.*'))
+                    <span class="ml-auto h-2 w-2 rounded-full bg-red-500"></span>
+                @else
+                    <span class="ml-auto inline-flex items-center rounded-full bg-blue-500/20 px-1.5 py-0.5 text-[9px] font-semibold text-blue-400 border border-blue-500/30">GPS</span>
                 @endif
             </a>
 

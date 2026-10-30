@@ -83,6 +83,7 @@ class FuelPoImportController extends Controller
                     'confidence' => $parsed['vehicle_match']['confidence'],
                 ],
                 'summary' => $parsed['summary'],
+                'tables' => $parsed['tables'] ?? [],
                 'date_groups' => array_values($parsed['date_groups']),
             ]);
         } catch (Throwable $e) {
@@ -111,6 +112,13 @@ class FuelPoImportController extends Controller
             'custom_plate_number' => ['nullable', 'string', 'max:50'],
             'custom_average_consumption' => ['nullable', 'numeric', 'min:0.01'],
             'driver_name' => ['nullable', 'string', 'max:255'],
+            'tables' => ['nullable', 'array'],
+            'tables.*.table_index' => ['required_with:tables', 'integer'],
+            'tables.*.vehicle_id' => ['nullable'],
+            'tables.*.driver_name' => ['nullable', 'string', 'max:255'],
+            'tables.*.custom_equipment_code' => ['nullable', 'string', 'max:50'],
+            'tables.*.custom_plate_number' => ['nullable', 'string', 'max:50'],
+            'tables.*.custom_average_consumption' => ['nullable', 'numeric', 'min:0.01'],
         ]);
 
         $token = $validated['import_token'];
@@ -135,6 +143,7 @@ class FuelPoImportController extends Controller
                 'custom_plate_number' => $validated['custom_plate_number'] ?? null,
                 'custom_average_consumption' => ! empty($validated['custom_average_consumption']) ? (float) $validated['custom_average_consumption'] : null,
                 'driver_name' => $validated['driver_name'] ?? null,
+                'tables' => $validated['tables'] ?? [],
                 'status' => AdvancedItinerary::STATUS_FINALIZED,
             ];
 

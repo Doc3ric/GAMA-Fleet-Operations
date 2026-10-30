@@ -263,6 +263,13 @@
                     </div>
 
                     <div class="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                        <span class="block text-[10px] uppercase font-bold text-amber-600">Fuel Limit</span>
+                        <span class="text-sm font-mono font-bold text-amber-900 mt-0.5 block">
+                            {{ $vehicle->fuel_limit !== null ? number_format($vehicle->fuel_limit, 2) . ' L' : 'Not set' }}
+                        </span>
+                    </div>
+
+                    <div class="p-3 bg-slate-50 rounded-xl border border-slate-100">
                         <span class="block text-[10px] uppercase font-bold text-slate-400">Helper / Crew</span>
                         <span class="text-sm font-medium text-slate-800 mt-0.5 block">{{ $vehicle->helper ?: '-' }}</span>
                     </div>

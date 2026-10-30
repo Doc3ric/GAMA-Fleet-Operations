@@ -255,7 +255,7 @@ class WeeklyItineraryImportTest extends TestCase
         $this->assertEquals($fuelTestsCount, FuelConsumptionTest::count());
     }
 
-    public function test_multi_date_report_creates_separate_po_records(): void
+    public function test_multi_date_itinerary_table_creates_single_fuel_po_record_matching_template_totals(): void
     {
         $vehicle = Vehicle::factory()->create([
             'equipment_code' => 'IV 5',
@@ -300,8 +300,10 @@ class WeeklyItineraryImportTest extends TestCase
             ]);
 
         $previewResp->assertOk();
-        $previewResp->assertJsonPath('summary.total_dates', 2);
+        $previewResp->assertJsonPath('summary.total_tables', 1);
         $previewResp->assertJsonPath('summary.total_legs', 2);
+        $this->assertEquals(33.0, (float) $previewResp->json('summary.total_distance'));
+        $this->assertEquals(9.0, (float) $previewResp->json('summary.overall_fuel_liters'));
 
         $token = $previewResp->json('import_token');
         $extension = $previewResp->json('extension');
@@ -314,20 +316,133 @@ class WeeklyItineraryImportTest extends TestCase
             ]);
 
         $confirmResp->assertOk();
+        $confirmResp->assertJsonPath('count', 1);
+        $confirmResp->assertJsonPath('total_legs', 2);
+
+        $itineraries = AdvancedItinerary::where('vehicle_id', $vehicle->id)->get();
+        $this->assertCount(1, $itineraries);
+
+        $po = $itineraries->first();
+        // 33 KM, 3.7 KM/L -> 9 L (33 / 3.7 = 8.92 -> 9 L)
+        $this->assertEquals(33.0, $po->total_distance);
+        $this->assertEquals(9.0, $po->fuel_liters_required);
+        $this->assertCount(2, $po->legs);
+        $this->assertEquals(4330.0, $po->start_odo);
+        $this->assertEquals(4363.0, $po->end_odo);
+    }
+
+    public function test_multiple_tables_in_spreadsheet_creates_multiple_po_records(): void
+    {
+        $vehicle1 = Vehicle::factory()->create([
+            'equipment_code' => 'IV 5',
+            'plate_number' => 'LAO 8559',
+            'created_by' => $this->user->id,
+        ]);
+
+        $vehicle2 = Vehicle::factory()->create([
+            'equipment_code' => 'EV 10',
+            'plate_number' => 'NDY 5123',
+            'created_by' => $this->user->id,
+        ]);
+
+        $multiTableExport = new class implements FromArray, WithTitle
+        {
+            public function array(): array
+            {
+                return [
+                    // Table 1: IV 5
+                    ['', '', '', '', 'WEEKLY ITINERARY REPORT', '', '', '', ''],
+                    ['NAME:', 'BRANDON LEE', '', '', '', '', '', '', ''],
+                    ['FOR THE WEEK:', '22-Sep-26', '', '', '', '', '', '', ''],
+                    ['PLATE NUMBER:', 'IV 5 - LAO 8559', '', '', '', '', '', '', ''],
+                    ['', '', '', '', '', '', '', '', ''],
+                    ['DATE', 'ORIGIN', 'START ODO', 'DESTINATION', 'END ODO', 'DISTANCE', 'TIME IN', 'TIME OUT', 'PURPOSE'],
+                    ['09-09-2026', 'VHEL', 4330, 'DP BALOY', 4339, 13, '9:20 PM', '9:30 PM', 'PICKUP DRIED FISH'],
+                    ['9/10/2026', 'SLO', 4339, 'DP BALOY', 4422, 13, '9:20 PM', '9:30 PM', 'PICKUP DRIED FISH'],
+                    ['TOTAL DISTANCE', 26, '', '', '', '', '', '', ''],
+                    ['AVE. CON. OF LITE', 2, '', '', '', '', '', '', ''],
+                    ['LITER FOR PO', 13, '', '', '', '', '', '', ''],
+
+                    // Blank rows
+                    ['', '', '', '', '', '', '', '', ''],
+                    ['', '', '', '', '', '', '', '', ''],
+
+                    // Table 2: EV 10
+                    ['', '', '', '', 'WEEKLY ITINERARY REPORT', '', '', '', ''],
+                    ['NAME:', 'JOHN DOE', '', '', '', '', '', '', ''],
+                    ['FOR THE WEEK:', '22-Sep-26', '', '', '', '', '', '', ''],
+                    ['PLATE NUMBER:', 'EV 10 - NDY 5123', '', '', '', '', '', '', ''],
+                    ['', '', '', '', '', '', '', '', ''],
+                    ['DATE', 'ORIGIN', 'START ODO', 'DESTINATION', 'END ODO', 'DISTANCE', 'TIME IN', 'TIME OUT', 'PURPOSE'],
+                    ['09-11-2026', 'DEPOT', 1000, 'CAGAYAN', 1050, 50, '8:00 AM', '11:00 AM', 'DELIVER FEEDS'],
+                    ['TOTAL DISTANCE', 50, '', '', '', '', '', '', ''],
+                    ['AVE. CON. OF LITE', 3.5, '', '', '', '', '', '', ''],
+                    ['LITER FOR PO', 15, '', '', '', '', '', '', ''],
+                ];
+            }
+
+            public function title(): string
+            {
+                return 'ITINERARY';
+            }
+        };
+
+        $fileName = 'multi_table_itinerary.xlsx';
+        Excel::store($multiTableExport, $fileName, 'local');
+        $fullPath = Storage::disk('local')->path($fileName);
+
+        $file = UploadedFile::fake()->createWithContent('multi_table.xlsx', file_get_contents($fullPath));
+
+        $previewResp = $this->actingAs($this->user)
+            ->postJson(route('fuel-po.import.preview'), [
+                'file' => $file,
+            ]);
+
+        $previewResp->assertOk();
+        $previewResp->assertJsonPath('summary.total_tables', 2);
+        $previewResp->assertJsonPath('summary.total_legs', 3);
+        $this->assertEquals(76.0, (float) $previewResp->json('summary.total_distance'));
+        $this->assertEquals(28.0, (float) $previewResp->json('summary.overall_fuel_liters'));
+
+        $this->assertCount(2, $previewResp->json('tables'));
+        $this->assertEquals(26.0, (float) $previewResp->json('tables.0.total_distance'));
+        $this->assertEquals(2.0, (float) $previewResp->json('tables.0.avg_consumption'));
+        $this->assertEquals(13.0, (float) $previewResp->json('tables.0.fuel_liters_required'));
+
+        $this->assertEquals(50.0, (float) $previewResp->json('tables.1.total_distance'));
+        $this->assertEquals(3.5, (float) $previewResp->json('tables.1.avg_consumption'));
+        $this->assertEquals(15.0, (float) $previewResp->json('tables.1.fuel_liters_required'));
+
+        $token = $previewResp->json('import_token');
+        $extension = $previewResp->json('extension');
+
+        $confirmResp = $this->actingAs($this->user)
+            ->postJson(route('fuel-po.import.confirm'), [
+                'import_token' => $token,
+                'extension' => $extension,
+            ]);
+
+        $confirmResp->assertOk();
         $confirmResp->assertJsonPath('count', 2);
+        $confirmResp->assertJsonPath('total_legs', 3);
 
-        $itineraries = AdvancedItinerary::where('vehicle_id', $vehicle->id)->orderBy('itinerary_date')->get();
-        $this->assertCount(2, $itineraries);
+        // Verify Table 1 Fuel PO Record
+        $po1 = AdvancedItinerary::where('vehicle_id', $vehicle1->id)->first();
+        $this->assertNotNull($po1);
+        $this->assertEquals('BRANDON LEE', $po1->driver_name);
+        $this->assertEquals(26.0, $po1->total_distance);
+        $this->assertEquals(13.0, $po1->fuel_liters_required);
+        $this->assertCount(2, $po1->legs);
+        $this->assertEquals(2.0, $vehicle1->fresh()->average_fuel_consumption);
 
-        // Date 1: 2026-09-09, 9 KM, 3.7 KM/L -> 3 L (9 / 3.7 = 2.43 -> 3 L)
-        $this->assertEquals('2026-09-09', $itineraries[0]->itinerary_date->format('Y-m-d'));
-        $this->assertEquals(9.0, $itineraries[0]->total_distance);
-        $this->assertEquals(3.0, $itineraries[0]->fuel_liters_required);
-
-        // Date 2: 2026-09-10, 24 KM, 3.7 KM/L -> 7 L (24 / 3.7 = 6.49 -> 7 L)
-        $this->assertEquals('2026-09-10', $itineraries[1]->itinerary_date->format('Y-m-d'));
-        $this->assertEquals(24.0, $itineraries[1]->total_distance);
-        $this->assertEquals(7.0, $itineraries[1]->fuel_liters_required);
+        // Verify Table 2 Fuel PO Record
+        $po2 = AdvancedItinerary::where('vehicle_id', $vehicle2->id)->first();
+        $this->assertNotNull($po2);
+        $this->assertEquals('JOHN DOE', $po2->driver_name);
+        $this->assertEquals(50.0, $po2->total_distance);
+        $this->assertEquals(15.0, $po2->fuel_liters_required);
+        $this->assertCount(1, $po2->legs);
+        $this->assertEquals(3.5, $vehicle2->fresh()->average_fuel_consumption);
     }
 
     public function test_fuel_po_index_preloads_import_when_bridged_from_excel_viewer(): void

@@ -24,10 +24,19 @@ class LongIdlingRecordController extends Controller
         }
 
         $request->validate([
-            'image' => 'required|image|mimes:jpeg,jpg,png,webp|max:10240',
+            'image' => 'nullable|image|mimes:jpeg,jpg,png,webp|max:10240',
+            'images' => 'nullable|array',
+            'images.*' => 'nullable|image|mimes:jpeg,jpg,png,webp|max:10240',
             'record_id' => 'nullable|exists:long_idling_records,id',
             'report_id' => 'nullable|exists:reports,id',
         ]);
+
+        if (! $request->hasFile('image') && ! $request->hasFile('images')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Please select at least one image file to upload.',
+            ], 422);
+        }
 
         $folder = 'screenshots/general';
         $record = null;
@@ -46,19 +55,54 @@ class LongIdlingRecordController extends Controller
             }
         }
 
-        $path = $request->file('image')->store($folder, 'public');
+        $files = [];
+        if ($request->hasFile('images')) {
+            $rawFiles = $request->file('images');
+            $files = is_array($rawFiles) ? $rawFiles : [$rawFiles];
+        } elseif ($request->hasFile('image')) {
+            $files = [$request->file('image')];
+        }
+
+        $uploadedPaths = [];
+        $uploadedUrls = [];
+
+        foreach ($files as $file) {
+            if ($file && $file->isValid()) {
+                $path = $file->store($folder, 'public');
+                $uploadedPaths[] = $path;
+                $uploadedUrls[] = Storage::disk('public')->url($path);
+            }
+        }
+
+        if (empty($uploadedPaths)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to upload images.',
+            ], 422);
+        }
 
         if ($record) {
-            if ($record->image) {
-                Storage::disk('public')->delete($record->image);
-            }
-            $record->update(['image' => $path]);
+            $currentImages = $record->getAllImages();
+            $merged = array_values(array_unique(array_merge($currentImages, $uploadedPaths)));
+            $record->update([
+                'images' => $merged,
+                'image' => $merged[0] ?? null,
+            ]);
+            $allImages = $merged;
+            $allImageUrls = $record->getAllImageUrls();
+        } else {
+            $allImages = $uploadedPaths;
+            $allImageUrls = $uploadedUrls;
         }
 
         return response()->json([
             'success' => true,
-            'image' => $path,
-            'image_url' => Storage::disk('public')->url($path),
+            'image' => $uploadedPaths[0] ?? null,
+            'image_url' => $uploadedUrls[0] ?? null,
+            'new_images' => $uploadedPaths,
+            'new_image_urls' => $uploadedUrls,
+            'all_images' => $allImages,
+            'all_image_urls' => $allImageUrls,
         ]);
     }
 
@@ -75,29 +119,63 @@ class LongIdlingRecordController extends Controller
         }
 
         $request->validate([
-            'image' => 'required|image|mimes:jpeg,jpg,png,webp|max:10240',
+            'image' => 'nullable|image|mimes:jpeg,jpg,png,webp|max:10240',
+            'images' => 'nullable|array',
+            'images.*' => 'nullable|image|mimes:jpeg,jpg,png,webp|max:10240',
             'record_id' => 'nullable|exists:long_idling_records,id',
         ]);
 
-        $path = $request->file('image')->store(
-            'screenshots/'.$report->id,
-            'public'
-        );
+        if (! $request->hasFile('image') && ! $request->hasFile('images')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Please select at least one image file.',
+            ], 422);
+        }
+
+        $files = [];
+        if ($request->hasFile('images')) {
+            $rawFiles = $request->file('images');
+            $files = is_array($rawFiles) ? $rawFiles : [$rawFiles];
+        } elseif ($request->hasFile('image')) {
+            $files = [$request->file('image')];
+        }
+
+        $uploadedPaths = [];
+        $uploadedUrls = [];
+
+        foreach ($files as $file) {
+            if ($file && $file->isValid()) {
+                $path = $file->store('screenshots/'.$report->id, 'public');
+                $uploadedPaths[] = $path;
+                $uploadedUrls[] = Storage::disk('public')->url($path);
+            }
+        }
+
+        if (empty($uploadedPaths)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to upload images.',
+            ], 422);
+        }
 
         if ($request->filled('record_id')) {
             $record = LongIdlingRecord::find($request->record_id);
             if ($record && $record->report_id === $report->id) {
-                if ($record->image) {
-                    Storage::disk('public')->delete($record->image);
-                }
-                $record->update(['image' => $path]);
+                $currentImages = $record->getAllImages();
+                $merged = array_values(array_unique(array_merge($currentImages, $uploadedPaths)));
+                $record->update([
+                    'images' => $merged,
+                    'image' => $merged[0] ?? null,
+                ]);
             }
         }
 
         return response()->json([
             'success' => true,
-            'image' => $path,
-            'image_url' => Storage::disk('public')->url($path),
+            'image' => $uploadedPaths[0] ?? null,
+            'image_url' => $uploadedUrls[0] ?? null,
+            'new_images' => $uploadedPaths,
+            'new_image_urls' => $uploadedUrls,
         ]);
     }
 
@@ -108,24 +186,52 @@ class LongIdlingRecordController extends Controller
         }
 
         $request->validate([
-            'image' => 'required|image|mimes:jpeg,jpg,png,webp|max:5120',
+            'image' => 'nullable|image|mimes:jpeg,jpg,png,webp|max:10240',
+            'images' => 'nullable|array',
+            'images.*' => 'nullable|image|mimes:jpeg,jpg,png,webp|max:10240',
         ]);
 
-        if ($record->image) {
-            Storage::disk('public')->delete($record->image);
+        if (! $request->hasFile('image') && ! $request->hasFile('images')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Please select at least one image file.',
+            ], 422);
         }
 
-        $path = $request->file('image')->store(
-            'screenshots/'.$record->report_id,
-            'public'
-        );
+        $files = [];
+        if ($request->hasFile('images')) {
+            $rawFiles = $request->file('images');
+            $files = is_array($rawFiles) ? $rawFiles : [$rawFiles];
+        } elseif ($request->hasFile('image')) {
+            $files = [$request->file('image')];
+        }
 
-        $record->update(['image' => $path]);
+        $uploadedPaths = [];
+        $uploadedUrls = [];
+
+        foreach ($files as $file) {
+            if ($file && $file->isValid()) {
+                $path = $file->store('screenshots/'.$record->report_id, 'public');
+                $uploadedPaths[] = $path;
+                $uploadedUrls[] = Storage::disk('public')->url($path);
+            }
+        }
+
+        $currentImages = $record->getAllImages();
+        $merged = array_values(array_unique(array_merge($currentImages, $uploadedPaths)));
+        $record->update([
+            'images' => $merged,
+            'image' => $merged[0] ?? null,
+        ]);
 
         return response()->json([
             'success' => true,
-            'image_url' => Storage::disk('public')->url($path),
-            'image' => $path,
+            'image' => $uploadedPaths[0] ?? null,
+            'image_url' => $uploadedUrls[0] ?? null,
+            'new_images' => $uploadedPaths,
+            'new_image_urls' => $uploadedUrls,
+            'all_images' => $record->getAllImages(),
+            'all_image_urls' => $record->getAllImageUrls(),
         ]);
     }
 
@@ -135,10 +241,7 @@ class LongIdlingRecordController extends Controller
             abort(403);
         }
 
-        if ($record->image) {
-            Storage::disk('public')->delete($record->image);
-        }
-
+        $record->deleteAllImages();
         $record->delete();
 
         return response()->json(['success' => true]);

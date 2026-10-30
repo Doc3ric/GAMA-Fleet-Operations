@@ -31,6 +31,7 @@ class VehicleImportService
         'operator_driver' => ['drivername', 'operatordriver', 'operator', 'driver', 'driveroperator', 'assigneddriver'],
         'user' => ['user', 'dept', 'department', 'userdept', 'assigneduser'],
         'average_fuel_consumption' => ['averageconsumption', 'averagefuelconsumption', 'avgconsumption', 'avgfuelconsumption', 'km/l', 'kml', 'consumption'],
+        'fuel_limit' => ['fuellimit', 'limit', 'fuelcapacity', 'maxfuel', 'allocation', 'fuelcap', 'fuelallocation', 'fuelquota', 'literslimit', 'fuelmaxliters'],
         'helper' => ['helper', 'assistant', 'crew'],
         'gps_status' => ['gpsstatus', 'gps', 'gpsequipped', 'trackerstatus'],
     ];
@@ -113,6 +114,7 @@ class VehicleImportService
             $operatorDriver = $this->getCellValue($row, $columnMap, 'operator_driver');
             $user = $this->getCellValue($row, $columnMap, 'user');
             $rawAvgCons = $this->getCellValue($row, $columnMap, 'average_fuel_consumption');
+            $rawFuelLimit = $this->getCellValue($row, $columnMap, 'fuel_limit');
             $helper = $this->getCellValue($row, $columnMap, 'helper');
             $rawGpsStatus = $this->getCellValue($row, $columnMap, 'gps_status');
 
@@ -125,6 +127,9 @@ class VehicleImportService
             $avgConsumption = is_numeric($rawAvgCons)
                 ? (float) $rawAvgCons
                 : (preg_match('/([\d\.]+)/', (string) $rawAvgCons, $m) ? (float) $m[1] : null);
+            $fuelLimit = is_numeric($rawFuelLimit)
+                ? (float) $rawFuelLimit
+                : (preg_match('/([\d\.]+)/', (string) $rawFuelLimit, $m) ? (float) $m[1] : null);
 
             $attributes = [
                 'vehicle_type_id' => $vehicleTypeId,
@@ -135,6 +140,7 @@ class VehicleImportService
                 'fuel_max' => $fuelMax,
                 'fuel_unit' => $fuelUnit,
                 'average_fuel_consumption' => $avgConsumption,
+                'fuel_limit' => $fuelLimit,
                 'status_value' => $statusValue,
                 'status_label' => $statusLabel,
                 'location' => $location ?: null,
@@ -153,6 +159,11 @@ class VehicleImportService
                     $skippedCount++;
 
                     continue;
+                }
+
+                // If fuel_limit was not in the imported file, preserve existing fuel_limit
+                if (! isset($columnMap['fuel_limit'])) {
+                    unset($attributes['fuel_limit']);
                 }
 
                 // Default update mode

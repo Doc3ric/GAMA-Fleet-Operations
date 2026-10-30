@@ -27,6 +27,7 @@ class Vehicle extends Model
         'fuel_max',
         'fuel_unit',
         'average_fuel_consumption',
+        'fuel_limit',
         'status_value',
         'status_label',
         'location',
@@ -46,6 +47,7 @@ class Vehicle extends Model
         'fuel_min' => 'float',
         'fuel_max' => 'float',
         'average_fuel_consumption' => 'float',
+        'fuel_limit' => 'float',
         'status_value' => 'float',
     ];
 
@@ -82,6 +84,24 @@ class Vehicle extends Model
         return $this->hasMany(FuelConsumptionTest::class, 'vehicle_id');
     }
 
+    public function dispatches(): HasMany
+    {
+        return $this->hasMany(FleetDispatch::class, 'vehicle_id');
+    }
+
+    public function mileageReconciliations(): HasMany
+    {
+        return $this->hasMany(MileageReconciliation::class, 'vehicle_id');
+    }
+
+    /**
+     * Check if vehicle is GPS-equipped (via active status or attached device).
+     */
+    public function hasGps(): bool
+    {
+        return $this->gps_status === 'YES' || $this->device()->exists();
+    }
+
     /**
      * Returns average fuel consumption in KM/L, checking direct attribute first, then latest test.
      */
@@ -97,6 +117,18 @@ class Vehicle extends Model
         }
 
         return null;
+    }
+
+    /**
+     * Returns fuel limit display string, e.g. "50.00 L".
+     */
+    public function getFuelLimitDisplayAttribute(): ?string
+    {
+        if ($this->fuel_limit === null || (float) $this->fuel_limit <= 0) {
+            return null;
+        }
+
+        return number_format((float) $this->fuel_limit, 2).' L';
     }
 
     /**

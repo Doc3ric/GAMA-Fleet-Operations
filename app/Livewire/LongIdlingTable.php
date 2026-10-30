@@ -180,6 +180,8 @@ class LongIdlingTable extends Component
             'remarks' => $r->remarks ?? '',
             'image' => $r->image,
             'image_url' => $r->image_url,
+            'images' => $r->all_images,
+            'image_urls' => $r->all_image_urls,
             'is_new' => false,
             'dirty' => false,
             '_key' => 'rec-'.$r->id,
@@ -215,6 +217,8 @@ class LongIdlingTable extends Component
             'remarks' => '',
             'image' => null,
             'image_url' => null,
+            'images' => [],
+            'image_urls' => [],
             'is_new' => true,
             'dirty' => true,
             '_key' => 'new-'.uniqid(),
@@ -544,7 +548,7 @@ class LongIdlingTable extends Component
         $existingIndex = null;
         if ($this->manualRowIndex === null) {
             foreach ($this->rows as $idx => $r) {
-                if (($r['device_name'] ?? '') === $deviceName) {
+                if (($r['device_name'] ?? '') === $deviceName || $this->matchesDevice($r['device_name'] ?? '', $deviceName)) {
                     $existingIndex = $idx;
                     break;
                 }
@@ -618,6 +622,8 @@ class LongIdlingTable extends Component
                 'remarks' => $this->manualRemarks ?: '',
                 'image' => null,
                 'image_url' => null,
+                'images' => [],
+                'image_urls' => [],
                 'is_new' => true,
                 'dirty' => true,
                 '_key' => 'new-'.uniqid(),
@@ -814,6 +820,7 @@ class LongIdlingTable extends Component
                 'address' => $row['address'],
                 'remarks' => $row['remarks'],
                 'image' => $row['image'] ?? null,
+                'images' => ! empty($row['images']) ? array_values(array_filter($row['images'])) : (! empty($row['image']) ? [$row['image']] : null),
                 'sort_order' => $index,
             ];
 
@@ -863,25 +870,93 @@ class LongIdlingTable extends Component
 
     public function updateRowImage(int $index, string $imageUrl, string $imagePath): void
     {
+        $this->appendRowImages($index, [$imagePath], [$imageUrl]);
+    }
+
+    public function appendRowImages(int $index, array $newImages, array $newImageUrls): void
+    {
         if (isset($this->rows[$index])) {
-            $this->rows[$index]['image'] = $imagePath;
-            $this->rows[$index]['image_url'] = $imageUrl;
+            $images = $this->rows[$index]['images'] ?? [];
+            $imageUrls = $this->rows[$index]['image_urls'] ?? [];
+
+            foreach ($newImages as $i => $path) {
+                if (! in_array($path, $images, true)) {
+                    $images[] = $path;
+                    $imageUrls[] = $newImageUrls[$i] ?? Storage::disk('public')->url($path);
+                }
+            }
+
+            $images = array_values($images);
+            $imageUrls = array_values($imageUrls);
+
+            $this->rows[$index]['images'] = $images;
+            $this->rows[$index]['image_urls'] = $imageUrls;
+            $this->rows[$index]['image'] = $images[0] ?? null;
+            $this->rows[$index]['image_url'] = $imageUrls[0] ?? null;
             $this->rows[$index]['dirty'] = true;
+
+            if (! empty($this->rows[$index]['id'])) {
+                LongIdlingRecord::where('id', $this->rows[$index]['id'])->update([
+                    'images' => ! empty($images) ? $images : null,
+                    'image' => $images[0] ?? null,
+                ]);
+            }
+        }
+    }
+
+    public function removeRowImageAtIndex(int $rowIndex, int $imageIndex): void
+    {
+        if (isset($this->rows[$rowIndex])) {
+            $images = $this->rows[$rowIndex]['images'] ?? [];
+            $imageUrls = $this->rows[$rowIndex]['image_urls'] ?? [];
+
+            if (isset($images[$imageIndex])) {
+                $deletedPath = $images[$imageIndex];
+                Storage::disk('public')->delete($deletedPath);
+                unset($images[$imageIndex]);
+                unset($imageUrls[$imageIndex]);
+            }
+
+            $images = array_values($images);
+            $imageUrls = array_values($imageUrls);
+
+            $this->rows[$rowIndex]['images'] = $images;
+            $this->rows[$rowIndex]['image_urls'] = $imageUrls;
+            $this->rows[$rowIndex]['image'] = $images[0] ?? null;
+            $this->rows[$rowIndex]['image_url'] = $imageUrls[0] ?? null;
+            $this->rows[$rowIndex]['dirty'] = true;
+
+            if (! empty($this->rows[$rowIndex]['id'])) {
+                LongIdlingRecord::where('id', $this->rows[$rowIndex]['id'])->update([
+                    'images' => ! empty($images) ? $images : null,
+                    'image' => $images[0] ?? null,
+                ]);
+            }
         }
     }
 
     public function removeRowImage(int $index): void
     {
         if (isset($this->rows[$index])) {
+            $images = $this->rows[$index]['images'] ?? [];
+            foreach ($images as $img) {
+                Storage::disk('public')->delete($img);
+            }
             if (! empty($this->rows[$index]['image'])) {
                 Storage::disk('public')->delete($this->rows[$index]['image']);
             }
+
+            $this->rows[$index]['images'] = [];
+            $this->rows[$index]['image_urls'] = [];
             $this->rows[$index]['image'] = null;
             $this->rows[$index]['image_url'] = null;
             $this->rows[$index]['dirty'] = true;
 
             if (! empty($this->rows[$index]['id'])) {
-                LongIdlingRecord::where('id', $this->rows[$index]['id'])->update(['image' => null]);
+                LongIdlingRecord::where('id', $this->rows[$index]['id'])->update([
+                    'images' => null,
+                    'image' => null,
+                ]);
             }
         }
     }
@@ -910,9 +985,7 @@ class LongIdlingTable extends Component
             $this->selectedIds = array_values(array_diff($this->selectedIds, [$this->deleteConfirmId]));
             $record = LongIdlingRecord::find($this->deleteConfirmId);
             if ($record) {
-                if ($record->image) {
-                    Storage::disk('public')->delete($record->image);
-                }
+                $record->deleteAllImages();
                 $record->delete();
             }
             $this->rows = array_values(
@@ -1010,7 +1083,8 @@ class LongIdlingTable extends Component
 
             // Device filter
             if ($this->filterDevice !== 'all' && $this->filterDevice !== '') {
-                if (($row['device_name'] ?? '') !== $this->filterDevice) {
+                $rowDevice = $row['device_name'] ?? '';
+                if ($rowDevice !== $this->filterDevice && ! $this->matchesDevice($rowDevice, $this->filterDevice)) {
                     continue;
                 }
             }
@@ -1102,6 +1176,29 @@ class LongIdlingTable extends Component
         }
 
         return $result;
+    }
+
+    public static function normalizeDeviceCode(?string $code): string
+    {
+        if (! $code) {
+            return '';
+        }
+
+        $clean = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $code));
+
+        return preg_replace('/(?<=[a-z])0+([0-9]+)/', '$1', $clean);
+    }
+
+    public function matchesDevice(?string $deviceA, ?string $deviceB): bool
+    {
+        if ($deviceA === $deviceB) {
+            return true;
+        }
+
+        $normA = self::normalizeDeviceCode($deviceA);
+        $normB = self::normalizeDeviceCode($deviceB);
+
+        return ! empty($normA) && $normA === $normB;
     }
 
     public function render(): View

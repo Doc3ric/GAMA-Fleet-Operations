@@ -946,6 +946,7 @@ class FuelPoController extends Controller
                     'confidence' => $parsed['vehicle_match']['confidence'],
                 ],
                 'summary' => $parsed['summary'],
+                'tables' => $parsed['tables'] ?? [],
                 'date_groups' => array_values($parsed['date_groups']),
                 'is_bridged' => true,
             ];
