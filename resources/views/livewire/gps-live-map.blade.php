@@ -484,6 +484,11 @@
                     visiblePinsCount: 0,
 
                     initMap() {
+                        if (typeof L === 'undefined') {
+                            setTimeout(() => this.initMap(), 100);
+                            return;
+                        }
+
                         const mapEl = document.getElementById('fleet-live-map');
                         if (!mapEl || this.map) return;
 
@@ -689,7 +694,7 @@
                                 </div>
 
                                 <div style="border-top: 1px solid #f1f5f9; padding-top: 8px; font-size: 10px; color: #64748b; display: flex; align-items: center; justify-content: space-between;">
-                                    <span>${item.lat.toFixed(5)}, ${item.lng.toFixed(5)}</span>
+                                    <span>${Number(item.lat).toFixed(5)}, ${Number(item.lng).toFixed(5)}</span>
                                     ${item.id ? `<a href="/vehicles/${item.id}" target="_blank" style="color: #2563eb; font-weight: 700; text-decoration: none;">View &rarr;</a>` : ''}
                                 </div>
                             </div>

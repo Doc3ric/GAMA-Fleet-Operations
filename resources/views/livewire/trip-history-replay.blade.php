@@ -5,7 +5,6 @@
         initialStops: @js($stops),
         initialPointsKey: @js($pointsCacheKey ?? '')
      })"
-     x-init="init()"
 >
     @push('styles')
         <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
@@ -626,6 +625,11 @@
                     },
 
                     initMap() {
+                        if (typeof L === 'undefined') {
+                            setTimeout(() => this.initMap(), 100);
+                            return;
+                        }
+
                         const container = document.getElementById('trip-replay-map');
                         if (!container) return;
 
@@ -696,7 +700,7 @@
 
                         this.track.points = validPoints;
                         this.totalPoints = validPoints.length;
-                        this.totalDistanceKm = (track.total_distance_km || 0).toFixed(1);
+                        this.totalDistanceKm = Number(track.total_distance_km || 0).toFixed(1);
                         this.trackEndTimestamp = validPoints[validPoints.length - 1].gps_time || '';
                         this.currentIndex = 0;
                         this.hasTrack = true;
@@ -828,7 +832,7 @@
                         this.currentSpeed = Math.round(pt.speed || 0);
                         this.currentTimestamp = pt.gps_time || '';
                         this.currentIgnition = !!pt.is_ignition_on;
-                        this.currentDistanceKm = (pt.cumulative_distance_km || 0).toFixed(1);
+                        this.currentDistanceKm = Number(pt.cumulative_distance_km || 0).toFixed(1);
                         this.currentHeading = Math.round(pt.direction || 0);
                     },
 
