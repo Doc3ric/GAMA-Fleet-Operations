@@ -67,6 +67,22 @@ class TrackSolidApiServiceTest extends TestCase
         $this->assertNull($token);
     }
 
+    public function test_live_location_batch_result_reports_partial_failures_without_losing_successful_data(): void
+    {
+        Cache::put('tracksolid_api_access_token_'.md5('test_app_key'), 'valid_token', 3600);
+        Http::fakeSequence()
+            ->push(['code' => 0, 'result' => [['imei' => '865100000000001', 'lat' => 8.4, 'lng' => 124.7]]], 200)
+            ->push(['message' => 'temporary failure'], 503);
+
+        $imeis = array_map(static fn (int $number): string => sprintf('865100000000%03d', $number), range(1, 51));
+        $result = (new TrackSolidApiService)->getDeviceLocationsWithStatus($imeis);
+
+        $this->assertSame('partial_failure', $result['status']);
+        $this->assertSame(['865100000000001'], array_map('strval', array_keys($result['locations'])));
+        $this->assertCount(1, $result['failed_imeis']);
+        $this->assertSame(array_slice($imeis, 50), $result['failed_imeis']);
+    }
+
     public function test_get_mileage_for_device(): void
     {
         Cache::put('tracksolid_api_access_token_'.md5('test_app_key'), 'valid_token', 3600);

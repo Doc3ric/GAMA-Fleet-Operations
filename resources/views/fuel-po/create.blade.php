@@ -1,4 +1,4 @@
-<x-app-layout>
+﻿<x-app-layout>
     @section('page-title', 'Add Itinerary • Fuel PO')
     @section('breadcrumb')
         <a href="{{ route('fuel-po.index') }}" class="hover:underline">Fuel PO Checklist</a> &bull; Add Itinerary
@@ -443,6 +443,7 @@
                                             <input type="text"
                                                    :name="'destinations[' + index + '][purpose]'"
                                                    x-model="row.purpose"
+                                                   maxlength="255"
                                                    placeholder="e.g. Delivery, Hauling"
                                                    class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-700 focus:border-blue-500 outline-none">
                                         </td>

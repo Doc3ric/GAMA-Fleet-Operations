@@ -37,6 +37,14 @@ class FleetDispatch extends Model
 
     public const SOURCE_GPS_MOVEMENT = 'gps_movement';
 
+    public const MONITORING_NORMAL = 'NORMAL';
+
+    public const MONITORING_POSSIBLE_EXCEPTION = 'POSSIBLE_EXCEPTION';
+
+    public const MONITORING_CONFIRMED_EXCEPTION = 'CONFIRMED_EXCEPTION';
+
+    public const MONITORING_GPS_UNAVAILABLE = 'GPS_UNAVAILABLE';
+
     /** @var list<string> */
     protected $fillable = [
         'trip_number',
@@ -45,13 +53,19 @@ class FleetDispatch extends Model
         'driver_name',
         'trip_date',
         'starting_point',
+        'origin_latitude',
+        'origin_longitude',
         'destination',
+        'destination_latitude',
+        'destination_longitude',
         'planned_route',
         'planned_distance_km',
         'planned_departure_time',
         'actual_departure_time',
         'departure_source',
         'dispatch_status',
+        'monitoring_status',
+        'last_monitored_at',
         'delay_minutes',
         'grace_period_minutes',
         'notes',
@@ -62,8 +76,13 @@ class FleetDispatch extends Model
     protected $casts = [
         'trip_date' => 'date',
         'planned_distance_km' => 'float',
+        'origin_latitude' => 'float',
+        'origin_longitude' => 'float',
+        'destination_latitude' => 'float',
+        'destination_longitude' => 'float',
         'planned_departure_time' => 'datetime',
         'actual_departure_time' => 'datetime',
+        'last_monitored_at' => 'datetime',
         'delay_minutes' => 'integer',
         'grace_period_minutes' => 'integer',
     ];
@@ -91,6 +110,55 @@ class FleetDispatch extends Model
     public function auditLogs(): HasMany
     {
         return $this->hasMany(MileageAuditLog::class, 'dispatch_id');
+    }
+
+    public function monitorEvents(): HasMany
+    {
+        return $this->hasMany(DispatchMonitorEvent::class, 'dispatch_id');
+    }
+
+    public function activeMonitorEvents(): HasMany
+    {
+        return $this->hasMany(DispatchMonitorEvent::class, 'dispatch_id')->whereIn('status', [
+            DispatchMonitorEvent::STATUS_POSSIBLE,
+            DispatchMonitorEvent::STATUS_CONFIRMED,
+        ]);
+    }
+
+    public function getPlannedRouteDataAttribute(): array
+    {
+        if (is_array($this->planned_route)) {
+            return $this->planned_route;
+        }
+
+        if (is_string($this->planned_route) && str_starts_with(trim($this->planned_route), '{')) {
+            $decoded = json_decode($this->planned_route, true);
+            if (is_array($decoded)) {
+                return $decoded;
+            }
+        }
+
+        return [];
+    }
+
+    public function isMonitoringNormal(): bool
+    {
+        return $this->monitoring_status === self::MONITORING_NORMAL;
+    }
+
+    public function hasPossibleException(): bool
+    {
+        return $this->monitoring_status === self::MONITORING_POSSIBLE_EXCEPTION;
+    }
+
+    public function hasConfirmedException(): bool
+    {
+        return $this->monitoring_status === self::MONITORING_CONFIRMED_EXCEPTION;
+    }
+
+    public function isGpsUnavailable(): bool
+    {
+        return $this->monitoring_status === self::MONITORING_GPS_UNAVAILABLE;
     }
 
     public function creator(): BelongsTo

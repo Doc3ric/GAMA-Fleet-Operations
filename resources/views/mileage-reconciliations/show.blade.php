@@ -120,7 +120,7 @@
             <div class="rounded-2xl bg-white dark:bg-slate-900 p-5 shadow-xs border border-slate-200 dark:border-slate-800">
                 <span class="text-xs font-bold uppercase tracking-wider text-slate-400 block">Planned Route Distance</span>
                 <div class="mt-2 flex items-baseline gap-1.5">
-                    <span class="text-3xl font-black text-slate-900 dark:text-white">{{ number_format($reconciliation->planned_distance_km, 2) }}</span>
+                    <span class="text-3xl font-black text-slate-900 dark:text-white">{{ $reconciliation->planned_distance_km !== null ? number_format($reconciliation->planned_distance_km, 2) : 'Pending' }}</span>
                     <span class="text-xs font-bold text-slate-400">KM</span>
                 </div>
                 <div class="text-[11px] text-slate-500 mt-2 truncate">
@@ -132,11 +132,13 @@
             <div class="rounded-2xl bg-white dark:bg-slate-900 p-5 shadow-xs border border-slate-200 dark:border-slate-800">
                 <span class="text-xs font-bold uppercase tracking-wider text-slate-400 block">Actual Odometer Distance</span>
                 <div class="mt-2 flex items-baseline gap-1.5">
-                    <span class="text-3xl font-black text-blue-600 dark:text-blue-400">{{ number_format($reconciliation->actual_odometer_km, 2) }}</span>
-                    <span class="text-xs font-bold text-blue-500">KM</span>
+                    <span class="text-3xl font-black text-blue-600 dark:text-blue-400">{{ $reconciliation->actual_odometer_km !== null ? number_format($reconciliation->actual_odometer_km, 2) : 'Pending' }}</span>
+                    @if($reconciliation->actual_odometer_km !== null)
+                        <span class="text-xs font-bold text-blue-500">KM</span>
+                    @endif
                 </div>
                 <div class="text-[11px] text-slate-500 mt-2 font-mono">
-                    {{ number_format($reconciliation->starting_odometer ?? 0, 1) }} &rarr; {{ number_format($reconciliation->ending_odometer ?? 0, 1) }}
+                    {{ $reconciliation->starting_odometer !== null ? number_format($reconciliation->starting_odometer, 1) : '—' }} &rarr; {{ $reconciliation->ending_odometer !== null ? number_format($reconciliation->ending_odometer, 1) : '—' }}
                 </div>
             </div>
 

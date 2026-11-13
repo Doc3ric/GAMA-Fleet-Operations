@@ -4,12 +4,17 @@ namespace App\Http\Controllers;
 
 use App\Exports\DispatchPunctualityExport;
 use App\Models\AdvancedItinerary;
+use App\Models\DispatchMonitorEvent;
 use App\Models\FleetDispatch;
+use App\Models\Location;
 use App\Models\Vehicle;
+use App\Services\DispatchGpsTrackingService;
 use App\Services\DispatchMonitoringService;
 use App\Services\MileageReconciliationService;
+use App\Services\RoutingService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -22,11 +27,13 @@ class FleetDispatchController extends Controller
 {
     public function __construct(
         protected DispatchMonitoringService $dispatchService,
-        protected MileageReconciliationService $reconciliationService
+        protected MileageReconciliationService $reconciliationService,
+        protected DispatchGpsTrackingService $trackingService,
+        protected RoutingService $routingService
     ) {}
 
     /**
-     * Display the On-Time Dispatch Rate Dashboard and dispatch table.
+     * Display the On-Time Dispatch Rate Dashboard, dispatch table, and live monitoring alerts.
      */
     public function index(Request $request): View
     {
@@ -36,12 +43,13 @@ class FleetDispatchController extends Controller
         $endDate = $request->input('end_date');
         $vehicleId = $request->filled('vehicle_id') ? (int) $request->input('vehicle_id') : null;
         $status = $request->input('status');
+        $monitoringStatus = $request->input('monitoring_status');
         $driver = $request->input('driver');
 
         // Statistics respect date range and vehicle filter
         $statistics = $this->dispatchService->getStatistics($startDate, $endDate, $vehicleId);
 
-        $query = FleetDispatch::with(['vehicle', 'reconciliation', 'itinerary'])
+        $query = FleetDispatch::with(['vehicle.device', 'reconciliation', 'itinerary', 'activeMonitorEvents'])
             ->latest('trip_date')
             ->latest('planned_departure_time');
 
@@ -57,38 +65,57 @@ class FleetDispatchController extends Controller
         if ($status && $status !== 'all') {
             $query->where('dispatch_status', $status);
         }
+        if ($monitoringStatus && $monitoringStatus !== 'all') {
+            $query->where('monitoring_status', $monitoringStatus);
+        }
         if ($driver) {
             $query->where('driver_name', 'like', "%{$driver}%");
         }
 
         $dispatches = $query->paginate(15)->withQueryString();
-        $vehicles = Vehicle::orderBy('equipment_code')->get();
+        $vehicles = Vehicle::with('device')->orderBy('equipment_code')->get();
 
         // Recent finalized itineraries for quick-linking into new dispatches
-        $approvedItineraries = AdvancedItinerary::with('vehicle')
+        $approvedItineraries = AdvancedItinerary::with(['vehicle', 'legs'])
             ->where('status', AdvancedItinerary::STATUS_FINALIZED)
             ->whereDoesntHave('dispatches')
             ->latest('itinerary_date')
             ->limit(20)
             ->get();
 
+        // Preloaded location master list for origin/destination pickers
+        $locations = Location::whereNotNull('latitude')
+            ->whereNotNull('longitude')
+            ->orderBy('official_name')
+            ->get(['id', 'official_name', 'latitude', 'longitude']);
+
+        // Active monitoring alerts (Vehicles not following assigned routes or schedule)
+        $activeAlerts = DispatchMonitorEvent::with(['dispatch.vehicle', 'vehicle'])
+            ->active()
+            ->latest()
+            ->limit(25)
+            ->get();
+
         return view('fleet-dispatches.index', [
             'dispatches' => $dispatches,
             'statistics' => $statistics,
             'vehicles' => $vehicles,
+            'locations' => $locations,
+            'activeAlerts' => $activeAlerts,
             'approvedItineraries' => $approvedItineraries,
             'filters' => [
                 'start_date' => $startDate,
                 'end_date' => $endDate,
                 'vehicle_id' => $vehicleId,
                 'status' => $status,
+                'monitoring_status' => $monitoringStatus,
                 'driver' => $driver,
             ],
         ]);
     }
 
     /**
-     * Store a new dispatch record (and initialize its mileage reconciliation).
+     * Store a new dispatch record with multi-stop waypoints and initialize mileage reconciliation.
      */
     public function store(Request $request): RedirectResponse
     {
@@ -100,8 +127,13 @@ class FleetDispatchController extends Controller
             'driver_name' => ['nullable', 'string', 'max:100'],
             'trip_date' => ['required', 'date'],
             'starting_point' => ['required', 'string', 'max:200'],
+            'origin_latitude' => ['nullable', 'numeric', 'between:-90,90'],
+            'origin_longitude' => ['nullable', 'numeric', 'between:-180,180'],
             'destination' => ['required', 'string', 'max:255'],
-            'planned_route' => ['nullable', 'string'],
+            'destination_latitude' => ['nullable', 'numeric', 'between:-90,90'],
+            'destination_longitude' => ['nullable', 'numeric', 'between:-180,180'],
+            'planned_route' => ['nullable'],
+            'waypoints' => ['nullable', 'array'],
             'planned_distance_km' => ['required', 'numeric', 'min:0'],
             'planned_departure_time' => ['required', 'date'],
             'actual_departure_time' => ['nullable', 'date'],
@@ -112,6 +144,56 @@ class FleetDispatchController extends Controller
             'starting_odometer' => ['nullable', 'numeric', 'min:0'],
             'ending_odometer' => ['nullable', 'numeric', 'min:0'],
         ]);
+
+        // Process structured multi-stop waypoints into planned_route JSON if provided
+        $waypoints = $request->input('waypoints', []);
+        $plannedRouteData = [];
+
+        if (! empty($waypoints) && is_array($waypoints)) {
+            $formattedWaypoints = [];
+            foreach ($waypoints as $wp) {
+                if (! empty($wp['address']) || ! empty($wp['name'])) {
+                    $formattedWaypoints[] = [
+                        'name' => (string) ($wp['name'] ?? $wp['address']),
+                        'address' => (string) ($wp['address'] ?? ($wp['name'] ?? '')),
+                        'lat' => isset($wp['lat']) && is_numeric($wp['lat']) ? (float) $wp['lat'] : null,
+                        'lng' => isset($wp['lng']) && is_numeric($wp['lng']) ? (float) $wp['lng'] : null,
+                    ];
+                }
+            }
+
+            $plannedRouteData = [
+                'origin' => [
+                    'name' => $validated['starting_point'],
+                    'lat' => $validated['origin_latitude'] ?? null,
+                    'lng' => $validated['origin_longitude'] ?? null,
+                ],
+                'intermediate_destinations' => $formattedWaypoints,
+                'waypoints' => array_values(array_filter(array_merge(
+                    [[
+                        'name' => $validated['starting_point'],
+                        'lat' => $validated['origin_latitude'] ?? null,
+                        'lng' => $validated['origin_longitude'] ?? null,
+                    ]],
+                    $formattedWaypoints,
+                    [[
+                        'name' => $validated['destination'],
+                        'lat' => $validated['destination_latitude'] ?? null,
+                        'lng' => $validated['destination_longitude'] ?? null,
+                    ]]
+                ), fn ($pt) => $pt['lat'] !== null && $pt['lng'] !== null)),
+                'destination' => [
+                    'name' => $validated['destination'],
+                    'lat' => $validated['destination_latitude'] ?? null,
+                    'lng' => $validated['destination_longitude'] ?? null,
+                ],
+                'distance_km' => (float) $validated['planned_distance_km'],
+            ];
+
+            $validated['planned_route'] = json_encode($plannedRouteData);
+        } elseif (is_array($request->input('planned_route'))) {
+            $validated['planned_route'] = json_encode($request->input('planned_route'));
+        }
 
         $dispatch = $this->dispatchService->createDispatch($validated, $request->user()->id);
 
@@ -127,6 +209,180 @@ class FleetDispatchController extends Controller
 
         return redirect()->route('fleet-dispatches.index')
             ->with('status', "Dispatch trip {$dispatch->trip_number} created successfully.");
+    }
+
+    /**
+     * API: Calculate multi-point route distance, duration, and geometry.
+     */
+    public function calculateRoute(Request $request): JsonResponse
+    {
+        Gate::authorize('viewAny', FleetDispatch::class);
+
+        $request->validate([
+            'points' => ['required', 'array', 'min:2'],
+            'points.*.lat' => ['required', 'numeric', 'between:-90,90'],
+            'points.*.lng' => ['required', 'numeric', 'between:-180,180'],
+            'points.*.name' => ['nullable', 'string'],
+        ]);
+
+        $points = $request->input('points', []);
+        $result = $this->routingService->calculateMultiPointRoute($points);
+
+        return response()->json($result);
+    }
+
+    /**
+     * Run automated dispatch monitoring check on-demand.
+     */
+    public function runMonitoring(Request $request): RedirectResponse|JsonResponse
+    {
+        Gate::authorize('viewAny', FleetDispatch::class);
+
+        $stats = $this->trackingService->monitorActiveDispatches();
+
+        $message = sprintf(
+            'Monitoring check complete: %d dispatches scanned (%d normal, %d possible exceptions, %d confirmed, %d GPS unavailable).',
+            $stats['scanned'],
+            $stats['normal'],
+            $stats['possible_exceptions'],
+            $stats['confirmed_exceptions'],
+            $stats['gps_unavailable']
+        );
+
+        if ($request->wantsJson()) {
+            return response()->json(['success' => true, 'stats' => $stats, 'message' => $message]);
+        }
+
+        return redirect()->back()->with('status', $message);
+    }
+
+    /**
+     * Resolve an active dispatch monitoring event with remarks.
+     */
+    public function resolveEvent(Request $request, DispatchMonitorEvent $event): RedirectResponse|JsonResponse
+    {
+        Gate::authorize('update', $event->dispatch);
+
+        $validated = $request->validate([
+            'remarks' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $event->resolve($request->user()->id, $validated['remarks'] ?? 'Manually acknowledged & resolved by operator.');
+
+        // Re-evaluate parent dispatch monitoring status
+        $dispatch = $event->dispatch;
+        if ($dispatch) {
+            $hasConfirmed = $dispatch->activeMonitorEvents()->confirmed()->exists();
+            $hasPossible = $dispatch->activeMonitorEvents()->possible()->exists();
+
+            $status = $hasConfirmed
+                ? FleetDispatch::MONITORING_CONFIRMED_EXCEPTION
+                : ($hasPossible ? FleetDispatch::MONITORING_POSSIBLE_EXCEPTION : FleetDispatch::MONITORING_NORMAL);
+
+            $dispatch->update(['monitoring_status' => $status]);
+        }
+
+        $msg = "Alert for {$event->vehicle?->equipment_code} resolved.";
+
+        if ($request->wantsJson()) {
+            return response()->json(['success' => true, 'message' => $msg]);
+        }
+
+        return redirect()->back()->with('status', $msg);
+    }
+
+    /**
+     * API: Get live GPS track, planned route corridor, and live telemetry for a dispatch.
+     */
+    public function liveTrack(FleetDispatch $dispatch): JsonResponse
+    {
+        Gate::authorize('view', $dispatch);
+
+        $dispatch->loadMissing(['vehicle.device', 'activeMonitorEvents']);
+        $vehicle = $dispatch->vehicle;
+        $imei = $vehicle?->device?->imei;
+
+        $livePoint = null;
+        if ($imei) {
+            $batch = $this->trackingService->trackSolidService->getDeviceLocationsWithStatus([trim((string) $imei)]);
+            $liveLoc = $batch['locations'][trim((string) $imei)] ?? null;
+            if ($liveLoc) {
+                $livePoint = $this->trackingService->extractValidPoint($liveLoc, Carbon::now());
+            }
+        }
+
+        $waypoints = $this->trackingService->extractRouteWaypoints($dispatch);
+
+        return response()->json([
+            'dispatch' => [
+                'id' => $dispatch->id,
+                'trip_number' => $dispatch->trip_number,
+                'trip_date' => $dispatch->trip_date->format('Y-m-d'),
+                'vehicle_code' => $vehicle?->equipment_code,
+                'plate_number' => $vehicle?->plate_number,
+                'driver_name' => $dispatch->driver_name,
+                'starting_point' => $dispatch->starting_point,
+                'destination' => $dispatch->destination,
+                'planned_distance_km' => $dispatch->planned_distance_km,
+                'dispatch_status' => $dispatch->dispatch_status,
+                'monitoring_status' => $dispatch->monitoring_status,
+                'delay_minutes' => $dispatch->delay_minutes,
+            ],
+            'live_point' => $livePoint,
+            'waypoints' => $waypoints,
+            'planned_route_data' => $dispatch->planned_route_data,
+            'active_events' => $dispatch->activeMonitorEvents,
+        ]);
+    }
+
+    /**
+     * API: Fetch unread in-app notifications for authenticated user.
+     */
+    public function notificationFeed(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        if (! $user) {
+            return response()->json(['unread_count' => 0, 'notifications' => []]);
+        }
+
+        $unreadCount = $user->unreadNotifications()->count();
+        $recentNotifications = $user->notifications()->latest()->limit(15)->get()->map(function ($n) {
+            return [
+                'id' => $n->id,
+                'type' => $n->type,
+                'data' => $n->data,
+                'read' => $n->read_at !== null,
+                'created_at_human' => $n->created_at?->diffForHumans() ?? 'Just now',
+            ];
+        });
+
+        return response()->json([
+            'unread_count' => $unreadCount,
+            'notifications' => $recentNotifications,
+        ]);
+    }
+
+    /**
+     * API: Mark in-app notification as read.
+     */
+    public function markNotificationRead(Request $request, string $id): JsonResponse
+    {
+        $notification = $request->user()->notifications()->where('id', $id)->first();
+        if ($notification) {
+            $notification->markAsRead();
+        }
+
+        return response()->json(['success' => true]);
+    }
+
+    /**
+     * API: Mark all in-app notifications as read.
+     */
+    public function markAllNotificationsRead(Request $request): JsonResponse
+    {
+        $request->user()->unreadNotifications->markAsRead();
+
+        return response()->json(['success' => true]);
     }
 
     /**
@@ -201,12 +457,9 @@ class FleetDispatchController extends Controller
             $firstLeg = $itinerary->legs->first();
             $lastLeg = $itinerary->legs->last();
 
-            $startingPoint = $firstLeg?->origin ?? 'Cagayan de Oro Main Yard';
-            $destination = $lastLeg?->destination ?? ($firstLeg?->destination ?? 'Regional Depot');
-            $plannedDistance = (float) ($itinerary->total_distance_km ?? 0.0);
-            if ($plannedDistance <= 0.0) {
-                $plannedDistance = 85.0;
-            }
+            $startingPoint = $firstLeg?->originLocation?->official_name ?? ($firstLeg?->origin ?? 'Cagayan de Oro Main Yard');
+            $destination = $lastLeg?->destinationLocation?->official_name ?? ($lastLeg?->destination ?? ($itinerary->destination ?: 'Regional Depot'));
+            $plannedDistance = max(0.0, (float) $itinerary->total_distance);
 
             $dispatch = $this->dispatchService->createDispatch([
                 'vehicle_id' => $vehicle->id,
@@ -214,26 +467,29 @@ class FleetDispatchController extends Controller
                 'trip_date' => $date->format('Y-m-d'),
                 'driver_name' => $itinerary->driver_name ?: 'Assigned Fleet Driver',
                 'starting_point' => $startingPoint,
+                'origin_latitude' => $firstLeg?->originLocation?->latitude,
+                'origin_longitude' => $firstLeg?->originLocation?->longitude,
                 'destination' => $destination,
-                'planned_route' => $itinerary->route_name ?: 'Approved Distribution Route',
+                'destination_latitude' => $lastLeg?->destinationLocation?->latitude,
+                'destination_longitude' => $lastLeg?->destinationLocation?->longitude,
+                'planned_route' => $itinerary->title ?: ($itinerary->destination ?: 'Approved Distribution Route'),
                 'planned_distance_km' => $plannedDistance,
                 'planned_departure_time' => $plannedDep,
                 'grace_period_minutes' => 15,
                 'notes' => "Auto-generated from Itinerary #{$itinerary->id}",
             ], $request->user()->id);
 
-            $prevOdo = (float) ($vehicle->odometer ?? 25000.0);
-            $this->reconciliationService->initializeForDispatch($dispatch, [
-                'starting_odometer' => $prevOdo,
-                'ending_odometer' => $prevOdo + $plannedDistance,
-                'notes' => 'Generated from operational itinerary.',
+            // Initialize Draft Mileage Reconciliation
+            $this->reconciliationService->createReconciliation($dispatch, [
+                'planned_distance_km' => $dispatch->planned_distance_km > 0 ? $dispatch->planned_distance_km : null,
+                'notes' => $dispatch->notes,
             ], $request->user()->id);
 
             $createdCount++;
         }
 
-        return redirect()->back()
-            ->with('status', "Successfully generated {$createdCount} active trip dispatches and reconciliations from your itineraries!");
+        return redirect()->route('fleet-dispatches.index')
+            ->with('status', "Successfully generated {$createdCount} trip dispatches from approved itineraries.");
     }
 
     /**

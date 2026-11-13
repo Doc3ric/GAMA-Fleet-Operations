@@ -84,6 +84,33 @@ class FuelPoController extends Controller
     }
 
     /**
+     * Truncate purpose fields in destinations and legs arrays to 255 characters
+     * before validation so over-length values never produce a validation error.
+     */
+    private function truncatePurposeFields(Request $request): void
+    {
+        $destinations = $request->input('destinations', []);
+        if (is_array($destinations)) {
+            foreach ($destinations as $i => $row) {
+                if (isset($row['purpose']) && mb_strlen((string) $row['purpose']) > 255) {
+                    $destinations[$i]['purpose'] = mb_substr((string) $row['purpose'], 0, 255);
+                }
+            }
+            $request->merge(['destinations' => $destinations]);
+        }
+
+        $legs = $request->input('legs', []);
+        if (is_array($legs)) {
+            foreach ($legs as $i => $leg) {
+                if (isset($leg['purpose']) && mb_strlen((string) $leg['purpose']) > 255) {
+                    $legs[$i]['purpose'] = mb_substr((string) $leg['purpose'], 0, 255);
+                }
+            }
+            $request->merge(['legs' => $legs]);
+        }
+    }
+
+    /**
      * Resolve target vehicle ID from either registered dropdown selection or manual specification.
      *
      * @param  array<string, mixed>  $data
@@ -167,6 +194,8 @@ class FuelPoController extends Controller
     public function store(Request $request): RedirectResponse
     {
         Gate::authorize('create', AdvancedItinerary::class);
+
+        $this->truncatePurposeFields($request);
 
         $validated = $request->validate([
             'itinerary_date' => ['required', 'date'],
@@ -396,6 +425,8 @@ class FuelPoController extends Controller
     public function update(Request $request, AdvancedItinerary $advancedItinerary): RedirectResponse
     {
         Gate::authorize('update', $advancedItinerary);
+
+        $this->truncatePurposeFields($request);
 
         $validated = $request->validate([
             'itinerary_date' => ['required', 'date'],

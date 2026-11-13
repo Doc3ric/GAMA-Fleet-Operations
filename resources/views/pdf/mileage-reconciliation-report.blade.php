@@ -180,17 +180,20 @@
             </td>
             <td class="text-right">
                 <span class="summary-label">Total Planned KM:</span><br/>
-                <span class="summary-val">{{ number_format($records->sum('planned_distance_km'), 2) }} KM</span>
+                <span class="summary-val">{{ number_format($records->whereNotNull('planned_distance_km')->sum('planned_distance_km'), 2) }} KM</span><br/>
+                <small>{{ $records->whereNull('planned_distance_km')->count() }} pending planned distances</small>
             </td>
             <td class="text-right">
-                <span class="summary-label">Total Actual KM:</span><br/>
-                <span class="summary-val">{{ number_format($records->sum('actual_odometer_km'), 2) }} KM</span>
+                <span class="summary-label">Recorded Actual KM:</span><br/>
+                <span class="summary-val">{{ number_format($records->whereNotNull('actual_odometer_km')->sum('actual_odometer_km'), 2) }} KM</span><br/>
+                <small>{{ $records->whereNull('actual_odometer_km')->count() }} pending readings</small>
             </td>
             <td class="text-right">
                 <span class="summary-label">Total Variance:</span><br/>
-                <span class="summary-val" style="{{ $records->sum('variance_km') > 0 ? 'color:#dc2626;' : 'color:#166534;' }}">
-                    {{ ($records->sum('variance_km') > 0 ? '+' : '') . number_format($records->sum('variance_km'), 2) }} KM
-                </span>
+                <span class="summary-val" style="{{ $records->whereNotNull('variance_km')->sum('variance_km') > 0 ? 'color:#dc2626;' : 'color:#166534;' }}">
+                    {{ ($records->whereNotNull('variance_km')->sum('variance_km') > 0 ? '+' : '') . number_format($records->whereNotNull('variance_km')->sum('variance_km'), 2) }} KM
+                </span><br/>
+                <small>{{ $records->whereNull('variance_km')->count() }} pending variances</small>
             </td>
         </tr>
     </table>
@@ -239,15 +242,19 @@
                         </span>
                     </td>
                     <td>{{ $rec->dispatch?->destination ?? '—' }}</td>
-                    <td class="text-right">{{ number_format($rec->planned_distance_km, 2) }}</td>
+                    <td class="text-right">{{ $rec->planned_distance_km !== null ? number_format($rec->planned_distance_km, 2) : 'Pending' }}</td>
                     <td class="text-right">{{ $rec->starting_odometer !== null ? number_format($rec->starting_odometer, 1) : '—' }}</td>
                     <td class="text-right">{{ $rec->ending_odometer !== null ? number_format($rec->ending_odometer, 1) : '—' }}</td>
-                    <td class="text-right"><strong>{{ number_format($rec->actual_odometer_km, 2) }}</strong></td>
+                    <td class="text-right"><strong>{{ $rec->actual_odometer_km !== null ? number_format($rec->actual_odometer_km, 2) : 'Pending' }}</strong></td>
                     <td class="text-right">{{ $rec->gps_reported_km !== null ? number_format($rec->gps_reported_km, 2) : '—' }}</td>
                     <td class="text-right" style="{{ $rec->variance_km > 0 ? 'color: #dc2626; font-weight: bold;' : '' }}">
-                        {{ ($rec->variance_km > 0 ? '+' : '') . number_format($rec->variance_km, 2) }}
-                        @if($rec->variance_percentage !== null)
-                            <small>({{ ($rec->variance_percentage > 0 ? '+' : '') . number_format($rec->variance_percentage, 1) }}%)</small>
+                        @if($rec->variance_km !== null)
+                            {{ ($rec->variance_km > 0 ? '+' : '') . number_format($rec->variance_km, 2) }}
+                            @if($rec->variance_percentage !== null)
+                                <small>({{ ($rec->variance_percentage > 0 ? '+' : '') . number_format($rec->variance_percentage, 1) }}%)</small>
+                            @endif
+                        @else
+                            Pending
                         @endif
                     </td>
                     <td class="text-center">

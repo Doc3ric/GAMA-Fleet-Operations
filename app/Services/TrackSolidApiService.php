@@ -334,6 +334,17 @@ class TrackSolidApiService
      */
     public function getDeviceLocations(array $imeis = []): array
     {
+        return $this->getDeviceLocationsWithStatus($imeis)['locations'];
+    }
+
+    /**
+     * Retrieve live locations while retaining batch failure details.
+     *
+     * @param  list<string>  $imeis
+     * @return array{locations: array<string, array<string, mixed>>, failed_imeis: list<string>, status: string}
+     */
+    public function getDeviceLocationsWithStatus(array $imeis = []): array
+    {
         if (empty($imeis)) {
             $imeis = Device::whereNotNull('imei')
                 ->where('imei', '!=', '')
@@ -348,18 +359,19 @@ class TrackSolidApiService
         }
 
         if (empty($imeis)) {
-            return [];
+            return ['locations' => [], 'failed_imeis' => [], 'status' => 'no_devices'];
         }
 
         $token = $this->getAccessToken();
         if (! $token) {
             Log::info('TrackSolid API: Cannot fetch device locations without valid access token.');
 
-            return [];
+            return ['locations' => [], 'failed_imeis' => $imeis, 'status' => 'failure'];
         }
 
         $locationsByImei = [];
         $chunks = array_chunk($imeis, 50);
+        $failedImeis = [];
 
         foreach ($chunks as $chunk) {
             try {
@@ -384,6 +396,8 @@ class TrackSolidApiService
                         'chunk_count' => count($chunk),
                     ]);
 
+                    $failedImeis = array_merge($failedImeis, $chunk);
+
                     continue;
                 }
 
@@ -395,6 +409,8 @@ class TrackSolidApiService
                         'code' => $code,
                         'message' => $json['message'] ?? $json['msg'] ?? 'Unknown error',
                     ]);
+
+                    $failedImeis = array_merge($failedImeis, $chunk);
 
                     continue;
                 }
@@ -415,10 +431,14 @@ class TrackSolidApiService
                 }
             } catch (Exception $e) {
                 Log::error('TrackSolid getDeviceLocations exception: '.$e->getMessage());
+                $failedImeis = array_merge($failedImeis, $chunk);
             }
         }
 
-        return $locationsByImei;
+        $failedImeis = array_values(array_unique($failedImeis));
+        $status = empty($failedImeis) ? 'success' : (empty($locationsByImei) ? 'failure' : 'partial_failure');
+
+        return ['locations' => $locationsByImei, 'failed_imeis' => $failedImeis, 'status' => $status];
     }
 
     /**

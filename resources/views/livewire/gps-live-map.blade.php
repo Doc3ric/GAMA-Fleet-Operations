@@ -50,9 +50,9 @@
         <div>
             <div class="flex items-center gap-2.5">
                 <h2 class="text-xl font-bold text-slate-800 dark:text-white tracking-tight">Live GPS Fleet Map</h2>
-                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold {{ $apiStatus === 'connected' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800' : 'bg-red-50 text-red-700 border border-red-200' }}">
-                    <span class="h-2 w-2 rounded-full {{ $apiStatus === 'connected' ? 'bg-emerald-500 animate-pulse' : 'bg-red-500' }}"></span>
-                    {{ $apiStatus === 'connected' ? 'TrackSolid API Connected' : 'API Connection Issue' }}
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold {{ $apiStatus === 'connected' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800' : ($apiStatus === 'warning' ? 'bg-amber-50 text-amber-800 border border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800' : 'bg-red-50 text-red-700 border border-red-200 dark:bg-red-950/60 dark:text-red-300 dark:border-red-800') }}">
+                    <span class="h-2 w-2 rounded-full {{ $apiStatus === 'connected' ? 'bg-emerald-500 animate-pulse' : ($apiStatus === 'warning' ? 'bg-amber-500' : 'bg-red-500') }}"></span>
+                    {{ $apiStatus === 'connected' ? 'TrackSolid API Connected' : ($apiStatus === 'warning' ? 'TrackSolid Data Unavailable' : 'TrackSolid API Error') }}
                 </span>
                 <span class="text-xs text-slate-500 dark:text-slate-400">
                     &bull; {{ $totalFleetCount }} Trackers Monitored
@@ -125,7 +125,7 @@
         <button type="button"
                 wire:click="setStatusFilter('all')"
                 class="flex flex-col p-2.5 rounded-xl border text-left transition-all duration-150 {{ $statusFilter === 'all' ? 'bg-slate-900 border-slate-900 text-white shadow-sm dark:bg-blue-600 dark:border-blue-600' : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300 dark:bg-slate-900 dark:border-slate-800 dark:text-slate-300' }}">
-            <span class="text-[10px] font-semibold uppercase tracking-wider {{ $statusFilter === 'all' ? 'text-slate-300 dark:text-blue-100' : 'text-slate-400' }}">All Units</span>
+                <span class="text-[10px] font-semibold uppercase tracking-wider {{ $statusFilter === 'all' ? 'text-slate-300 dark:text-blue-100' : 'text-slate-400' }}">All Trackers</span>
             <div class="flex items-baseline justify-between mt-0.5">
                 <span class="text-lg font-bold">{{ $summary['total'] }}</span>
                 <span class="text-[10px] opacity-80">{{ $summary['has_coords'] }} pinned</span>
@@ -212,7 +212,7 @@
             </div>
             <div class="flex items-baseline justify-between mt-0.5">
                 <span class="text-lg font-bold text-red-600 {{ $statusFilter === 'issues' ? '!text-white' : '' }}">{{ $summary['issues'] }}</span>
-                <span class="text-[10px] {{ $statusFilter === 'issues' ? 'text-red-100' : 'text-slate-400' }}">Expired/No Fix</span>
+                <span class="text-[10px] {{ $statusFilter === 'issues' ? 'text-red-100' : 'text-slate-400' }}">Expired / No Fix / Stale</span>
             </div>
         </button>
 
@@ -316,19 +316,24 @@
                             <h3 class="text-base font-bold text-slate-900 dark:text-white">{{ $selectedItem['equipment_code'] }}</h3>
                             <p class="text-xs font-semibold text-slate-600 dark:text-slate-300">{{ $selectedItem['plate_number'] }}</p>
                         </div>
-                        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold
-                            {{ $selectedItem['state'] === 'moving' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300' : '' }}
-                            {{ $selectedItem['state'] === 'idling' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300' : '' }}
-                            {{ $selectedItem['state'] === 'parked' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/60 dark:text-blue-300' : '' }}
-                            {{ $selectedItem['state'] === 'offline' ? 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300' : '' }}
-                        ">
-                            <span class="h-1.5 w-1.5 rounded-full {{ $selectedItem['state'] === 'moving' ? 'bg-emerald-600 animate-ping' : ($selectedItem['state'] === 'idling' ? 'bg-amber-600' : ($selectedItem['state'] === 'parked' ? 'bg-blue-600' : 'bg-slate-500')) }}"></span>
-                            {{ $selectedItem['state_label'] }}
-                        </span>
+                        <div class="flex flex-col items-end gap-1">
+                            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold
+                                {{ $selectedItem['state'] === 'moving' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300' : '' }}
+                                {{ $selectedItem['state'] === 'idling' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300' : '' }}
+                                {{ $selectedItem['state'] === 'parked' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/60 dark:text-blue-300' : '' }}
+                                {{ $selectedItem['state'] === 'offline' ? 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300' : '' }}
+                            ">
+                                <span class="h-1.5 w-1.5 rounded-full {{ $selectedItem['state'] === 'moving' ? 'bg-emerald-600 animate-ping' : ($selectedItem['state'] === 'idling' ? 'bg-amber-600' : ($selectedItem['state'] === 'parked' ? 'bg-blue-600' : 'bg-slate-500')) }}"></span>
+                                {{ $selectedItem['state_label'] }}
+                            </span>
+                            <span class="text-[10px] font-semibold {{ $selectedItem['is_online'] ? ($selectedItem['is_gps_stale'] ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400') : 'text-slate-500 dark:text-slate-400' }}">
+                                {{ $selectedItem['connection_label'] ?? ($selectedItem['is_online'] ? 'Connected' : 'Offline') }}
+                            </span>
+                        </div>
                     </div>
 
-                    {{-- Metrics Grid --}}
-                    <div class="grid grid-cols-2 gap-2 text-xs bg-white dark:bg-slate-900 p-3 rounded-xl border border-blue-100 dark:border-blue-900">
+                    {{-- Primary Telemetry Grid --}}
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs bg-white dark:bg-slate-900 p-3 rounded-xl border border-blue-100 dark:border-blue-900">
                         <div>
                             <span class="text-[10px] text-slate-400 uppercase tracking-wider block">Speed</span>
                             <span class="text-sm font-bold text-slate-800 dark:text-slate-100">{{ $selectedItem['speed'] }} km/h</span>
@@ -340,16 +345,89 @@
                             </span>
                         </div>
                         <div>
+                            <span class="text-[10px] text-slate-400 uppercase tracking-wider block">Heading / Bearing</span>
+                            <div class="flex items-center gap-1.5 mt-0.5">
+                                <svg class="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 transform" style="transform: rotate({{ $selectedItem['direction'] ?? 0 }}deg);" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z"/>
+                                </svg>
+                                <span class="text-xs font-bold text-slate-700 dark:text-slate-300 font-mono">{{ $selectedItem['direction'] ?? 0 }}&deg;</span>
+                            </div>
+                        </div>
+                        <div>
                             <span class="text-[10px] text-slate-400 uppercase tracking-wider block">Driver</span>
                             <span class="text-xs font-medium text-slate-700 dark:text-slate-300 truncate block">{{ $selectedItem['operator_driver'] }}</span>
                         </div>
-                        <div>
-                            <span class="text-[10px] text-slate-400 uppercase tracking-wider block">Last GPS Fix</span>
-                            <span class="text-xs font-medium text-slate-700 dark:text-slate-300 truncate block">{{ $selectedItem['last_contact'] }}</span>
+                    </div>
+
+                    {{-- Dedicated Dual Timestamp Panel (GPS Fix Time vs Device Heartbeat Time) --}}
+                    <div class="bg-white dark:bg-slate-900 p-3 rounded-xl border border-blue-100 dark:border-blue-900 space-y-2">
+                        <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                            <span>GPS Telemetry Timestamps</span>
+                            <span class="font-normal normal-case text-slate-400">TrackSolid Pro Feed</span>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                            {{-- GPS Fix Time (Actual Satellite Fix) --}}
+                            <div class="rounded-lg bg-slate-50/80 dark:bg-slate-800/60 p-2 border border-slate-100 dark:border-slate-800">
+                                <div class="flex items-center gap-1 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                                    <svg class="h-3 w-3 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582" />
+                                    </svg>
+                                    <span>GPS Fix Time (Satellite)</span>
+                                </div>
+                                <div class="mt-1">
+                                    <span class="text-xs font-bold text-slate-800 dark:text-slate-100 block">
+                                        {{ $selectedItem['gps_time_human'] ?? 'No fix recorded' }}
+                                    </span>
+                                    <span class="text-[10px] font-mono text-slate-400 block mt-0.5">
+                                        {{ $selectedItem['gps_time'] ?: 'No fix reported' }}
+                                    </span>
+                                </div>
+                            </div>
+
+                            {{-- Device Heartbeat Time (Cellular Communication) --}}
+                            <div class="rounded-lg bg-slate-50/80 dark:bg-slate-800/60 p-2 border border-slate-100 dark:border-slate-800">
+                                <div class="flex items-center gap-1 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                                    <svg class="h-3 w-3 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M8.288 15.038a5.25 5.25 0 0 1 7.424 0M5.106 11.856c3.807-3.808 9.98-3.808 13.788 0M1.924 8.674c5.565-5.565 14.587-5.565 20.152 0M12.53 18.22l-.53.53-.53-.53a.75.75 0 0 1 1.06 0Z" />
+                                    </svg>
+                                    <span>Device Heartbeat (Cellular)</span>
+                                </div>
+                                <div class="mt-1">
+                                    <span class="text-xs font-bold text-slate-800 dark:text-slate-100 block">
+                                        {{ $selectedItem['hb_time_human'] ?? 'No heartbeat' }}
+                                    </span>
+                                    <span class="text-[10px] font-mono text-slate-400 block mt-0.5">
+                                        {{ $selectedItem['hb_time'] ?: 'No heartbeat reported' }}
+                                    </span>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
-                    {{-- Coordinates & Details --}}
+                    {{-- Distinction Alert Banners --}}
+                    @if ($selectedItem['is_online'] && $selectedItem['is_gps_stale'])
+                        <div class="rounded-xl bg-amber-50 border border-amber-200 p-2.5 text-xs text-amber-800 flex items-start gap-2 dark:bg-amber-950/60 dark:border-amber-800 dark:text-amber-200">
+                            <svg class="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+                            </svg>
+                            <div>
+                                <span class="font-bold block">Online with Stale GPS Satellite Fix</span>
+                                <span class="text-[11px] text-amber-700 dark:text-amber-300">Device cellular connection is active, but satellite coordinates have not updated (last fix: {{ $selectedItem['gps_time_human'] }}). The unit may be parked in a covered facility or experiencing antenna blockage.</span>
+                            </div>
+                        </div>
+                    @elseif (! $selectedItem['is_online'])
+                        <div class="rounded-xl bg-slate-100 border border-slate-300 p-2.5 text-xs text-slate-700 flex items-start gap-2 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300">
+                            <svg class="h-4 w-4 text-slate-500 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M18.364 5.636a9 9 0 0 1 0 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 0 1 0 7.072m0 0l-2.829-2.829m-4.243 4.243a9 9 0 0 1-2.828-6.364 9 9 0 0 1 2.828-6.364m2.829 2.829a5 5 0 0 0 0 7.072" />
+                            </svg>
+                            <div>
+                                <span class="font-bold block">Device Offline (No Cellular Signal)</span>
+                                <span class="text-[11px] text-slate-500 dark:text-slate-400">Tracker has not communicated with the cellular network since {{ $selectedItem['hb_time_human'] }}.</span>
+                            </div>
+                        </div>
+                    @endif
+
+                    {{-- Coordinates & Hardware Info --}}
                     <div class="space-y-1 text-xs text-slate-600 dark:text-slate-400">
                         <div class="flex items-center justify-between">
                             <span class="text-slate-400">Coordinates:</span>
@@ -389,7 +467,7 @@
                     <div class="pt-1 flex items-center justify-between border-t border-blue-200/60 dark:border-blue-800/60">
                         @if($selectedItem['has_coords'])
                             <button type="button"
-                                    @click="focusCoords({{ $selectedItem['lat'] }}, {{ $selectedItem['lng'] }})"
+                                    wire:click="{{ $selectedItem['is_unmapped'] ? "selectUnmappedDevice('{$selectedItem['imei']}')" : "selectVehicle({$selectedItem['id']})" }}"
                                     class="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-800 dark:text-blue-400">
                                 <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
@@ -449,17 +527,37 @@
                             <div class="text-right flex-shrink-0">
                                 @if($item['state'] === 'moving')
                                     <span class="text-xs font-bold text-emerald-600 dark:text-emerald-400 block">{{ $item['speed'] }} km/h</span>
+                                @elseif($item['movement_state'] === 'gps_stale')
+                                    <span class="text-[11px] font-semibold text-amber-600 dark:text-amber-400 block">{{ $item['state_label'] }}</span>
                                 @else
                                     <span class="text-[11px] font-semibold text-slate-600 dark:text-slate-400 block">{{ $item['state_label'] }}</span>
                                 @endif
 
                                 <div class="flex items-center justify-end gap-1 mt-0.5">
-                                    @if($item['has_coords'])
-                                        <span class="text-[9px] text-slate-400 font-mono">{{ $item['last_contact'] }}</span>
+                                    @if(in_array($item['connection_status'], ['unknown', 'sync_failure', 'invalid_coordinates', 'invalid_timestamp', 'stale_heartbeat'], true))
+                                        <span class="text-[9px] font-semibold {{ in_array($item['connection_status'], ['sync_failure', 'invalid_coordinates', 'invalid_timestamp'], true) ? 'text-rose-600 dark:text-rose-400' : 'text-amber-600 dark:text-amber-400' }}">{{ $item['connection_label'] }}</span>
+                                    @elseif($item['is_online'] && $item['is_gps_stale'])
+                                        <span class="text-[9px] text-amber-600 dark:text-amber-400 font-semibold" title="Device connected, but satellite fix is older than 2 hours">Stale GPS: {{ $item['gps_time_human'] }}</span>
+                                    @elseif(! $item['is_online'])
+                                        <span class="text-[9px] text-slate-400 font-mono" title="No cellular heartbeat">Offline {{ $item['hb_time_human'] }}</span>
+                                    @elseif($item['has_coords'])
+                                        <span class="text-[9px] text-slate-400 font-mono" title="Satellite Fix Time">Fix: {{ $item['gps_time_human'] }}</span>
                                     @else
                                         <span class="text-[9px] text-amber-600 dark:text-amber-400 font-bold">No Fix</span>
                                     @endif
                                 </div>
+                                @if($item['has_coords'])
+                                    <button type="button"
+                                            wire:click.stop="{{ $item['is_unmapped'] ? "selectUnmappedDevice('{$item['imei']}')" : "selectVehicle({$item['id']})" }}"
+                                            class="mt-1 inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[10px] font-bold text-blue-600 hover:bg-blue-50 hover:text-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-blue-400 dark:hover:bg-slate-700 dark:hover:text-blue-300"
+                                            aria-label="Zoom to {{ $item['equipment_code'] }} on map">
+                                        <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
+                                        </svg>
+                                        Zoom to Unit
+                                    </button>
+                                @endif
                             </div>
                         </div>
                     @empty
@@ -481,7 +579,12 @@
                     vehicles: config.vehicles || [],
                     map: null,
                     markers: {},
+                    markerHeadings: {},
+                    markerAnimations: {},
+                    markerData: {},
                     visiblePinsCount: 0,
+                    hasAutoFitted: false,
+                    listenersBound: false,
 
                     initMap() {
                         if (typeof L === 'undefined') {
@@ -491,6 +594,15 @@
 
                         const mapEl = document.getElementById('fleet-live-map');
                         if (!mapEl || this.map) return;
+
+                        if (mapEl.__gpsLiveMap) {
+                            this.map = mapEl.__gpsLiveMap;
+                            this.markers = mapEl.__gpsLiveMarkers || {};
+                            this.markerHeadings = mapEl.__gpsLiveHeadings || {};
+                            this.renderMarkers(this.vehicles);
+                            this.map.invalidateSize();
+                            return;
+                        }
 
                         // Tile layers
                         const googleHybrid = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
@@ -519,6 +631,7 @@
                             zoom: 11,
                             layers: [googleHybrid]
                         });
+                        mapEl.__gpsLiveMap = this.map;
 
                         const baseMaps = {
                             "🛰️ Google Satellite": googleHybrid,
@@ -531,14 +644,15 @@
                         // Render markers
                         this.renderMarkers(this.vehicles);
 
-                        // Fit bounds on initial load
-                        this.fitBounds();
+                        // Fit bounds only once on initial load to preserve user zoom/pan during Livewire poll refreshes
+                        if (!this.hasAutoFitted) {
+                            this.fitBounds();
+                            this.hasAutoFitted = true;
+                        }
 
-                        // Invalidate size after render to ensure full dimensions are applied
                         setTimeout(() => {
                             if (this.map) {
                                 this.map.invalidateSize();
-                                this.fitBounds();
                             }
                         }, 250);
 
@@ -548,23 +662,92 @@
                             }
                         });
 
-                        // Listen to Livewire refresh events
-                        window.addEventListener('gps-locations-refreshed', (event) => {
-                            if (event.detail && event.detail.vehicles) {
-                                this.vehicles = event.detail.vehicles;
-                                this.renderMarkers(this.vehicles);
+                        // Ensure event listeners are attached only once to prevent memory leaks and duplicates
+                        if (!this.listenersBound) {
+                            this.listenersBound = true;
+
+                            window.addEventListener('gps-locations-refreshed', (event) => {
+                                if (event.detail && event.detail.vehicles) {
+                                    this.vehicles = event.detail.vehicles;
+                                    this.renderMarkers(this.vehicles);
+                                }
+                            });
+
+                            window.addEventListener('focus-vehicle-on-map', (event) => {
+                                const vId = event.detail.vehicleId;
+                                this.focusItemByKey('v-' + vId);
+                            });
+
+                            window.addEventListener('focus-device-on-map', (event) => {
+                                const imei = event.detail.imei;
+                                this.focusItemByKey('d-' + imei);
+                            });
+
+                            window.addEventListener('focus-location-on-map', (event) => {
+                                this.focusCoords(event.detail.lat, event.detail.lng);
+                            });
+                        }
+                    },
+
+                    /**
+                     * Calculate the shortest angular distance between two compass bearings.
+                     * Prevents unnatural 360-degree reverse spins when crossing 0°/360°.
+                     */
+                    calculateShortestAngle(fromAngle, toAngle) {
+                        let diff = (toAngle - fromAngle) % 360;
+                        if (diff > 180) diff -= 360;
+                        if (diff < -180) diff += 360;
+                        return fromAngle + diff;
+                    },
+
+                    /**
+                     * Smoothly interpolate marker position between startLatLng and targetLatLng
+                     * using requestAnimationFrame and ease-out cubic curve.
+                     */
+                    animateMarkerPosition(key, marker, startLatLng, targetLatLng, duration = 1100) {
+                        if (this.markerAnimations[key]?.animId) {
+                            cancelAnimationFrame(this.markerAnimations[key].animId);
+                            delete this.markerAnimations[key];
+                        }
+
+                        const startLat = Number(startLatLng.lat);
+                        const startLng = Number(startLatLng.lng);
+                        const targetLat = Number(targetLatLng.lat);
+                        const targetLng = Number(targetLatLng.lng);
+
+                        if (Math.abs(startLat - targetLat) < 0.000001 && Math.abs(startLng - targetLng) < 0.000001) {
+                            marker.setLatLng([targetLat, targetLng]);
+                            return;
+                        }
+
+                        const startTime = performance.now();
+
+                        const step = (currentTime) => {
+                            const elapsed = currentTime - startTime;
+                            const progress = Math.min(elapsed / duration, 1.0);
+                            // Cubic ease-out
+                            const ease = 1 - Math.pow(1 - progress, 3);
+
+                            const currentLat = startLat + (targetLat - startLat) * ease;
+                            const currentLng = startLng + (targetLng - startLng) * ease;
+
+                            marker.setLatLng([currentLat, currentLng]);
+
+                            if (progress < 1.0) {
+                                this.markerAnimations[key] = {
+                                    animId: requestAnimationFrame(step),
+                                    curLat: currentLat,
+                                    curLng: currentLng
+                                };
+                            } else {
+                                marker.setLatLng([targetLat, targetLng]);
+                                delete this.markerAnimations[key];
                             }
-                        });
+                        };
 
-                        window.addEventListener('focus-vehicle-on-map', (event) => {
-                            const vId = event.detail.vehicleId;
-                            this.focusItemByKey('v-' + vId);
-                        });
-
-                        window.addEventListener('focus-device-on-map', (event) => {
-                            const imei = event.detail.imei;
-                            this.focusItemByKey('d-' + imei);
-                        });
+                        this.markerAnimations[key] = {
+                            animId: requestAnimationFrame(step)
+                        };
                     },
 
                     renderMarkers(items) {
@@ -582,16 +765,48 @@
                             currentKeys.add(key);
                             count++;
 
-                            const icon = this.createMarkerIcon(item);
+                            const targetBearing = Number(item.direction || 0);
+                            const prevHeading = this.markerHeadings[key] ?? targetBearing;
+                            const smoothedHeading = this.calculateShortestAngle(prevHeading, targetBearing);
+                            this.markerHeadings[key] = smoothedHeading;
+
+                            const icon = this.createMarkerIcon(item, smoothedHeading);
+                            const targetLatLng = L.latLng(Number(item.lat), Number(item.lng));
 
                             if (this.markers[key]) {
-                                // Update position and icon
-                                this.markers[key].setLatLng([item.lat, item.lng]);
-                                this.markers[key].setIcon(icon);
-                                this.markers[key].setPopupContent(this.createPopupContent(item));
+                                const marker = this.markers[key];
+                                const currentLatLng = marker.getLatLng();
+                                const dLat = Math.abs(currentLatLng.lat - targetLatLng.lat);
+                                const dLng = Math.abs(currentLatLng.lng - targetLatLng.lng);
+                                const hasPositionChanged = dLat > 0.00001 || dLng > 0.00001;
+
+                                if (hasPositionChanged) {
+                                    // Teleport directly without animating if:
+                                    // - Device is offline or GPS is stale
+                                    // - Distance jump is unrealistic (> 0.5 degrees ≈ 55 km)
+                                    if (item.state === 'offline' || item.is_gps_stale || item.is_stale || dLat > 0.5 || dLng > 0.5) {
+                                        if (this.markerAnimations[key]?.animId) {
+                                            cancelAnimationFrame(this.markerAnimations[key].animId);
+                                            delete this.markerAnimations[key];
+                                        }
+                                        marker.setLatLng(targetLatLng);
+                                    } else {
+                                        this.animateMarkerPosition(key, marker, currentLatLng, targetLatLng);
+                                    }
+                                }
+
+                                // Update icon with direction rotation
+                                marker.setIcon(icon);
+
+                                // Preserve open popup without closing and reopening it
+                                if (marker.isPopupOpen && marker.isPopupOpen()) {
+                                    marker.getPopup().setContent(this.createPopupContent(item));
+                                } else {
+                                    marker.setPopupContent(this.createPopupContent(item));
+                                }
                             } else {
                                 // Create new marker
-                                const marker = L.marker([item.lat, item.lng], { icon: icon }).addTo(this.map);
+                                const marker = L.marker(targetLatLng, { icon: icon }).addTo(this.map);
                                 marker.bindPopup(this.createPopupContent(item));
                                 marker.on('click', () => {
                                     if (item.id) {
@@ -602,51 +817,76 @@
                                 });
                                 this.markers[key] = marker;
                             }
+
+                            this.markerData[key] = item;
                         });
 
                         // Remove markers no longer in filtered set
                         Object.keys(this.markers).forEach(k => {
                             if (!currentKeys.has(k)) {
+                                if (this.markerAnimations[k]?.animId) {
+                                    cancelAnimationFrame(this.markerAnimations[k].animId);
+                                    delete this.markerAnimations[k];
+                                }
                                 this.map.removeLayer(this.markers[k]);
                                 delete this.markers[k];
+                                delete this.markerHeadings[k];
+                                delete this.markerData[k];
                             }
                         });
 
                         this.visiblePinsCount = count;
+
+                        const mapElement = document.getElementById('fleet-live-map');
+                        if (mapElement) {
+                            mapElement.__gpsLiveMarkers = this.markers;
+                            mapElement.__gpsLiveHeadings = this.markerHeadings;
+                        }
                     },
 
-                    createMarkerIcon(item) {
+                    createMarkerIcon(item, heading = 0) {
                         let bgColor = '#64748b'; // slate
                         let pulseHtml = '';
                         let glyph = '';
+                        const isMoving = item.state === 'moving';
+                        const isGpsStale = Boolean(item.is_gps_stale);
 
                         if (item.is_unmapped) {
                             bgColor = '#9333ea'; // purple
-                            glyph = `<svg class="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582m15.686 0A11.953 11.953 0 0 1 12 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0 1 21 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0 1 12 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 0 1 3 12c0-1.605.42-3.113 1.157-4.418" /></svg>`;
-                        } else if (item.state === 'moving') {
+                            glyph = `<svg class="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582" /></svg>`;
+                        } else if (isMoving) {
                             bgColor = '#10b981'; // emerald
                             pulseHtml = `<div class="absolute -inset-1 rounded-full bg-emerald-400 opacity-60 animate-ping"></div>`;
-                            // Rotating heading arrow
-                            glyph = `<svg class="w-4 h-4 text-white" style="transform: rotate(${item.direction || 0}deg);" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z"/></svg>`;
+                            // Rotating heading arrow oriented along compass bearing with smooth CSS transition
+                            glyph = `
+                                <div style="transform: rotate(${heading}deg); transition: transform 0.4s ease-out; transform-origin: center center; will-change: transform;" class="flex items-center justify-center w-full h-full">
+                                    <svg class="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z"/>
+                                    </svg>
+                                </div>
+                            `;
+                        } else if (isGpsStale && item.is_online) {
+                            bgColor = '#f59e0b'; // amber / orange warning
+                            glyph = `<svg class="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>`;
                         } else if (item.state === 'idling') {
                             bgColor = '#f59e0b'; // amber
                             glyph = `<svg class="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" /></svg>`;
                         } else if (item.state === 'parked') {
                             bgColor = '#2563eb'; // blue
-                            glyph = `<span class="text-white text-[10px] font-black">P</span>`;
+                            glyph = `<span class="text-white text-[11px] font-black">P</span>`;
                         } else {
                             bgColor = '#64748b'; // slate
-                            glyph = `<svg class="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M18.364 5.636a9 9 0 0 1 0 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 0 1 0 7.072m0 0l-2.829-2.829m-4.243 4.243a9 9 0 0 1-2.828-6.364 9 9 0 0 1 2.828-6.364m2.829 2.829a5 5 0 0 0 0 7.072" /></svg>`;
+                            glyph = `<svg class="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M18.364 5.636a9 9 0 0 1 0 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 0 1 0 7.072m0 0l-2.829-2.829m-4.243 4.243a9 9 0 0 1-2.828-6.364 9 9 0 0 1 2.828-6.364m2.829 2.829a5 5 0 0 0 0 7.072" /></svg>`;
                         }
 
                         const html = `
-                            <div class="relative flex items-center justify-center">
+                            <div class="relative flex items-center justify-center w-9 h-9">
                                 ${pulseHtml}
                                 <div style="background-color: ${bgColor};" class="relative flex items-center justify-center h-8 w-8 rounded-full shadow-lg border-2 border-white ring-1 ring-black/10">
                                     ${glyph}
                                 </div>
                                 <div class="absolute -bottom-4 whitespace-nowrap bg-slate-900/90 text-white font-bold text-[9px] px-1.5 py-0.2 rounded-md shadow-sm pointer-events-none">
-                                    ${item.equipment_code}
+                                    ${this.escapeHtml(item.equipment_code)}
                                 </div>
                             </div>
                         `;
@@ -654,24 +894,29 @@
                         return L.divIcon({
                             className: 'custom-gps-pin',
                             html: html,
-                            iconSize: [32, 32],
-                            iconAnchor: [16, 16],
-                            popupAnchor: [0, -20]
+                            iconSize: [36, 36],
+                            iconAnchor: [18, 18],
+                            popupAnchor: [0, -22]
                         });
                     },
 
                     createPopupContent(item) {
+                        const safeText = value => this.escapeHtml(value);
+                        const isGpsStale = Boolean(item.is_gps_stale);
+
                         return `
-                            <div style="font-family: inherit; width: 240px; padding: 12px;">
+                            <div style="font-family: inherit; width: 260px; padding: 12px;">
                                 <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #f1f5f9; padding-bottom: 8px; margin-bottom: 8px;">
                                     <div>
-                                        <div style="font-size: 9px; font-weight: 800; color: #2563eb; text-transform: uppercase;">${item.vehicle_type}</div>
-                                        <div style="font-size: 14px; font-weight: 800; color: #0f172a; line-height: 1.2;">${item.equipment_code}</div>
-                                        <div style="font-size: 11px; font-weight: 600; color: #64748b;">${item.plate_number}</div>
+                                        <div style="font-size: 9px; font-weight: 800; color: #2563eb; text-transform: uppercase;">${safeText(item.vehicle_type)}</div>
+                                        <div style="font-size: 14px; font-weight: 800; color: #0f172a; line-height: 1.2;">${safeText(item.equipment_code)}</div>
+                                        <div style="font-size: 11px; font-weight: 600; color: #64748b;">${safeText(item.plate_number)}</div>
                                     </div>
-                                    <span style="font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 9999px; background: ${item.state === 'moving' ? '#d1fae5; color: #065f46;' : (item.state === 'idling' ? '#fef3c7; color: #92400e;' : (item.state === 'parked' ? '#dbeafe; color: #1e40af;' : '#f1f5f9; color: #475569;'))}">
-                                        ${item.state_label}
-                                    </span>
+                                    <div style="text-align: right;">
+                                        <span style="font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 9999px; background: ${item.state === 'moving' ? '#d1fae5; color: #065f46;' : (item.state === 'idling' ? '#fef3c7; color: #92400e;' : (item.state === 'parked' ? '#dbeafe; color: #1e40af;' : '#f1f5f9; color: #475569;'))}">
+                                            ${safeText(item.state_label)}
+                                        </span>
+                                    </div>
                                 </div>
 
                                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 11px; margin-bottom: 8px;">
@@ -680,17 +925,38 @@
                                         <strong style="color: #0f172a; font-size: 13px;">${item.speed} km/h</strong>
                                     </div>
                                     <div>
-                                        <span style="font-size: 9px; color: #94a3b8; text-transform: uppercase; display: block;">Ignition</span>
+                                        <span style="font-size: 9px; color: #94a3b8; text-transform: uppercase; display: block;">Ignition (ACC)</span>
                                         <strong style="color: ${item.is_ignition_on ? '#d97706' : '#64748b'};">${item.is_ignition_on ? '⚡ Engine ON' : '⭕ Engine OFF'}</strong>
                                     </div>
-                                    <div style="grid-column: span 2;">
+                                    <div>
+                                        <span style="font-size: 9px; color: #94a3b8; text-transform: uppercase; display: block;">Heading</span>
+                                        <strong style="color: #0f172a;">${item.direction || 0}&deg;</strong>
+                                    </div>
+                                    <div>
                                         <span style="font-size: 9px; color: #94a3b8; text-transform: uppercase; display: block;">Driver</span>
-                                        <span style="color: #334155; font-weight: 600;">${item.operator_driver}</span>
+                                        <span style="color: #334155; font-weight: 600;">${safeText(item.operator_driver)}</span>
                                     </div>
-                                    <div style="grid-column: span 2;">
-                                        <span style="font-size: 9px; color: #94a3b8; text-transform: uppercase; display: block;">Last Fix</span>
-                                        <span style="color: #475569;">${item.last_contact}</span>
+                                </div>
+
+                                {{-- Dual Timestamps: GPS Satellite Fix vs Cellular Heartbeat --}}
+                                <div style="background: #f8fafc; border-radius: 8px; padding: 6px 8px; font-size: 10px; margin-bottom: 8px; border: 1px solid #e2e8f0;">
+                                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                        <span style="color: #64748b; font-weight: 600;">GPS Fix:</span>
+                                        <span style="color: ${isGpsStale ? '#b45309; font-weight:700;' : '#0f172a; font-weight:600;'}">
+                                            ${safeText(item.gps_time_human || 'No Fix')}
+                                        </span>
                                     </div>
+                                    <div style="display: flex; justify-content: space-between;">
+                                        <span style="color: #64748b; font-weight: 600;">Heartbeat:</span>
+                                        <span style="color: ${item.is_online ? '#059669; font-weight:700;' : '#64748b;'}">
+                                            ${safeText(item.hb_time_human || 'None')} ${item.is_online ? '• Online' : '• Offline'}
+                                        </span>
+                                    </div>
+                                    ${item.is_online && isGpsStale ? `
+                                        <div style="margin-top: 4px; padding-top: 4px; border-top: 1px dashed #cbd5e1; color: #b45309; font-size: 9px; font-weight: 700;">
+                                            ⚠️ GPS fix is stale (>2 hrs old)
+                                        </div>
+                                    ` : ''}
                                 </div>
 
                                 <div style="border-top: 1px solid #f1f5f9; padding-top: 8px; font-size: 10px; color: #64748b; display: flex; align-items: center; justify-content: space-between;">
@@ -714,20 +980,57 @@
                     },
 
                     focusCoords(lat, lng) {
-                        if (!this.map || !lat || !lng) return;
-                        this.map.flyTo([lat, lng], 16, { animate: true, duration: 1.0 });
+                        const mapElement = document.getElementById('fleet-live-map');
+
+                        if (!mapElement) return;
+
+                        this.map = this.map || mapElement.__gpsLiveMap;
+
+                        if (!this.map || lat === null || lng === null || !Number.isFinite(Number(lat)) || !Number.isFinite(Number(lng))) return;
+
+                        mapElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+                        window.setTimeout(() => {
+                            if (!this.map) return;
+
+                            this.map.invalidateSize();
+                            this.map.setView([Number(lat), Number(lng)], 16, { animate: true, duration: 1.0 });
+                        }, 250);
+                    },
+
+                    escapeHtml(value) {
+                        return String(value ?? '').replace(/[&<>"']/g, character => ({
+                            '&': '&amp;',
+                            '<': '&lt;',
+                            '>': '&gt;',
+                            '"': '&quot;',
+                            "'": '&#039;'
+                        })[character]);
                     },
 
                     focusItemByKey(key) {
                         const marker = this.markers[key];
-                        if (marker && this.map) {
-                            this.map.flyTo(marker.getLatLng(), 16, { animate: true, duration: 1.0 });
-                            marker.openPopup();
+                        const mapElement = document.getElementById('fleet-live-map');
+
+                        if (!marker || !this.map || !mapElement) {
+                            return;
                         }
+
+                        mapElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+                        window.setTimeout(() => {
+                            if (!this.map) {
+                                return;
+                            }
+
+                            this.map.invalidateSize();
+                            this.map.setView(marker.getLatLng(), 16, { animate: true, duration: 1.0 });
+                            marker.openPopup();
+                        }, 250);
                     },
 
                     onVehicleItemClicked(item) {
-                        if (item.has_coords && item.lat && item.lng) {
+                        if (item.has_coords && item.lat !== null && item.lng !== null) {
                             this.focusCoords(item.lat, item.lng);
                             const key = item.id ? ('v-' + item.id) : ('d-' + item.imei);
                             const marker = this.markers[key];
@@ -735,6 +1038,15 @@
                                 marker.openPopup();
                             }
                         }
+                    },
+
+                    destroy() {
+                        Object.keys(this.markerAnimations).forEach(k => {
+                            if (this.markerAnimations[k]?.animId) {
+                                cancelAnimationFrame(this.markerAnimations[k].animId);
+                            }
+                        });
+                        this.markerAnimations = {};
                     }
                 };
             }

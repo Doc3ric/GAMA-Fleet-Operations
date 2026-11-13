@@ -53,7 +53,7 @@ class MileageReconciliationService
         $withExceptions = $all->where('has_exceptions', true)->count();
 
         $totalPlanned = (float) $all->sum('planned_distance_km');
-        $totalActual = (float) $all->sum('actual_odometer_km');
+        $totalActual = (float) $all->whereNotNull('actual_odometer_km')->sum('actual_odometer_km');
         $totalVariance = (float) $all->sum('variance_km');
 
         return [
@@ -95,7 +95,9 @@ class MileageReconciliationService
                 'vehicle_id' => $dispatch->vehicle_id,
                 'trip_date' => $tripDate,
                 'is_gps_vehicle' => (bool) $isGpsVehicle,
-                'planned_distance_km' => (float) ($data['planned_distance_km'] ?? $dispatch->planned_distance_km),
+                'planned_distance_km' => array_key_exists('planned_distance_km', $data)
+                    ? ($data['planned_distance_km'] !== null ? (float) $data['planned_distance_km'] : null)
+                    : $dispatch->planned_distance_km,
                 'starting_odometer' => isset($data['starting_odometer']) ? (float) $data['starting_odometer'] : null,
                 'ending_odometer' => isset($data['ending_odometer']) ? (float) $data['ending_odometer'] : null,
                 'gps_reported_km' => isset($data['gps_reported_km']) ? (float) $data['gps_reported_km'] : null,
@@ -123,6 +125,16 @@ class MileageReconciliationService
     }
 
     /**
+     * Initialize reconciliation for a dispatch (alias for createReconciliation).
+     *
+     * @param  array<string, mixed>  $data
+     */
+    public function initializeForDispatch(FleetDispatch $dispatch, array $data = [], ?int $userId = null): MileageReconciliation
+    {
+        return $this->createReconciliation($dispatch, $data, $userId);
+    }
+
+    /**
      * Update an existing mileage reconciliation.
      * Prevents silent modification of approved records.
      *
@@ -147,7 +159,9 @@ class MileageReconciliationService
                 $reconciliation->gps_reported_km = $data['gps_reported_km'] !== null ? (float) $data['gps_reported_km'] : null;
             }
             if (array_key_exists('planned_distance_km', $data)) {
-                $reconciliation->planned_distance_km = (float) $data['planned_distance_km'];
+                $reconciliation->planned_distance_km = $data['planned_distance_km'] !== null
+                    ? (float) $data['planned_distance_km']
+                    : null;
             }
             if (array_key_exists('notes', $data)) {
                 $reconciliation->notes = $data['notes'];
@@ -377,7 +391,7 @@ class MileageReconciliationService
 
         // 4. Check GPS Discrepancy (GPS vehicles)
         if ($reconciliation->is_gps_vehicle) {
-            if ($reconciliation->gps_reported_km !== null) {
+            if ($reconciliation->gps_reported_km !== null && $reconciliation->actual_odometer_km !== null) {
                 $diff = (float) $reconciliation->odometer_gps_difference_km;
                 $pct = $reconciliation->gps_reported_km > 0 ? ($diff / $reconciliation->gps_reported_km) * 100 : 0;
 
@@ -391,7 +405,7 @@ class MileageReconciliationService
                 } else {
                     $this->resolveExceptionIfExists($reconciliation, ReconciliationException::TYPE_GPS_DISCREPANCY);
                 }
-            } else {
+            } elseif ($reconciliation->gps_reported_km === null) {
                 // GPS vehicle missing GPS report
                 $this->upsertException(
                     $reconciliation,
@@ -399,6 +413,8 @@ class MileageReconciliationService
                     ReconciliationException::SEVERITY_INFO,
                     'GPS vehicle has no associated TrackSolid Pro report or GPS distance.'
                 );
+            } else {
+                $this->resolveExceptionIfExists($reconciliation, ReconciliationException::TYPE_GPS_DISCREPANCY);
             }
         } else {
             $this->resolveExceptionIfExists($reconciliation, ReconciliationException::TYPE_MISSING_GPS_REPORT);

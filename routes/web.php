@@ -154,9 +154,18 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('fleet-dispatches/export/excel', [FleetDispatchController::class, 'exportExcel'])->name('fleet-dispatches.export-excel');
     Route::get('fleet-dispatches/export/pdf', [FleetDispatchController::class, 'exportPdf'])->name('fleet-dispatches.export-pdf');
     Route::post('fleet-dispatches/generate-from-itineraries', [FleetDispatchController::class, 'generateFromItineraries'])->name('fleet-dispatches.generate-from-itineraries');
+    Route::post('fleet-dispatches/calculate-route', [FleetDispatchController::class, 'calculateRoute'])->name('fleet-dispatches.calculate-route');
+    Route::post('fleet-dispatches/run-monitoring', [FleetDispatchController::class, 'runMonitoring'])->name('fleet-dispatches.run-monitoring');
+    Route::post('fleet-dispatches/events/{event}/resolve', [FleetDispatchController::class, 'resolveEvent'])->name('fleet-dispatches.events.resolve');
+    Route::get('fleet-dispatches/{dispatch}/live-track', [FleetDispatchController::class, 'liveTrack'])->name('fleet-dispatches.live-track');
     Route::post('fleet-dispatches/{dispatch}/depart-now', [FleetDispatchController::class, 'departNow'])->name('fleet-dispatches.depart-now');
     Route::post('fleet-dispatches/{dispatch}/record-departure', [FleetDispatchController::class, 'recordDeparture'])->name('fleet-dispatches.record-departure');
     Route::resource('fleet-dispatches', FleetDispatchController::class)->only(['index', 'store']);
+
+    // In-App Notification Center API (Pure Database Notifications)
+    Route::get('notifications/feed', [FleetDispatchController::class, 'notificationFeed'])->name('notifications.feed');
+    Route::post('notifications/{id}/mark-as-read', [FleetDispatchController::class, 'markNotificationRead'])->name('notifications.mark-as-read');
+    Route::post('notifications/mark-all-read', [FleetDispatchController::class, 'markAllNotificationsRead'])->name('notifications.mark-all-read');
 
     // Mileage Reconciliation Integration & Controls
     Route::get('mileage-reconciliations/export/excel', [MileageReconciliationController::class, 'exportExcel'])->name('mileage-reconciliations.export-excel');

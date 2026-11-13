@@ -152,23 +152,30 @@ class MileageReconciliation extends Model
 
     /**
      * Compute actual odometer KM, variance KM, variance percentage, and GPS difference.
-     * Safe against division by zero and null values.
+     * Missing readings and a missing planned distance stay distinguishable from zero.
      */
     public function computeCalculations(): void
     {
-        $start = $this->starting_odometer !== null ? (float) $this->starting_odometer : 0.0;
-        $end = $this->ending_odometer !== null ? (float) $this->ending_odometer : 0.0;
-        $planned = $this->planned_distance_km !== null ? (float) $this->planned_distance_km : 0.0;
+        $planned = $this->planned_distance_km !== null ? (float) $this->planned_distance_km : null;
 
-        $actual = round($end - $start, 2);
+        if ($this->starting_odometer === null || $this->ending_odometer === null) {
+            $this->actual_odometer_km = null;
+            $this->variance_km = null;
+            $this->variance_percentage = null;
+            $this->odometer_gps_difference_km = null;
+
+            return;
+        }
+
+        $actual = round((float) $this->ending_odometer - (float) $this->starting_odometer, 2);
         $this->actual_odometer_km = $actual;
 
-        $variance = round($actual - $planned, 2);
-        $this->variance_km = $variance;
-
-        if ($planned > 0) {
-            $this->variance_percentage = round(($variance / $planned) * 100, 2);
+        if ($planned !== null) {
+            $variance = round($actual - $planned, 2);
+            $this->variance_km = $variance;
+            $this->variance_percentage = $planned > 0 ? round(($variance / $planned) * 100, 2) : null;
         } else {
+            $this->variance_km = null;
             $this->variance_percentage = null;
         }
 

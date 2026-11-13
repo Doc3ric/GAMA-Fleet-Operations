@@ -121,8 +121,8 @@ class GpsLiveMapTest extends TestCase
                         'direction' => 90,
                         'status' => 1,
                         'accStatus' => 1,
-                        'hbTime' => now()->format('Y-m-d H:i:s'),
-                        'gpsTime' => now()->format('Y-m-d H:i:s'),
+                        'hbTime' => now('Asia/Manila')->format('Y-m-d H:i:s'),
+                        'gpsTime' => now('Asia/Manila')->format('Y-m-d H:i:s'),
                     ],
                     [
                         'imei' => '865100000000002',
@@ -132,8 +132,8 @@ class GpsLiveMapTest extends TestCase
                         'direction' => 0,
                         'status' => 1,
                         'accStatus' => 1,
-                        'hbTime' => now()->format('Y-m-d H:i:s'),
-                        'gpsTime' => now()->format('Y-m-d H:i:s'),
+                        'hbTime' => now('Asia/Manila')->format('Y-m-d H:i:s'),
+                        'gpsTime' => now('Asia/Manila')->format('Y-m-d H:i:s'),
                     ],
                     [
                         'imei' => '865100000000003',
@@ -143,8 +143,8 @@ class GpsLiveMapTest extends TestCase
                         'direction' => 0,
                         'status' => 1,
                         'accStatus' => 0,
-                        'hbTime' => now()->format('Y-m-d H:i:s'),
-                        'gpsTime' => now()->format('Y-m-d H:i:s'),
+                        'hbTime' => now('Asia/Manila')->format('Y-m-d H:i:s'),
+                        'gpsTime' => now('Asia/Manila')->format('Y-m-d H:i:s'),
                     ],
                     [
                         'imei' => '865100000000004',
@@ -154,8 +154,8 @@ class GpsLiveMapTest extends TestCase
                         'direction' => 0,
                         'status' => 0,
                         'accStatus' => 0,
-                        'hbTime' => now()->subDays(2)->format('Y-m-d H:i:s'),
-                        'gpsTime' => now()->subDays(2)->format('Y-m-d H:i:s'),
+                        'hbTime' => now('Asia/Manila')->subDays(2)->format('Y-m-d H:i:s'),
+                        'gpsTime' => now('Asia/Manila')->subDays(2)->format('Y-m-d H:i:s'),
                     ],
                     [
                         'imei' => '865100000000099',
@@ -165,8 +165,8 @@ class GpsLiveMapTest extends TestCase
                         'direction' => 0,
                         'status' => 1,
                         'accStatus' => 0,
-                        'hbTime' => now()->format('Y-m-d H:i:s'),
-                        'gpsTime' => now()->format('Y-m-d H:i:s'),
+                        'hbTime' => now('Asia/Manila')->format('Y-m-d H:i:s'),
+                        'gpsTime' => now('Asia/Manila')->format('Y-m-d H:i:s'),
                     ],
                 ],
             ], 200),
@@ -176,12 +176,13 @@ class GpsLiveMapTest extends TestCase
 
         $fleetData = $component->instance()->getNormalizedFleetData();
 
-        $this->assertEquals(4, $fleetData['summary']['total']);
+        $this->assertEquals(5, $fleetData['summary']['total']);
         $this->assertEquals(1, $fleetData['summary']['moving']);
         $this->assertEquals(1, $fleetData['summary']['idling']);
-        $this->assertEquals(1, $fleetData['summary']['parked']);
+        $this->assertEquals(2, $fleetData['summary']['parked']);
         $this->assertEquals(1, $fleetData['summary']['offline']);
         $this->assertEquals(1, $fleetData['summary']['unmapped']);
+        $this->assertEquals(5, $fleetData['summary']['moving'] + $fleetData['summary']['idling'] + $fleetData['summary']['parked'] + $fleetData['summary']['offline']);
 
         // Check individual vehicle states
         $vehiclesByKey = collect($fleetData['vehicles'])->keyBy('equipment_code');
@@ -234,8 +235,8 @@ class GpsLiveMapTest extends TestCase
                         'speed' => 0,
                         'status' => 1,
                         'accStatus' => 0,
-                        'hbTime' => now()->format('Y-m-d H:i:s'),
-                        'gpsTime' => now()->format('Y-m-d H:i:s'),
+                        'hbTime' => now('Asia/Manila')->format('Y-m-d H:i:s'),
+                        'gpsTime' => now('Asia/Manila')->format('Y-m-d H:i:s'),
                     ],
                 ],
             ], 200),
@@ -246,6 +247,40 @@ class GpsLiveMapTest extends TestCase
 
         $this->assertEquals('parked', $fleet['vehicles'][0]['state']);
         $this->assertNotEquals('offline', $fleet['vehicles'][0]['state']);
+    }
+
+    public function test_gps_reliability_distinguishes_bad_timestamps_coordinates_unknown_and_sync_failures(): void
+    {
+        Cache::flush();
+        $cases = [
+            ['FUTURE', '865100000000201', 1, 8.4, 124.7, now('Asia/Manila')->addMinutes(10)->format('Y-m-d H:i:s'), now('Asia/Manila')->format('Y-m-d H:i:s')],
+            ['INVALID-COORDS', '865100000000202', 1, 95.0, 124.7, now('Asia/Manila')->format('Y-m-d H:i:s'), now('Asia/Manila')->format('Y-m-d H:i:s')],
+            ['UNKNOWN', '865100000000203', 'MYSTERY', 8.4, 124.7, now('Asia/Manila')->format('Y-m-d H:i:s'), now('Asia/Manila')->format('Y-m-d H:i:s')],
+            ['STALE-HB', '865100000000204', 1, 8.4, 124.7, now('Asia/Manila')->format('Y-m-d H:i:s'), now('Asia/Manila')->subHours(3)->format('Y-m-d H:i:s')],
+            ['SYNC-FAIL', '865100000000205', 1, 8.4, 124.7, now('Asia/Manila')->format('Y-m-d H:i:s'), now('Asia/Manila')->format('Y-m-d H:i:s')],
+        ];
+        $locations = [];
+        foreach ($cases as [$code, $imei, $status, $lat, $lng, $gpsTime, $hbTime]) {
+            $vehicle = Vehicle::factory()->create(['equipment_code' => $code]);
+            Device::factory()->create(['vehicle_id' => $vehicle->id, 'imei' => $imei]);
+            $locations[$imei] = compact('imei', 'status', 'lat', 'lng', 'gpsTime', 'hbTime');
+        }
+
+        Cache::put('tracksolid_live_device_locations', [
+            'locations' => $locations,
+            'failed_imeis' => ['865100000000205'],
+            'status' => 'partial_failure',
+        ], 25);
+
+        $fleet = Livewire::actingAs($this->user)->test(GpsLiveMap::class)->instance()->getNormalizedFleetData();
+        $vehicles = collect($fleet['vehicles'])->keyBy('equipment_code');
+
+        $this->assertSame('invalid_timestamp', $vehicles['FUTURE']['connection_status']);
+        $this->assertSame('invalid_coordinates', $vehicles['INVALID-COORDS']['connection_status']);
+        $this->assertSame('unknown', $vehicles['UNKNOWN']['connection_status']);
+        $this->assertSame('stale_heartbeat', $vehicles['STALE-HB']['connection_status']);
+        $this->assertSame('sync_failure', $vehicles['SYNC-FAIL']['connection_status']);
+        $this->assertFalse($vehicles['INVALID-COORDS']['has_coords']);
     }
 
     public function test_missing_coordinates_handled_safely(): void
@@ -341,7 +376,7 @@ class GpsLiveMapTest extends TestCase
                         'lat' => 8.476,
                         'lng' => 124.717,
                         'status' => 1,
-                        'hbTime' => now()->subHours(5)->format('Y-m-d H:i:s'),
+                        'hbTime' => now('Asia/Manila')->subHours(5)->format('Y-m-d H:i:s'),
                     ],
                 ],
             ], 200),
@@ -404,6 +439,33 @@ class GpsLiveMapTest extends TestCase
         $this->assertEquals('PARKED-1', $filtered[0]['equipment_code']);
     }
 
+    public function test_unmapped_filter_enables_unmapped_devices(): void
+    {
+        Cache::flush();
+
+        Device::factory()->create([
+            'vehicle_id' => null,
+            'imei' => '865100000000123',
+            'device_name' => 'UNMAPPED-123',
+        ]);
+
+        Cache::put('tracksolid_api_access_token_'.md5('test_key'), 'valid_token', 3600);
+        Http::fake([
+            'https://api.tracksolidpro.test/route/rest*' => Http::response([
+                'code' => 0,
+                'result' => [],
+            ], 200),
+        ]);
+
+        $component = Livewire::actingAs($this->user)
+            ->test(GpsLiveMap::class)
+            ->set('showUnmapped', false)
+            ->call('setStatusFilter', 'unmapped');
+
+        $component->assertSet('showUnmapped', true)
+            ->assertSee('UNMAPPED-123');
+    }
+
     public function test_api_failure_does_not_crash_component(): void
     {
         Cache::flush();
@@ -419,5 +481,150 @@ class GpsLiveMapTest extends TestCase
 
         $component->assertStatus(200);
         $this->assertContains($component->get('apiStatus'), ['warning', 'error', 'connected']);
+    }
+
+    public function test_separate_gps_time_and_hb_time_timestamps_are_exposed(): void
+    {
+        Cache::flush();
+
+        $vehicle = Vehicle::factory()->create(['equipment_code' => 'TIMESTAMPS-01']);
+        Device::factory()->create([
+            'vehicle_id' => $vehicle->id,
+            'imei' => '865100000099901',
+        ]);
+
+        $gpsFixTime = '2026-11-10 14:15:00';
+        $heartbeatTime = '2026-11-10 14:16:30';
+
+        Cache::put('tracksolid_api_access_token_'.md5('test_key'), 'valid_token', 3600);
+        Http::fake([
+            'https://api.tracksolidpro.test/route/rest*' => Http::response([
+                'code' => 0,
+                'result' => [
+                    [
+                        'imei' => '865100000099901',
+                        'lat' => 8.48,
+                        'lng' => 124.65,
+                        'speed' => 25.0,
+                        'direction' => 145,
+                        'status' => 1,
+                        'accStatus' => 1,
+                        'gpsTime' => $gpsFixTime,
+                        'hbTime' => $heartbeatTime,
+                    ],
+                ],
+            ], 200),
+        ]);
+
+        $component = Livewire::actingAs($this->user)->test(GpsLiveMap::class);
+        $vehicles = $component->instance()->getNormalizedFleetData()['vehicles'];
+
+        $this->assertCount(1, $vehicles);
+        $this->assertEquals($gpsFixTime, $vehicles[0]['gps_time']);
+        $this->assertEquals($heartbeatTime, $vehicles[0]['hb_time']);
+        $this->assertNotEmpty($vehicles[0]['gps_time_human']);
+        $this->assertNotEmpty($vehicles[0]['hb_time_human']);
+        $this->assertEquals(145, $vehicles[0]['direction']);
+    }
+
+    public function test_online_device_with_stale_gps_is_distinguished_from_offline_device(): void
+    {
+        Cache::flush();
+
+        // Unit A: Connected cellular heartbeat (now), but GPS fix is 5 hours old
+        $vStaleGps = Vehicle::factory()->create(['equipment_code' => 'STALE-GPS-ONLINE']);
+        Device::factory()->create([
+            'vehicle_id' => $vStaleGps->id,
+            'imei' => '865100000099902',
+        ]);
+
+        // Unit B: Truly offline (no heartbeat for 3 days)
+        $vTrulyOffline = Vehicle::factory()->create(['equipment_code' => 'TRULY-OFFLINE']);
+        Device::factory()->create([
+            'vehicle_id' => $vTrulyOffline->id,
+            'imei' => '865100000099903',
+        ]);
+
+        Cache::put('tracksolid_api_access_token_'.md5('test_key'), 'valid_token', 3600);
+        Http::fake([
+            'https://api.tracksolidpro.test/route/rest*' => Http::response([
+                'code' => 0,
+                'result' => [
+                    [
+                        'imei' => '865100000099902',
+                        'lat' => 8.48,
+                        'lng' => 124.65,
+                        'speed' => 0,
+                        'status' => 1, // Online!
+                        'accStatus' => 0,
+                        'hbTime' => now('Asia/Manila')->format('Y-m-d H:i:s'), // Heartbeat fresh!
+                        'gpsTime' => now('Asia/Manila')->subHours(5)->format('Y-m-d H:i:s'), // Satellite fix stale!
+                    ],
+                    [
+                        'imei' => '865100000099903',
+                        'lat' => 8.49,
+                        'lng' => 124.66,
+                        'speed' => 0,
+                        'status' => 0, // Offline
+                        'accStatus' => 0,
+                        'hbTime' => now('Asia/Manila')->subDays(3)->format('Y-m-d H:i:s'),
+                        'gpsTime' => now('Asia/Manila')->subDays(3)->format('Y-m-d H:i:s'),
+                    ],
+                ],
+            ], 200),
+        ]);
+
+        $component = Livewire::actingAs($this->user)->test(GpsLiveMap::class);
+        $vehicles = collect($component->instance()->getNormalizedFleetData()['vehicles'])->keyBy('equipment_code');
+
+        // Unit A is ONLINE, but has stale GPS
+        $this->assertTrue($vehicles['STALE-GPS-ONLINE']['is_online']);
+        $this->assertTrue($vehicles['STALE-GPS-ONLINE']['is_gps_stale']);
+        $this->assertFalse($vehicles['STALE-GPS-ONLINE']['is_heartbeat_stale']);
+        $this->assertEquals('online_stale_gps', $vehicles['STALE-GPS-ONLINE']['connection_status']);
+        $this->assertEquals('gps_stale', $vehicles['STALE-GPS-ONLINE']['movement_state']);
+
+        // Unit B is OFFLINE
+        $this->assertFalse($vehicles['TRULY-OFFLINE']['is_online']);
+        $this->assertTrue($vehicles['TRULY-OFFLINE']['is_heartbeat_stale']);
+        $this->assertEquals('offline', $vehicles['TRULY-OFFLINE']['connection_status']);
+        $this->assertEquals('offline', $vehicles['TRULY-OFFLINE']['movement_state']);
+    }
+
+    public function test_stationary_filter_matches_both_idling_and_parked(): void
+    {
+        Cache::flush();
+
+        $vIdling = Vehicle::factory()->create(['equipment_code' => 'IDLE-1']);
+        Device::factory()->create(['vehicle_id' => $vIdling->id, 'imei' => '3331']);
+
+        $vParked = Vehicle::factory()->create(['equipment_code' => 'PARK-1']);
+        Device::factory()->create(['vehicle_id' => $vParked->id, 'imei' => '3332']);
+
+        $vMoving = Vehicle::factory()->create(['equipment_code' => 'MOVE-1']);
+        Device::factory()->create(['vehicle_id' => $vMoving->id, 'imei' => '3333']);
+
+        Cache::put('tracksolid_api_access_token_'.md5('test_key'), 'valid_token', 3600);
+        Http::fake([
+            'https://api.tracksolidpro.test/route/rest*' => Http::response([
+                'code' => 0,
+                'result' => [
+                    ['imei' => '3331', 'lat' => 8.1, 'lng' => 124.1, 'speed' => 0, 'status' => 1, 'accStatus' => 1, 'hbTime' => now('Asia/Manila')->format('Y-m-d H:i:s'), 'gpsTime' => now('Asia/Manila')->format('Y-m-d H:i:s')],
+                    ['imei' => '3332', 'lat' => 8.2, 'lng' => 124.2, 'speed' => 0, 'status' => 1, 'accStatus' => 0, 'hbTime' => now('Asia/Manila')->format('Y-m-d H:i:s'), 'gpsTime' => now('Asia/Manila')->format('Y-m-d H:i:s')],
+                    ['imei' => '3333', 'lat' => 8.3, 'lng' => 124.3, 'speed' => 45, 'status' => 1, 'accStatus' => 1, 'hbTime' => now('Asia/Manila')->format('Y-m-d H:i:s'), 'gpsTime' => now('Asia/Manila')->format('Y-m-d H:i:s')],
+                ],
+            ], 200),
+        ]);
+
+        $component = Livewire::actingAs($this->user)->test(GpsLiveMap::class);
+
+        $component->call('setStatusFilter', 'stationary');
+        $filtered = $component->instance()->getFilteredVehicles();
+
+        $this->assertCount(2, $filtered);
+        $codes = collect($filtered)->pluck('equipment_code')->all();
+        $this->assertContains('IDLE-1', $codes);
+        $this->assertContains('PARK-1', $codes);
+        $this->assertNotContains('MOVE-1', $codes);
     }
 }

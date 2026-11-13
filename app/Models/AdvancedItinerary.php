@@ -103,6 +103,30 @@ class AdvancedItinerary extends Model
         return $this->status === self::STATUS_FINALIZED;
     }
 
+    /**
+     * Return finalized odometer readings when the pair is valid.
+     *
+     * @return array{starting_odometer: float, ending_odometer: float}|null
+     */
+    public function verifiedOdometerReadings(): ?array
+    {
+        if (! $this->isFinalized() || $this->start_odo === null || $this->end_odo === null) {
+            return null;
+        }
+
+        $startingOdometer = (float) $this->start_odo;
+        $endingOdometer = (float) $this->end_odo;
+
+        if (! is_finite($startingOdometer) || ! is_finite($endingOdometer) || $startingOdometer < 0 || $endingOdometer < $startingOdometer) {
+            return null;
+        }
+
+        return [
+            'starting_odometer' => $startingOdometer,
+            'ending_odometer' => $endingOdometer,
+        ];
+    }
+
     public function getTotalDistanceAttribute(): float
     {
         if (isset($this->attributes['total_distance']) && $this->attributes['total_distance'] !== null && (float) $this->attributes['total_distance'] > 0) {

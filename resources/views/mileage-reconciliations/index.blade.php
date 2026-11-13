@@ -222,7 +222,7 @@
                                     </span>
                                 </td>
                                 <td class="px-4 py-3.5 text-right font-medium text-slate-600 dark:text-slate-400">
-                                    {{ number_format($rec->planned_distance_km, 1) }}
+                                    {{ $rec->planned_distance_km !== null ? number_format($rec->planned_distance_km, 1) : 'Pending' }}
                                 </td>
                                 <td class="px-4 py-3.5 text-right font-mono text-slate-700 dark:text-slate-300">
                                     {{ $rec->starting_odometer !== null ? number_format($rec->starting_odometer, 1) : '—' }}
@@ -231,15 +231,19 @@
                                     {{ $rec->ending_odometer !== null ? number_format($rec->ending_odometer, 1) : '—' }}
                                 </td>
                                 <td class="px-4 py-3.5 text-right font-bold text-slate-900 dark:text-white">
-                                    {{ number_format($rec->actual_odometer_km, 1) }}
+                                    {{ $rec->actual_odometer_km !== null ? number_format($rec->actual_odometer_km, 1) : 'Pending' }}
                                 </td>
                                 <td class="px-4 py-3.5 text-right font-mono text-slate-700 dark:text-slate-300">
                                     {{ $rec->gps_reported_km !== null ? number_format($rec->gps_reported_km, 1) : '—' }}
                                 </td>
                                 <td class="px-4 py-3.5 text-right">
-                                    <div class="{{ $rec->variance_km > 0 ? 'text-red-600 dark:text-red-400 font-bold' : 'text-emerald-600 dark:text-emerald-400 font-medium' }}">
-                                        {{ ($rec->variance_km > 0 ? '+' : '') . number_format($rec->variance_km, 1) }} KM
-                                    </div>
+                                    @if($rec->variance_km !== null)
+                                        <div class="{{ $rec->variance_km > 0 ? 'text-red-600 dark:text-red-400 font-bold' : 'text-emerald-600 dark:text-emerald-400 font-medium' }}">
+                                            {{ ($rec->variance_km > 0 ? '+' : '') . number_format($rec->variance_km, 1) }} KM
+                                        </div>
+                                    @else
+                                        <div class="text-slate-400">Pending</div>
+                                    @endif
                                     @if($rec->variance_percentage !== null)
                                         <div class="text-[10px] text-slate-400 font-mono">
                                             {{ ($rec->variance_percentage > 0 ? '+' : '') . number_format($rec->variance_percentage, 1) }}%

@@ -2,8 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Models\AdvancedItinerary;
 use App\Models\FleetDispatch;
 use App\Models\MileageAuditLog;
+use App\Models\MileageReconciliation;
 use App\Models\User;
 use App\Models\Vehicle;
 use App\Services\DispatchMonitoringService;
@@ -86,6 +88,34 @@ class DispatchMonitoringTest extends TestCase
         $this->assertNotNull($dispatch->reconciliation);
         $this->assertEquals(110.5, $dispatch->reconciliation->planned_distance_km);
         $this->assertEquals(45000.0, $dispatch->reconciliation->starting_odometer);
+    }
+
+    public function test_manual_itinerary_generation_leaves_missing_measurements_pending(): void
+    {
+        AdvancedItinerary::factory()->create([
+            'vehicle_id' => $this->vehicle->id,
+            'created_by' => $this->operator->id,
+            'itinerary_date' => Carbon::today(),
+            'total_distance' => null,
+            'start_odo' => 52000,
+            'end_odo' => null,
+        ]);
+
+        $this->actingAs($this->operator)
+            ->post(route('fleet-dispatches.generate-from-itineraries'))
+            ->assertRedirect();
+
+        $dispatch = FleetDispatch::query()->sole();
+        $reconciliation = $dispatch->reconciliation;
+
+        $this->assertSame(0.0, $dispatch->planned_distance_km);
+        $this->assertNotNull($reconciliation);
+        $this->assertNull($reconciliation->starting_odometer);
+        $this->assertNull($reconciliation->ending_odometer);
+        $this->assertNull($reconciliation->planned_distance_km);
+        $this->assertNull($reconciliation->actual_odometer_km);
+        $this->assertNull($reconciliation->variance_km);
+        $this->assertSame(MileageReconciliation::STATUS_DRAFT, $reconciliation->status);
     }
 
     public function test_record_actual_departure_calculates_on_time_within_grace_period(): void

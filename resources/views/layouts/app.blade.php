@@ -403,14 +403,101 @@
                             </svg>
                         </button>
                     </div>
-                    {{-- Bell --}}
-                    <div class="relative">
-                        <button class="relative flex items-center justify-center h-8 w-8 rounded-full hover:bg-slate-100 text-slate-500 transition-colors">
+                    {{-- Bell (In-App Notification Center) --}}
+                    <div class="relative" x-data="{
+                        open: false,
+                        unreadCount: 0,
+                        notifications: [],
+                        fetchNotifications() {
+                            fetch('{{ route('notifications.feed') }}')
+                                .then(res => res.json())
+                                .then(data => {
+                                    this.unreadCount = data.unread_count || 0;
+                                    this.notifications = data.notifications || [];
+                                })
+                                .catch(() => {});
+                        },
+                        markRead(id) {
+                            fetch(`/notifications/${id}/mark-as-read`, {
+                                method: 'POST',
+                                headers: {
+                                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                                    'Accept': 'application/json'
+                                }
+                            }).then(() => this.fetchNotifications());
+                        },
+                        markAllRead() {
+                            fetch('{{ route('notifications.mark-all-read') }}', {
+                                method: 'POST',
+                                headers: {
+                                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                                    'Accept': 'application/json'
+                                }
+                            }).then(() => this.fetchNotifications());
+                        }
+                    }" x-init="fetchNotifications(); setInterval(() => fetchNotifications(), 30000)">
+                        <button type="button" @click="open = !open"
+                                class="relative flex items-center justify-center h-8 w-8 rounded-full hover:bg-slate-100 text-slate-500 transition-colors cursor-pointer"
+                                title="In-App Notifications">
                             <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0" />
                             </svg>
-                            <span class="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-red-500"></span>
+                            <template x-if="unreadCount > 0">
+                                <span class="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white shadow-xs" x-text="unreadCount"></span>
+                            </template>
                         </button>
+
+                        {{-- In-App Notification Dropdown --}}
+                        <div x-show="open" @click.away="open = false" x-cloak
+                             class="absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-800 z-50 overflow-hidden text-xs">
+                            <div class="px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/40">
+                                <span class="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                                    <span>Notifications</span>
+                                    <template x-if="unreadCount > 0">
+                                        <span class="rounded-full bg-red-100 dark:bg-red-950 px-2 py-0.5 text-[10px] font-bold text-red-600 dark:text-red-400" x-text="`${unreadCount} unread`"></span>
+                                    </template>
+                                </span>
+                                <template x-if="unreadCount > 0">
+                                    <button type="button" @click="markAllRead()" class="text-[11px] font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 cursor-pointer">
+                                        Mark all read
+                                    </button>
+                                </template>
+                            </div>
+
+                            <div class="max-h-80 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
+                                <template x-if="notifications.length === 0">
+                                    <div class="p-6 text-center text-slate-400">
+                                        No recent notifications.
+                                    </div>
+                                </template>
+                                <template x-for="item in notifications" :key="item.id">
+                                    <div :class="item.read ? 'opacity-70 bg-white dark:bg-slate-900' : 'bg-blue-50/40 dark:bg-blue-950/20 font-medium'"
+                                         class="p-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors flex items-start gap-3">
+                                        <div class="mt-0.5 flex-shrink-0">
+                                            <span class="h-2 w-2 rounded-full inline-block"
+                                                  :class="item.read ? 'bg-slate-300' : (item.data.severity === 'DANGER' ? 'bg-red-500 animate-pulse' : 'bg-amber-500')"></span>
+                                        </div>
+                                        <div class="flex-1 min-w-0">
+                                            <div class="flex items-center justify-between gap-1">
+                                                <span class="font-bold text-slate-900 dark:text-white truncate" x-text="item.data.title || 'Dispatch Alert'"></span>
+                                                <span class="text-[10px] text-slate-400 whitespace-nowrap" x-text="item.created_at_human"></span>
+                                            </div>
+                                            <p class="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5 line-clamp-2" x-text="item.data.message"></p>
+                                            <div class="mt-2 flex items-center justify-between text-[10px]">
+                                                <a :href="item.data.url || '{{ route('fleet-dispatches.index') }}'" class="font-bold text-blue-600 hover:underline">
+                                                    View Dispatch &rarr;
+                                                </a>
+                                                <template x-if="!item.read">
+                                                    <button type="button" @click="markRead(item.id)" class="text-slate-400 hover:text-slate-600 cursor-pointer">
+                                                        Dismiss
+                                                    </button>
+                                                </template>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
                     </div>
                     {{-- Live Feed --}}
                     <div class="flex items-center gap-2 rounded-full bg-slate-50 border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700">

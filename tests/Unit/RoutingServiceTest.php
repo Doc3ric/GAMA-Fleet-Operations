@@ -149,4 +149,47 @@ class RoutingServiceTest extends TestCase
         $this->assertEquals('2h 45m', RoutingService::formatDuration(165));
         $this->assertEquals('—', RoutingService::formatDuration(null));
     }
+
+    public function test_calculates_haversine_distance(): void
+    {
+        // Distance between Cagayan de Oro (8.4822, 124.6472) and Tagoloan (8.5414, 124.7547) is ~13.5 km
+        $dist = RoutingService::calculateHaversineDistanceKm(8.4822, 124.6472, 8.5414, 124.7547);
+        $this->assertGreaterThan(12.0, $dist);
+        $this->assertLessThan(15.0, $dist);
+    }
+
+    public function test_calculates_multipoint_route_with_osrm_and_fallback(): void
+    {
+        Http::fake([
+            'router.project-osrm.org/*' => Http::response([
+                'code' => 'Ok',
+                'routes' => [
+                    [
+                        'distance' => 10000.0,
+                        'duration' => 600.0,
+                        'geometry' => [
+                            'coordinates' => [
+                                [124.6472, 8.4822],
+                                [124.7000, 8.5100],
+                                [124.7547, 8.5414],
+                            ],
+                        ],
+                    ],
+                ],
+            ], 200),
+        ]);
+
+        $points = [
+            ['name' => 'Origin Yard', 'lat' => 8.4822, 'lng' => 124.6472],
+            ['name' => 'Depot 1', 'lat' => 8.5100, 'lng' => 124.7000],
+            ['name' => 'Final Customer', 'lat' => 8.5414, 'lng' => 124.7547],
+        ];
+
+        $route = $this->service->calculateMultiPointRoute($points);
+
+        $this->assertTrue($route['success']);
+        $this->assertCount(2, $route['legs']);
+        $this->assertEquals(20.0, $route['total_distance_km']); // 2 legs of 10.0km each
+        $this->assertNotEmpty($route['geometry']);
+    }
 }
