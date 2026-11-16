@@ -303,7 +303,50 @@ class TrackSolidApiServiceTest extends TestCase
         $this->assertEquals(25.0, $track['max_speed_kmh']);
         $this->assertEquals('parked', $track['points'][0]['state']);
         $this->assertEquals('moving', $track['points'][1]['state']);
+        $this->assertSame(strtotime('2026-10-23T00:00:00Z') * 1000, $track['points'][0]['timestamp_ms']);
         $this->assertGreaterThan(0.0, $track['total_distance_km']);
+    }
+
+    public function test_historical_track_orders_points_before_calculating_distance_and_removes_duplicate_timestamps(): void
+    {
+        Cache::put('tracksolid_api_access_token_'.md5('test_app_key'), 'valid_token', 3600);
+        Http::fake([
+            'https://api.tracksolidpro.test/route/rest*' => Http::response([
+                'code' => 0,
+                'result' => [
+                    ['lat' => 8.4740, 'lng' => 124.7240, 'gpsTime' => '2026-10-23 08:05:00', 'gpsSpeed' => 25],
+                    ['lat' => 8.4735, 'lng' => 124.7233, 'gpsTime' => '2026-10-23 08:00:00', 'gpsSpeed' => 20],
+                    ['lat' => 8.4800, 'lng' => 124.7300, 'gpsTime' => '2026-10-23 08:05:00', 'gpsSpeed' => 25],
+                ],
+            ], 200),
+        ]);
+
+        $track = (new TrackSolidApiService)->getHistoricalTrack('865100000000001', '2026-10-23 00:00:00', '2026-10-23 23:59:59');
+
+        $this->assertSame(2, $track['total_points']);
+        $this->assertSame('2026-10-23 08:00:00', $track['start_time']);
+        $this->assertSame(0.0, $track['points'][0]['leg_distance_km']);
+        $this->assertGreaterThan(0.0, $track['points'][1]['cumulative_distance_km']);
+    }
+
+    public function test_historical_track_keeps_points_after_offline_gap_without_adding_distance(): void
+    {
+        Cache::put('tracksolid_api_access_token_'.md5('test_app_key'), 'valid_token', 3600);
+        Http::fake([
+            'https://api.tracksolidpro.test/route/rest*' => Http::response([
+                'code' => 0,
+                'result' => [
+                    ['lat' => 8.4735, 'lng' => 124.7233, 'gpsTime' => '2026-10-23 08:00:00', 'gpsSpeed' => 0],
+                    ['lat' => 9.4735, 'lng' => 124.7233, 'gpsTime' => '2026-10-23 12:00:00', 'gpsSpeed' => 0],
+                ],
+            ], 200),
+        ]);
+
+        $track = (new TrackSolidApiService)->getHistoricalTrack('865100000000001', '2026-10-23 00:00:00', '2026-10-23 23:59:59');
+
+        $this->assertSame(2, $track['total_points']);
+        $this->assertSame(0.0, $track['total_distance_km']);
+        $this->assertSame(0.0, $track['points'][1]['leg_distance_km']);
     }
 
     public function test_get_historical_track_filters_null_island_and_speed_jumps(): void

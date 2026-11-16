@@ -64,7 +64,7 @@ class TripHistoryReplay extends Component
 
     public function mount(?int $vehicleId = null, ?string $imei = null): void
     {
-        $now = Carbon::now();
+        $now = Carbon::now($this->sourceTimezone());
         $this->startDate = $now->format('Y-m-d');
         $this->endDate = $now->format('Y-m-d');
         $this->startTime = '00:00';
@@ -107,7 +107,7 @@ class TripHistoryReplay extends Component
     public function applyPreset(string $preset): void
     {
         $this->preset = $preset;
-        $now = Carbon::now();
+        $now = Carbon::now($this->sourceTimezone());
 
         switch ($preset) {
             case 'today':
@@ -161,6 +161,7 @@ class TripHistoryReplay extends Component
         $this->stops = [];
         $this->itineraryComparison = null;
         $this->pointsCacheKey = '';
+        $this->dispatch('track-data-cleared');
 
         // Allow up to 120 seconds for large date range queries (e.g. 7 days) to complete
         set_time_limit(120);
@@ -188,8 +189,8 @@ class TripHistoryReplay extends Component
         $endStr = "{$this->endDate} {$this->endTime}:59";
 
         try {
-            $startCarbon = Carbon::parse($startStr);
-            $endCarbon = Carbon::parse($endStr);
+            $startCarbon = Carbon::parse($startStr, $this->sourceTimezone());
+            $endCarbon = Carbon::parse($endStr, $this->sourceTimezone());
         } catch (Exception $e) {
             $this->errorMessage = 'Invalid start or end date format: '.$e->getMessage();
 
@@ -202,20 +203,37 @@ class TripHistoryReplay extends Component
             return;
         }
 
-        // TrackSolid API limits query range to at most 30 days
-        if ($startCarbon->diffInDays($endCarbon) > 31) {
-            $this->errorMessage = 'Historical track queries are limited to a maximum range of 30 days.';
+        $queryNow = Carbon::now($this->sourceTimezone());
+        if ($startCarbon->gt($queryNow) || $endCarbon->copy()->startOfMinute()->gt($queryNow)) {
+            $this->errorMessage = 'Trip history cannot be requested for a future time.';
 
             return;
         }
 
-        $cacheKey = "tracksolid_track_{$imei}_{$this->startDate}_{$this->startTime}_{$this->endDate}_{$this->endTime}";
+        if ($endCarbon->gt($queryNow)) {
+            $endCarbon = $queryNow->copy()->subSecond();
+            $endStr = $endCarbon->format('Y-m-d H:i:s');
+        }
+
+        if ($endCarbon->lt($startCarbon)) {
+            $this->errorMessage = 'The selected range has no completed GPS time yet.';
+
+            return;
+        }
+
+        if ($startCarbon->diffInSeconds($endCarbon) > 7 * 86400 || $startCarbon->lt($queryNow->copy()->subMonths(3))) {
+            $this->errorMessage = 'TrackSolid history is limited to seven days per query and the past three months.';
+
+            return;
+        }
+
+        $cacheKey = "tracksolid_track_v2_{$imei}_{$this->startDate}_{$this->startTime}_{$this->endDate}_{$this->endTime}";
 
         try {
             $apiService = app(TrackSolidApiService::class);
 
             // Cache track results for 60 seconds (or 10 minutes if past date)
-            $isPastDate = $endCarbon->lt(Carbon::now()->subMinutes(10));
+            $isPastDate = $endCarbon->lt(Carbon::now($this->sourceTimezone())->subMinutes(10));
             $ttl = $isPastDate ? 600 : 45;
 
             $track = Cache::remember($cacheKey, $ttl, function () use ($apiService, $imei, $startStr, $endStr) {
@@ -254,7 +272,7 @@ class TripHistoryReplay extends Component
             // instead of embedding thousands of coordinates into the Livewire response body.
             // Store the raw hash only; the route prefixes "trip_points_" when looking up the cache.
             $pointsHash = md5("{$imei}_{$this->startDate}_{$this->startTime}_{$this->endDate}_{$this->endTime}");
-            $isPastDate = $endCarbon->lt(Carbon::now()->subMinutes(10));
+            $isPastDate = $endCarbon->lt(Carbon::now($this->sourceTimezone())->subMinutes(10));
             Cache::put("trip_points_{$pointsHash}", $this->cachedPoints, $isPastDate ? 600 : 120);
             $this->pointsCacheKey = $pointsHash;
 
@@ -349,13 +367,11 @@ class TripHistoryReplay extends Component
             $next = $points[$i + 1];
 
             try {
-                $t1 = Carbon::parse($curr['gps_time']);
-                $t2 = Carbon::parse($next['gps_time']);
-                $diff = abs($t2->getTimestamp() - $t1->getTimestamp());
+                $diff = (int) (($this->pointTimestampMs($next) - $this->pointTimestampMs($curr)) / 1000);
 
-                // Reject gaps longer than 2 hours (offline / powered down)
-                if ($diff > 7200) {
-                    $diff = 60;
+                // Offline intervals have no observed operating state.
+                if ($diff <= 0 || $diff > 7200) {
+                    continue;
                 }
 
                 $state = $curr['state'] ?? 'parked';
@@ -399,6 +415,15 @@ class TripHistoryReplay extends Component
         for ($i = 0; $i < $count; $i++) {
             $pt = $points[$i];
             $state = $pt['state'] ?? 'parked';
+
+            if ($cluster !== [] && ($this->pointTimestampMs($pt) - $this->pointTimestampMs($cluster[count($cluster) - 1])) > 7200000) {
+                $stop = $this->buildStopFromCluster($cluster, $clusterState, $startIndex);
+                if ($stop) {
+                    $stops[] = $stop;
+                }
+                $cluster = [];
+                $clusterState = null;
+            }
 
             if ($state === 'moving') {
                 if ($clusterState !== null && count($cluster) > 0) {
@@ -456,9 +481,7 @@ class TripHistoryReplay extends Component
         $lastPt = $cluster[count($cluster) - 1];
 
         try {
-            $t1 = Carbon::parse($firstPt['gps_time']);
-            $t2 = Carbon::parse($lastPt['gps_time']);
-            $durationSeconds = abs($t2->getTimestamp() - $t1->getTimestamp());
+            $durationSeconds = (int) (($this->pointTimestampMs($lastPt) - $this->pointTimestampMs($firstPt)) / 1000);
         } catch (Exception) {
             $durationSeconds = 0;
         }
@@ -604,6 +627,17 @@ class TripHistoryReplay extends Component
             'targetOptions' => $this->getTargetOptions(),
             'initialPoints' => [],
             'pointsCacheKey' => $this->pointsCacheKey,
+            'displayTimezone' => $this->sourceTimezone(),
         ]);
+    }
+
+    protected function sourceTimezone(): string
+    {
+        return (string) config('fleet_reconciliation.tracksolid.source_timezone', 'Asia/Manila');
+    }
+
+    protected function pointTimestampMs(array $point): int
+    {
+        return (int) ($point['timestamp_ms'] ?? Carbon::parse($point['gps_time'], $this->sourceTimezone())->getTimestamp() * 1000);
     }
 }

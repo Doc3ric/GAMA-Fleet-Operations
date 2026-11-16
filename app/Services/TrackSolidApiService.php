@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Device;
 use App\Models\FleetDispatch;
 use App\Models\Vehicle;
+use Carbon\Carbon;
 use Exception;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -537,11 +538,7 @@ class TrackSolidApiService
 
             // Normalize and validate each track point
             $normalizedPoints = [];
-            $maxSpeed = 0.0;
-            $speedSum = 0.0;
-            $totalDistanceKm = 0.0;
-            $prevLat = null;
-            $prevLng = null;
+            $sourceTimezone = (string) config('fleet_reconciliation.tracksolid.source_timezone', 'Asia/Manila');
 
             foreach ($rawPoints as $pt) {
                 if (! is_array($pt)) {
@@ -558,6 +555,12 @@ class TrackSolidApiService
 
                 $gpsTime = ! empty($pt['gpsTime']) ? (string) $pt['gpsTime'] : null;
                 if (! $gpsTime) {
+                    continue;
+                }
+
+                try {
+                    $timestampMs = Carbon::parse($gpsTime, $sourceTimezone)->getTimestamp() * 1000;
+                } catch (Exception) {
                     continue;
                 }
 
@@ -583,27 +586,11 @@ class TrackSolidApiService
                     $state = 'parked';
                 }
 
-                // Compute point-to-point distance using Haversine formula
-                $legDistanceKm = 0.0;
-                if ($prevLat !== null && $prevLng !== null) {
-                    $legDistanceKm = $this->calculateHaversineDistanceKm($prevLat, $prevLng, $lat, $lng);
-                    // Filter out massive GPS telemetry jumps (> 50 km in a single sample)
-                    if ($legDistanceKm > 50.0) {
-                        $legDistanceKm = 0.0;
-                    }
-                    $totalDistanceKm += $legDistanceKm;
-                }
-
-                $prevLat = $lat;
-                $prevLng = $lng;
-
-                $maxSpeed = max($maxSpeed, $speedKmh);
-                $speedSum += $speedKmh;
-
                 $normalizedPoints[] = [
                     'lat' => $lat,
                     'lng' => $lng,
                     'gps_time' => $gpsTime,
+                    'timestamp_ms' => $timestampMs,
                     'speed' => $speedKmh,
                     'direction' => $direction,
                     'acc_status' => $rawAcc,
@@ -611,13 +598,39 @@ class TrackSolidApiService
                     'state' => $state,
                     'pos_type' => $pt['posType'] ?? 'GPS',
                     'satellite' => (int) ($pt['satellite'] ?? 0),
-                    'leg_distance_km' => round($legDistanceKm, 3),
-                    'cumulative_distance_km' => round($totalDistanceKm, 2),
                 ];
             }
 
-            // Ensure points are strictly chronological
-            usort($normalizedPoints, fn ($a, $b) => strcmp($a['gps_time'], $b['gps_time']));
+            usort($normalizedPoints, fn ($a, $b) => $a['timestamp_ms'] <=> $b['timestamp_ms']);
+
+            $orderedPoints = [];
+            $totalDistanceKm = 0.0;
+            foreach ($normalizedPoints as $point) {
+                $previous = $orderedPoints[count($orderedPoints) - 1] ?? null;
+                $legDistanceKm = 0.0;
+                if ($previous !== null) {
+                    $elapsedSeconds = ($point['timestamp_ms'] - $previous['timestamp_ms']) / 1000;
+                    if ($elapsedSeconds <= 0) {
+                        continue;
+                    }
+
+                    if ($elapsedSeconds <= 7200) {
+                        $legDistanceKm = $this->calculateHaversineDistanceKm($previous['lat'], $previous['lng'], $point['lat'], $point['lng']);
+                        if ($legDistanceKm > 50.0 || ($legDistanceKm / $elapsedSeconds * 3600) > 180.0) {
+                            continue;
+                        }
+                    }
+                }
+
+                $totalDistanceKm += $legDistanceKm;
+                $point['leg_distance_km'] = round($legDistanceKm, 3);
+                $point['cumulative_distance_km'] = round($totalDistanceKm, 2);
+                $orderedPoints[] = $point;
+            }
+
+            $normalizedPoints = $orderedPoints;
+            $speedSum = array_sum(array_column($normalizedPoints, 'speed'));
+            $maxSpeed = $normalizedPoints === [] ? 0.0 : max(array_column($normalizedPoints, 'speed'));
 
             $count = count($normalizedPoints);
             $avgSpeed = $count > 0 ? round($speedSum / $count, 1) : 0.0;

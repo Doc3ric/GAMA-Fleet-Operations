@@ -3,18 +3,25 @@
         initialTrack: @js($trackData),
         initialPoints: @js($initialPoints ?? []),
         initialStops: @js($stops),
-        initialPointsKey: @js($pointsCacheKey ?? '')
+        initialPointsKey: @js($pointsCacheKey ?? ''),
+        timezone: @js($displayTimezone)
      })"
 >
     @push('styles')
         <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
         <style>
             #trip-replay-map {
-                height: 600px !important;
-                min-height: 600px !important;
+                height: 440px !important;
+                min-height: 440px !important;
                 width: 100% !important;
                 border-radius: 0.75rem;
                 z-index: 10;
+            }
+            @media (min-width: 1024px) {
+                #trip-replay-map {
+                    height: 600px !important;
+                    min-height: 600px !important;
+                }
             }
             .leaflet-popup-content-wrapper {
                 border-radius: 0.75rem;
@@ -28,6 +35,10 @@
                 line-height: 1.4;
             }
             .custom-replay-pin {
+                background: transparent;
+                border: none;
+            }
+            .custom-stop-pin {
                 background: transparent;
                 border: none;
             }
@@ -96,7 +107,7 @@
             {{-- Start Date & Time --}}
             <div class="lg:col-span-3">
                 <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
-                    Start (Date & Time)
+                    Start ({{ $displayTimezone }})
                 </label>
                 <div class="flex items-center gap-1.5">
                     <input type="date"
@@ -111,7 +122,7 @@
             {{-- End Date & Time --}}
             <div class="lg:col-span-3">
                 <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
-                    End (Date & Time)
+                    End ({{ $displayTimezone }})
                 </label>
                 <div class="flex items-center gap-1.5">
                     <input type="date"
@@ -135,10 +146,11 @@
                     <span wire:loading wire:target="loadTrack">
                         <svg class="animate-spin w-4 h-4 text-white" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
                     </span>
-                    <span class="hidden lg:inline">Fetch</span>
+                    <span>Load</span>
                 </button>
             </div>
         </div>
+        <p class="text-[11px] text-slate-500 dark:text-slate-400 pt-2">TrackSolid allows up to seven days per request within the past three months. Displayed times use {{ $displayTimezone }}; confirm this matches your TrackSolid account timezone.</p>
     </div>
 
     {{-- Error Notice --}}
@@ -159,7 +171,7 @@
         <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
             {{-- Total Distance --}}
             <div class="bg-white dark:bg-slate-900 rounded-xl p-3.5 border border-slate-200 dark:border-slate-800 shadow-sm">
-                <div class="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Total Odometer Distance</div>
+                <div class="text-[10px] uppercase font-bold text-slate-500 tracking-wider">GPS Route Distance</div>
                 <div class="text-lg font-extrabold text-slate-900 dark:text-white mt-0.5 flex items-baseline gap-1">
                     {{ number_format((float) $trackData['total_distance_km'], 1) }}
                     <span class="text-xs font-semibold text-slate-500">km</span>
@@ -285,9 +297,10 @@
                 {{-- HUD Overlay on Map --}}
                 <div x-show="hasTrack"
                      x-transition
-                     class="absolute top-4 left-4 z-[500] bg-slate-900/90 backdrop-blur-md text-white p-3.5 rounded-xl border border-white/10 shadow-2xl pointer-events-none min-w-[220px]">
-                    <div class="text-[10px] uppercase font-bold text-blue-400 tracking-wider">HUD Telemetry</div>
-                    <div class="text-xs font-semibold text-slate-300 mt-0.5" x-text="currentTimestamp || 'Ready'"></div>
+                     class="absolute top-3 left-3 z-[500] bg-slate-900/90 backdrop-blur-md text-white p-3 rounded-xl border border-white/10 shadow-2xl pointer-events-none w-[min(15rem,calc(100%-6rem))] sm:w-60">
+                    <div class="text-[10px] uppercase font-bold text-blue-300 tracking-wider">Replay Clock · {{ $displayTimezone }}</div>
+                    <div class="text-sm font-bold text-white mt-0.5" x-text="currentTimestamp || 'Ready'"></div>
+                    <div class="text-[10px] text-slate-300 mt-0.5">Last GPS fix: <span x-text="currentGpsFix || '—'"></span></div>
 
                     <div class="flex items-baseline gap-2 mt-2">
                         <span class="text-2xl font-black text-white" x-text="currentSpeed"></span>
@@ -296,6 +309,10 @@
                               :class="currentIgnition ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-slate-700 text-slate-300'"
                               x-text="currentIgnition ? '⚡ ACC ON' : '⭕ ACC OFF'">
                         </span>
+                    </div>
+                    <div class="mt-2 inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-bold"
+                         :class="currentState === 'idling' ? 'bg-amber-600 text-white' : (currentState === 'parked' ? 'bg-blue-600 text-white' : 'bg-emerald-600 text-white')">
+                        <span x-text="currentState === 'idling' ? '◷ Idling' : (currentState === 'parked' ? 'P Parked' : '➤ Moving')"></span>
                     </div>
 
                     <div class="mt-2.5 pt-2 border-t border-white/10 flex items-center justify-between text-[11px] text-slate-400">
@@ -314,7 +331,14 @@
                 {{-- Map Action Floating Badges (Top Right) --}}
                 <div x-show="hasTrack"
                      x-transition
-                     class="absolute top-4 right-4 z-[500] flex flex-col gap-2">
+                     class="absolute top-3 right-3 z-[500] flex flex-col items-end gap-2">
+                    <label class="rounded-lg bg-white/95 dark:bg-slate-800/95 border border-slate-200 dark:border-slate-700 px-2 py-1 shadow-md text-[10px] font-bold text-slate-600 dark:text-slate-300">
+                        Map style
+                        <select @change="setMapStyle($event.target.value)" class="block w-full border-0 bg-transparent p-0 text-xs font-bold text-slate-800 dark:text-white focus:ring-0">
+                            <option value="street">Street</option>
+                            <option value="satellite">Satellite</option>
+                        </select>
+                    </label>
                     <button type="button"
                             @click="fitBounds()"
                             class="bg-white/95 dark:bg-slate-800/95 hover:bg-white text-slate-700 dark:text-slate-200 px-3 py-1.5 rounded-lg text-xs font-bold shadow-md border border-slate-200 dark:border-slate-700 transition-all flex items-center gap-1.5 backdrop-blur-sm">
@@ -342,18 +366,20 @@
             <div class="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-4 space-y-3">
                 {{-- Timeline Scrubber Slider --}}
                 <div class="space-y-1">
-                    <div class="flex items-center justify-between text-xs font-bold text-slate-600 dark:text-slate-400">
-                        <span x-text="currentTimestamp || 'Start'"></span>
-                        <span class="text-blue-600 dark:text-blue-400 font-extrabold" x-text="totalPoints > 0 ? (Math.round(((currentIndex + 1) / Math.max(1, totalPoints)) * 100) + '% Completed') : 'No Route Loaded'"></span>
-                        <span x-text="trackEndTimestamp || 'End'"></span>
+                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[10px] sm:text-xs font-semibold text-slate-600 dark:text-slate-400">
+                        <div><span class="block uppercase tracking-wide text-slate-400">Start</span><span x-text="trackStartTimestamp || '—'"></span></div>
+                        <div class="col-span-2 sm:col-span-1 order-3 sm:order-2 sm:text-center"><span class="block uppercase tracking-wide text-blue-500">Replay clock</span><span class="font-extrabold text-blue-700 dark:text-blue-300" x-text="currentTimestamp || '—'"></span></div>
+                        <div class="text-right order-2 sm:order-3"><span class="block uppercase tracking-wide text-slate-400">End</span><span x-text="trackEndTimestamp || '—'"></span></div>
                     </div>
                     <input type="range"
                            min="0"
-                           :max="Math.max(0, totalPoints - 1)"
-                           x-model.number="currentIndex"
-                           @input="seekTo(currentIndex)"
+                           :max="Math.max(0, totalDurationSeconds)"
+                           step="1"
+                           x-model.number="currentElapsedSeconds"
+                           @input="seekToTimestamp(trackStartMs + currentElapsedSeconds * 1000)"
                            :disabled="!hasTrack || totalPoints === 0"
                            class="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-600 disabled:opacity-50">
+                    <div class="text-right text-[11px] font-bold text-blue-600 dark:text-blue-400" x-text="hasTrack ? (Math.round((currentElapsedSeconds / Math.max(1, totalDurationSeconds)) * 100) + '% complete') : 'No route loaded'"></div>
                 </div>
 
                 {{-- Playback Buttons & Speed Multipliers --}}
@@ -408,18 +434,20 @@
                     </div>
 
                     {{-- Speed Multiplier Pills --}}
-                    <div class="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-lg border border-slate-200 dark:border-slate-700">
+                    <div class="flex flex-wrap items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-lg border border-slate-200 dark:border-slate-700">
                         <span class="text-[10px] uppercase font-bold text-slate-400 px-1">Speed</span>
                         <template x-for="spd in [1, 2, 5, 10, 20, 50, 100]" :key="spd">
                             <button type="button"
-                                    @click="playbackSpeed = spd"
+                                    @click="changePlaybackSpeed(spd)"
                                     :class="playbackSpeed === spd ? 'bg-blue-600 text-white font-bold shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'"
                                     class="px-2 py-0.5 rounded text-xs transition-colors"
                                     x-text="spd + 'x'">
                             </button>
                         </template>
                     </div>
+                    <span class="text-[10px] font-semibold text-slate-500 dark:text-slate-400">Times shown in {{ $displayTimezone }}</span>
                 </div>
+                <p x-show="gapNotice" x-text="gapNotice" class="text-xs font-semibold text-amber-700 dark:text-amber-400"></p>
             </div>
         </div>
 
@@ -445,8 +473,12 @@
                              class="p-3 rounded-lg border border-slate-200 dark:border-slate-800 hover:border-blue-400 dark:hover:border-blue-500 cursor-pointer transition-all hover:shadow-sm bg-slate-50/50 dark:bg-slate-800/40 group">
                             <div class="flex items-center justify-between">
                                 <div class="flex items-center gap-2">
-                                    <span class="flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-extrabold {{ $stop['type'] === 'idling' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300' : 'bg-blue-100 text-blue-800 dark:bg-blue-900/60 dark:text-blue-300' }}">
-                                        {{ $idx + 1 }}
+                                    <span class="flex items-center justify-center w-7 h-7 rounded-lg text-white {{ $stop['type'] === 'idling' ? 'bg-amber-600' : 'bg-blue-600' }}">
+                                        @if($stop['type'] === 'idling')
+                                            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></svg>
+                                        @else
+                                            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="4" y="3" width="16" height="18" rx="3"/><path d="M9 17V7h4a3 3 0 0 1 0 6H9"/></svg>
+                                        @endif
                                     </span>
                                     <span class="text-xs font-bold {{ $stop['type'] === 'idling' ? 'text-amber-700 dark:text-amber-400' : 'text-blue-700 dark:text-blue-400' }}">
                                         {{ $stop['type'] === 'idling' ? 'Idling Stop' : 'Parking Stop' }}
@@ -458,7 +490,7 @@
                             </div>
 
                             <div class="text-[11px] text-slate-500 dark:text-slate-400 mt-2 flex items-center justify-between">
-                                <span>{{ \Carbon\Carbon::parse($stop['start_time'])->format('M d, h:i A') }} &rarr; {{ \Carbon\Carbon::parse($stop['end_time'])->format('h:i A') }}</span>
+                                <span>{{ \Carbon\Carbon::parse($stop['start_time'], $displayTimezone)->format('M d, h:i A') }} &rarr; {{ \Carbon\Carbon::parse($stop['end_time'], $displayTimezone)->format('h:i A') }}</span>
                                 <span class="text-blue-600 dark:text-blue-400 font-semibold group-hover:underline text-[10px]">
                                     Jump &rarr;
                                 </span>
@@ -489,11 +521,11 @@
                         <span>End / Destination Point (Red)</span>
                     </div>
                     <div class="flex items-center gap-2">
-                        <span class="h-2.5 w-2.5 rounded-full bg-amber-500"></span>
+                        <span class="flex items-center justify-center h-5 w-5 rounded bg-amber-600 text-white text-[10px] font-bold">◷</span>
                         <span>Idling Stop (Engine ON, Speed &lt; 3 km/h)</span>
                     </div>
                     <div class="flex items-center gap-2">
-                        <span class="h-2.5 w-2.5 rounded-full bg-blue-500"></span>
+                        <span class="flex items-center justify-center h-5 w-5 rounded bg-blue-600 text-white text-[10px] font-bold">P</span>
                         <span>Parking Stop (Engine OFF)</span>
                     </div>
                 </div>
@@ -515,6 +547,10 @@
             }
 
             window.tripHistoryReplay = function tripHistoryReplay(config) {
+                const timestampFormatter = new Intl.DateTimeFormat('en-GB', {
+                    timeZone: config.timezone, year: 'numeric', month: 'short', day: '2-digit',
+                    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+                });
                 return {
                     track: config.initialTrack || null,
                     stops: config.initialStops || [],
@@ -530,7 +566,18 @@
                     totalPoints: 0,
                     isPlaying: false,
                     playbackSpeed: 2,
-                    playbackTimer: null,
+                    playbackFrame: null,
+                    playbackAnchorMs: 0,
+                    playbackAnchorTime: 0,
+                    trackStartMs: 0,
+                    trackEndMs: 0,
+                    currentPositionMs: 0,
+                    totalDurationSeconds: 0,
+                    currentElapsedSeconds: 0,
+                    lastCameraUpdate: 0,
+                    gapNotice: '',
+                    loadRequestId: 0,
+                    timezone: config.timezone,
                     autoFollow: true,
                     showStopsOnMap: true,
                     hasTrack: false,
@@ -538,11 +585,18 @@
                     // HUD state
                     currentSpeed: 0,
                     currentTimestamp: '',
+                    currentGpsFix: '',
                     currentIgnition: false,
+                    currentState: 'parked',
                     currentDistanceKm: '0.0',
                     totalDistanceKm: '0.0',
                     currentHeading: 0,
                     trackEndTimestamp: '',
+                    trackStartTimestamp: '',
+                    mapStyle: 'street',
+                    streetLayer: null,
+                    satelliteLayer: null,
+                    currentBaseLayer: null,
 
                     /**
                      * Fetch track points from the server-side cache endpoint.
@@ -575,13 +629,14 @@
 
                             // Load initial track: prefer in-memory points, fall back to server fetch via key
                             if (this.track) {
+                                const requestId = ++this.loadRequestId;
                                 let pts = Array.isArray(this.points) && this.points.length > 0 ? this.points : [];
 
                                 if (pts.length === 0 && this.pointsKey) {
                                     pts = await this.fetchPoints(this.pointsKey);
                                 }
 
-                                if (pts.length > 0) {
+                                if (pts.length > 0 && requestId === this.loadRequestId) {
                                     const fullTrack = { ...this.track, points: pts };
                                     this.loadTrackData(fullTrack, this.stops);
                                 }
@@ -589,6 +644,7 @@
                         });
 
                         const handleTrackLoaded = async (rawPayload) => {
+                            const requestId = ++this.loadRequestId;
                             let raw = rawPayload;
                             if (Array.isArray(raw) && raw.length > 0) raw = raw[0];
                             const track = raw?.track || raw;
@@ -602,6 +658,7 @@
                                 } else if (Array.isArray(track.points) && track.points.length > 0) {
                                     pts = track.points;
                                 }
+                                if (requestId !== this.loadRequestId) return;
                                 const fullTrack = { ...track, points: pts };
                                 this.loadTrackData(fullTrack, stops);
                             }
@@ -613,6 +670,8 @@
                         });
 
                         window.addEventListener('track-data-cleared', () => {
+                            this.loadRequestId++;
+                            this.pause();
                             this.clearMap();
                             this.hasTrack = false;
                         });
@@ -645,18 +704,30 @@
                         // Default coordinates: Metro Manila / Calabarzon region
                         this.map = L.map('trip-replay-map', {
                             zoomControl: true,
-                            attributionControl: false
+                            attributionControl: true
                         }).setView([14.2833, 121.0833], 12);
 
-                        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                            maxZoom: 19
-                        }).addTo(this.map);
+                        this.streetLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                            maxZoom: 19, attribution: '&copy; OpenStreetMap contributors'
+                        });
+                        this.satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                            maxZoom: 19, attribution: '&copy; Esri, Maxar, Earthstar Geographics, GIS User Community'
+                        });
+                        this.setMapStyle(this.mapStyle);
 
                         setTimeout(() => {
                             if (this.map) {
                                 this.map.invalidateSize();
                             }
                         }, 250);
+                    },
+
+                    setMapStyle(style) {
+                        this.mapStyle = style === 'satellite' ? 'satellite' : 'street';
+                        if (!this.map || !this.streetLayer || !this.satelliteLayer) return;
+                        if (this.currentBaseLayer) this.map.removeLayer(this.currentBaseLayer);
+                        this.currentBaseLayer = this.mapStyle === 'satellite' ? this.satelliteLayer : this.streetLayer;
+                        this.currentBaseLayer.addTo(this.map);
                     },
 
                     loadTrackData(track, stops) {
@@ -685,9 +756,11 @@
                             if (!p) continue;
                             const lat = parseFloat(p.lat);
                             const lng = parseFloat(p.lng);
-                            if (!isNaN(lat) && !isNaN(lng) && (Math.abs(lat) > 0.001 || Math.abs(lng) > 0.001)) {
+                            const timestampMs = Number(p.timestamp_ms);
+                            if (Number.isFinite(lat) && Number.isFinite(lng) && Number.isFinite(timestampMs) && timestampMs > 0 && (Math.abs(lat) > 0.001 || Math.abs(lng) > 0.001)) {
                                 p.lat = lat;
                                 p.lng = lng;
+                                p.timestamp_ms = timestampMs;
                                 validPoints.push(p);
                             }
                         }
@@ -700,22 +773,30 @@
 
                         this.track.points = validPoints;
                         this.totalPoints = validPoints.length;
+                        this.trackStartMs = validPoints[0].timestamp_ms;
+                        this.trackEndMs = validPoints[validPoints.length - 1].timestamp_ms;
+                        this.currentPositionMs = this.trackStartMs;
+                        this.totalDurationSeconds = Math.max(0, Math.ceil((this.trackEndMs - this.trackStartMs) / 1000));
+                        this.currentElapsedSeconds = 0;
                         this.totalDistanceKm = Number(track.total_distance_km || 0).toFixed(1);
+                        this.trackStartTimestamp = validPoints[0].gps_time || '';
                         this.trackEndTimestamp = validPoints[validPoints.length - 1].gps_time || '';
                         this.currentIndex = 0;
                         this.hasTrack = true;
 
-                        // Build lat/lng array for Leaflet polyline
-                        const latLngs = validPoints.map(p => [p.lat, p.lng]);
-
-                        // Polyline with primary blue casing
-                        this.polyline = L.polyline(latLngs, {
-                            color: '#2563eb',
-                            weight: 5,
-                            opacity: 0.85,
-                            lineCap: 'round',
-                            lineJoin: 'round'
-                        }).addTo(this.map);
+                        const segments = [];
+                        let segment = [];
+                        validPoints.forEach((point, index) => {
+                            if (index > 0 && point.timestamp_ms - validPoints[index - 1].timestamp_ms > 7200000) {
+                                segments.push(segment);
+                                segment = [];
+                            }
+                            segment.push([point.lat, point.lng]);
+                        });
+                        segments.push(segment);
+                        this.polyline = L.featureGroup(segments.map(latLngs => L.polyline(latLngs, {
+                            color: '#2563eb', weight: 5, opacity: 0.85, lineCap: 'round', lineJoin: 'round'
+                        }))).addTo(this.map);
 
                         // Start Marker (Green Flag)
                         const startPt = validPoints[0];
@@ -750,6 +831,7 @@
                         `);
 
                         // Stop Markers along the route
+                        const stopPositions = new Map();
                         this.stops.forEach((stop, idx) => {
                             if (!stop) return;
                             const sLat = parseFloat(stop.lat);
@@ -757,14 +839,22 @@
                             if (isNaN(sLat) || isNaN(sLng) || (Math.abs(sLat) < 0.001 && Math.abs(sLng) < 0.001)) return;
 
                             const isIdling = stop.type === 'idling';
-                            const stopMarker = L.circleMarker([sLat, sLng], {
-                                radius: 6,
-                                fillColor: isIdling ? '#f59e0b' : '#3b82f6',
-                                color: '#ffffff',
-                                weight: 2,
-                                opacity: 1,
-                                fillOpacity: 0.95
-                            }).bindPopup(`
+                            const positionKey = `${sLat.toFixed(5)},${sLng.toFixed(5)}`;
+                            const positionCount = stopPositions.get(positionKey) || 0;
+                            stopPositions.set(positionKey, positionCount + 1);
+                            const horizontalOffset = positionCount === 0 ? 0 : Math.ceil(positionCount / 2) * 32 * (positionCount % 2 ? 1 : -1);
+                            const iconHtml = isIdling
+                                ? '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></svg>'
+                                : '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="4" y="3" width="16" height="18" rx="3"/><path d="M9 17V7h4a3 3 0 0 1 0 6H9"/></svg>';
+                            const stopMarker = L.marker([sLat, sLng], {
+                                icon: L.divIcon({
+                                    className: 'custom-stop-pin',
+                                    html: `<div style="display:flex;align-items:center;justify-content:center;width:36px;height:36px;border:3px solid white;border-radius:12px;background:${isIdling ? '#d97706' : '#2563eb'};color:white;box-shadow:0 3px 12px rgba(15,23,42,.35)">${iconHtml}</div>`,
+                                    iconSize: [36, 36],
+                                    iconAnchor: [18 - horizontalOffset, 18]
+                                }),
+                                title: isIdling ? 'Idling stop' : 'Parked stop'
+                            }).bindTooltip(`${isIdling ? 'Idling' : 'Parked'} · ${stop.duration_human}`, { direction: 'top', offset: [0, -18] }).bindPopup(`
                                 <div style="font-family: inherit; padding: 10px; width: 210px;">
                                     <div style="font-size: 10px; font-weight: 800; color: ${isIdling ? '#d97706' : '#2563eb'}; text-transform: uppercase;">
                                         Stop #${idx + 1} &bull; ${isIdling ? 'Idling (Engine ON)' : 'Parked (Engine OFF)'}
@@ -831,7 +921,9 @@
                         if (!pt) return;
                         this.currentSpeed = Math.round(pt.speed || 0);
                         this.currentTimestamp = pt.gps_time || '';
+                        this.currentGpsFix = pt.gps_time || '';
                         this.currentIgnition = !!pt.is_ignition_on;
+                        this.currentState = pt.state || (pt.speed >= 3 ? 'moving' : (pt.is_ignition_on ? 'idling' : 'parked'));
                         this.currentDistanceKm = Number(pt.cumulative_distance_km || 0).toFixed(1);
                         this.currentHeading = Math.round(pt.direction || 0);
                     },
@@ -850,19 +942,55 @@
                     seekTo(index) {
                         if (!this.track || !this.track.points || this.track.points.length === 0) return;
                         const idx = Math.max(0, Math.min(index, this.totalPoints - 1));
-                        this.currentIndex = idx;
-                        const pt = this.track.points[idx];
+                        this.seekToTimestamp(this.track.points[idx].timestamp_ms);
+                    },
 
-                        if (this.vehicleMarker && pt) {
-                            this.vehicleMarker.setLatLng([pt.lat, pt.lng]);
-                            this.vehicleMarker.setIcon(this.createVehicleIcon(pt.direction || 0, pt.speed || 0, pt.is_ignition_on));
+                    formatTimestamp(timestampMs) {
+                        return timestampFormatter.format(new Date(timestampMs));
+                    },
 
-                            if (this.autoFollow && this.map) {
-                                this.map.panTo([pt.lat, pt.lng], { animate: false });
-                            }
+                    seekToTimestamp(timestampMs, fromPlayback = false) {
+                        if (!this.hasTrack) return;
+                        const points = this.track.points;
+                        const positionMs = Math.max(this.trackStartMs, Math.min(timestampMs, this.trackEndMs));
+                        this.currentPositionMs = positionMs;
+                        let low = 0;
+                        let high = points.length - 1;
+                        while (low < high) {
+                            const middle = Math.ceil((low + high) / 2);
+                            if (points[middle].timestamp_ms <= positionMs) low = middle;
+                            else high = middle - 1;
                         }
 
-                        this.updateHud(pt);
+                        const previousIndex = this.currentIndex;
+                        this.currentIndex = low;
+                        this.currentElapsedSeconds = Math.round((positionMs - this.trackStartMs) / 1000);
+                        const current = points[low];
+                        const next = points[low + 1];
+                        const intervalMs = next ? next.timestamp_ms - current.timestamp_ms : 0;
+                        const isGap = intervalMs > 7200000;
+                        const fraction = intervalMs > 0 && !isGap ? (positionMs - current.timestamp_ms) / intervalMs : 0;
+                        const lat = next ? current.lat + (next.lat - current.lat) * fraction : current.lat;
+                        const lng = next ? current.lng + (next.lng - current.lng) * fraction : current.lng;
+
+                        if (this.vehicleMarker) {
+                            this.vehicleMarker.setLatLng([lat, lng]);
+                            if (previousIndex !== low) {
+                                this.vehicleMarker.setIcon(this.createVehicleIcon(current.direction || 0, current.speed || 0, current.is_ignition_on));
+                            }
+                        }
+                        this.gapNotice = isGap && positionMs > current.timestamp_ms ? 'No GPS data during this interval' : '';
+                        this.updateHud(current);
+                        this.currentDistanceKm = (Number(current.cumulative_distance_km || 0) + fraction * Number(next?.leg_distance_km || 0)).toFixed(1);
+                        this.currentTimestamp = this.formatTimestamp(positionMs);
+                        if (this.autoFollow && this.map && (!fromPlayback || performance.now() - this.lastCameraUpdate > 200)) {
+                            this.map.panTo([lat, lng], { animate: false });
+                            this.lastCameraUpdate = performance.now();
+                        }
+                        if (this.isPlaying && !fromPlayback) {
+                            this.playbackAnchorMs = positionMs;
+                            this.playbackAnchorTime = performance.now();
+                        }
                     },
 
                     stepForward() {
@@ -885,43 +1013,50 @@
 
                     play() {
                         if (!this.track || !this.track.points || this.totalPoints === 0) return;
-                        this.isPlaying = true;
-
-                        if (this.currentIndex >= this.totalPoints - 1) {
-                            this.currentIndex = 0;
+                        if (this.currentPositionMs >= this.trackEndMs) {
+                            this.seekTo(0);
                         }
-
-                        this.scheduleNextTick();
+                        this.isPlaying = true;
+                        this.playbackAnchorMs = this.currentPositionMs;
+                        this.playbackAnchorTime = performance.now();
+                        this.playbackFrame = requestAnimationFrame(time => this.advancePlayback(time));
                     },
 
                     pause() {
                         this.isPlaying = false;
-                        if (this.playbackTimer) {
-                            clearTimeout(this.playbackTimer);
-                            this.playbackTimer = null;
+                        if (this.playbackFrame !== null) {
+                            cancelAnimationFrame(this.playbackFrame);
+                            this.playbackFrame = null;
                         }
                     },
 
-                    scheduleNextTick() {
+                    changePlaybackSpeed(speed) {
+                        if (this.isPlaying) {
+                            this.playbackAnchorMs = this.currentPositionMs;
+                            this.playbackAnchorTime = performance.now();
+                        }
+                        this.playbackSpeed = speed;
+                    },
+
+                    advancePlayback(time) {
                         if (!this.isPlaying) return;
-
-                        const stepSize = (this.totalPoints > 2000 && this.playbackSpeed >= 20) 
-                            ? Math.ceil(this.playbackSpeed / 10) 
-                            : 1;
-
-                        const delay = Math.max(20, Math.round(300 / this.playbackSpeed));
-
-                        this.playbackTimer = setTimeout(() => {
-                            if (!this.isPlaying) return;
-
-                            if (this.currentIndex < this.totalPoints - 1) {
-                                this.currentIndex = Math.min(this.totalPoints - 1, this.currentIndex + stepSize);
-                                this.seekTo(this.currentIndex);
-                                this.scheduleNextTick();
-                            } else {
-                                this.pause();
-                            }
-                        }, delay);
+                        let positionMs = this.playbackAnchorMs + (time - this.playbackAnchorTime) * this.playbackSpeed;
+                        const current = this.track.points[this.currentIndex];
+                        const next = this.track.points[this.currentIndex + 1];
+                        if (next && next.timestamp_ms - current.timestamp_ms > 7200000 && positionMs > current.timestamp_ms) {
+                            positionMs = next.timestamp_ms;
+                            this.playbackAnchorMs = positionMs;
+                            this.playbackAnchorTime = time;
+                        }
+                        this.seekToTimestamp(positionMs, true);
+                        if (next && next.timestamp_ms - current.timestamp_ms > 7200000 && positionMs === next.timestamp_ms) {
+                            this.gapNotice = 'Skipped an interval without GPS data';
+                        }
+                        if (positionMs >= this.trackEndMs) {
+                            this.pause();
+                        } else {
+                            this.playbackFrame = requestAnimationFrame(nextTime => this.advancePlayback(nextTime));
+                        }
                     },
 
                     fitBounds(animate = false) {

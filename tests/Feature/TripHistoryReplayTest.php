@@ -62,6 +62,24 @@ class TripHistoryReplayTest extends TestCase
         $component->assertSet('startDate', $pastWeek);
     }
 
+    public function test_trip_history_uses_tracksolid_local_date_when_server_clock_is_utc(): void
+    {
+        $this->travelTo(Carbon::parse('2026-11-15 20:00:00', 'UTC'));
+        $vehicle = Vehicle::factory()->create();
+        Device::factory()->create(['vehicle_id' => $vehicle->id, 'imei' => '865000000000556']);
+        $mockApiService = Mockery::mock(TrackSolidApiService::class);
+        $mockApiService->shouldReceive('getHistoricalTrack')
+            ->once()
+            ->with('865000000000556', '2026-11-16 00:00:00', '2026-11-16 03:59:59')
+            ->andReturn(['points' => []]);
+        $this->app->instance(TrackSolidApiService::class, $mockApiService);
+
+        Livewire::actingAs($this->user)
+            ->test(TripHistoryReplay::class, ['vehicleId' => $vehicle->id])
+            ->assertSet('startDate', '2026-11-16')
+            ->assertSet('endTime', '04:00');
+    }
+
     public function test_track_loading_and_stop_extraction(): void
     {
         $vehicle = Vehicle::factory()->create(['equipment_code' => 'VH-REPLAY-01', 'plate_number' => 'ABC-9999']);
@@ -95,12 +113,42 @@ class TripHistoryReplayTest extends TestCase
             ->assertSet('selectedTarget', "v_{$vehicle->id}")
             ->assertDispatched('track-data-loaded')
             ->assertSee('15.5') // Total distance
+            ->assertSee('GPS Route Distance')
             ->assertSee('65')   // Max speed
             ->assertSee('VH-REPLAY-01');
 
         $this->assertCount(1, $test->get('stops'));
         $this->assertEquals('idling', $test->get('stops')[0]['type']);
         $this->assertEquals(900, $test->get('stops')[0]['duration_seconds']);
+    }
+
+    public function test_offline_gap_does_not_count_as_idling_or_parked_time(): void
+    {
+        $vehicle = Vehicle::factory()->create();
+        Device::factory()->create(['vehicle_id' => $vehicle->id, 'imei' => '865000000000889']);
+        $mockApiService = Mockery::mock(TrackSolidApiService::class);
+        $mockApiService->shouldReceive('getHistoricalTrack')->once()->andReturn([
+            'total_points' => 4,
+            'total_distance_km' => 0.0,
+            'max_speed_kmh' => 0.0,
+            'avg_speed_kmh' => 0.0,
+            'start_time' => '2026-10-23 08:00:00',
+            'end_time' => '2026-10-23 12:05:00',
+            'points' => [
+                ['lat' => 14.1, 'lng' => 121.0, 'gps_time' => '2026-10-23 08:00:00', 'speed' => 0, 'state' => 'idling'],
+                ['lat' => 14.1, 'lng' => 121.0, 'gps_time' => '2026-10-23 08:05:00', 'speed' => 0, 'state' => 'idling'],
+                ['lat' => 14.1, 'lng' => 121.0, 'gps_time' => '2026-10-23 12:00:00', 'speed' => 0, 'state' => 'parked'],
+                ['lat' => 14.1, 'lng' => 121.0, 'gps_time' => '2026-10-23 12:05:00', 'speed' => 0, 'state' => 'parked'],
+            ],
+        ]);
+        $this->app->instance(TrackSolidApiService::class, $mockApiService);
+
+        $component = Livewire::actingAs($this->user)->test(TripHistoryReplay::class, ['vehicleId' => $vehicle->id]);
+
+        $this->assertSame(300, $component->get('trackData')['idling_duration_seconds']);
+        $this->assertSame(300, $component->get('trackData')['parking_duration_seconds']);
+        $this->assertSame(['idling', 'parked'], array_column($component->get('stops'), 'type'));
+        $component->assertSee('Idling Stop')->assertSee('Parking Stop');
     }
 
     public function test_planned_itinerary_comparison(): void
@@ -158,6 +206,32 @@ class TripHistoryReplayTest extends TestCase
             ->set('endDate', '2026-10-20')
             ->call('loadTrack')
             ->assertSee('End date & time cannot be earlier than start date & time.');
+    }
+
+    public function test_date_validation_rejects_ranges_over_tracksolid_seven_day_limit(): void
+    {
+        $vehicle = Vehicle::factory()->create();
+        Device::factory()->create(['vehicle_id' => $vehicle->id, 'imei' => '865000000000112']);
+
+        Livewire::actingAs($this->user)
+            ->test(TripHistoryReplay::class, ['vehicleId' => $vehicle->id])
+            ->set('startDate', Carbon::now('Asia/Manila')->subDays(8)->format('Y-m-d'))
+            ->set('endDate', Carbon::now('Asia/Manila')->format('Y-m-d'))
+            ->call('loadTrack')
+            ->assertSee('TrackSolid history is limited to seven days per query');
+    }
+
+    public function test_date_validation_rejects_future_trip_time(): void
+    {
+        $this->travelTo(Carbon::parse('2026-11-16 04:00:00', 'Asia/Manila'));
+        $vehicle = Vehicle::factory()->create();
+        Device::factory()->create(['vehicle_id' => $vehicle->id, 'imei' => '865000000000113']);
+
+        Livewire::actingAs($this->user)
+            ->test(TripHistoryReplay::class, ['vehicleId' => $vehicle->id])
+            ->set('endTime', '04:02')
+            ->call('loadTrack')
+            ->assertSee('Trip history cannot be requested for a future time.');
     }
 }
 
