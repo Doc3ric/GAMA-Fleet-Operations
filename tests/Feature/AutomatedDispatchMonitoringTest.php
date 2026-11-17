@@ -13,6 +13,7 @@ use App\Notifications\DispatchAlertNotification;
 use App\Services\DispatchGpsTrackingService;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
 
@@ -71,7 +72,29 @@ class AutomatedDispatchMonitoringTest extends TestCase
                     'lat' => 8.5414,
                     'lng' => 124.7547,
                 ],
+                [
+                    'name' => 'Second Delivery Stop',
+                    'address' => 'Westside Distribution Point',
+                    'lat' => 8.5000,
+                    'lng' => 124.8000,
+                ],
             ],
+            'route_result' => json_encode([
+                'id' => 'osrm-0',
+                'source' => 'osrm',
+                'distance_km' => 88.5,
+                'duration_minutes' => 92,
+                'geometry' => [[8.4822, 124.6472], [8.5414, 124.7547], [8.5000, 124.8000], [8.2280, 124.2452]],
+                'geojson' => [
+                    'type' => 'LineString',
+                    'coordinates' => [[124.6472, 8.4822], [124.7547, 8.5414], [124.8000, 8.5000], [124.2452, 8.2280]],
+                ],
+                'legs' => [
+                    ['distance_km' => 20, 'duration_minutes' => 18],
+                    ['distance_km' => 30, 'duration_minutes' => 31],
+                    ['distance_km' => 38.5, 'duration_minutes' => 43],
+                ],
+            ]),
             'create_reconciliation' => 1,
             'starting_odometer' => 12000.0,
             'ending_odometer' => 12088.5,
@@ -97,10 +120,35 @@ class AutomatedDispatchMonitoringTest extends TestCase
         $routeData = $dispatch->planned_route_data;
         $this->assertIsArray($routeData);
         $this->assertNotEmpty($routeData['intermediate_destinations']);
+        $this->assertSame('osrm', $routeData['source']);
+        $this->assertSame('osrm-0', $routeData['selected_route_id']);
+        $this->assertCount(4, $routeData['geometry']);
+        $this->assertSame('Tagoloan Warehouse Stop', $routeData['intermediate_destinations'][0]['name']);
+        $this->assertSame('Second Delivery Stop', $routeData['intermediate_destinations'][1]['name']);
+        $this->assertDatabaseHas('mileage_audit_logs', [
+            'dispatch_id' => $dispatch->id,
+            'action' => 'ROUTE_CREATED',
+        ]);
     }
 
     public function test_calculate_route_api_endpoint(): void
     {
+        Http::preventStrayRequests();
+        Http::fake([
+            'router.project-osrm.org/route/v1/driving/*' => Http::response([
+                'code' => 'Ok',
+                'routes' => [[
+                    'distance' => 21000,
+                    'duration' => 1800,
+                    'geometry' => ['coordinates' => [[124.6472, 8.4822], [124.7547, 8.5414], [124.2452, 8.2280]]],
+                    'legs' => [
+                        ['distance' => 10000, 'duration' => 600],
+                        ['distance' => 11000, 'duration' => 1200],
+                    ],
+                ]],
+            ]),
+        ]);
+
         $points = [
             ['name' => 'Cagayan de Oro', 'lat' => 8.4822, 'lng' => 124.6472],
             ['name' => 'Tagoloan', 'lat' => 8.5414, 'lng' => 124.7547],
@@ -122,6 +170,8 @@ class AutomatedDispatchMonitoringTest extends TestCase
 
         $this->assertTrue($response->json('success'));
         $this->assertGreaterThan(0, $response->json('total_distance_km'));
+        $this->assertCount(1, $response->json('alternatives'));
+        $this->assertSame('LineString', $response->json('geojson.type'));
     }
 
     public function test_detects_possible_and_confirmed_route_deviations(): void
@@ -203,6 +253,47 @@ class AutomatedDispatchMonitoringTest extends TestCase
                 return $channels === ['database'];
             }
         );
+    }
+
+    public function test_uses_saved_route_geometry_for_deviation_checks(): void
+    {
+        Notification::fake();
+        $now = Carbon::parse('2026-11-13 10:00:00');
+        $dispatch = FleetDispatch::factory()->create([
+            'vehicle_id' => $this->gpsVehicle->id,
+            'origin_latitude' => 8.4800,
+            'origin_longitude' => 124.6400,
+            'destination_latitude' => 8.5400,
+            'destination_longitude' => 124.7500,
+            'planned_departure_time' => $now->copy()->subMinutes(10),
+            'actual_departure_time' => $now->copy()->subMinutes(10),
+            'planned_route' => json_encode([
+                'waypoints' => [
+                    ['name' => 'Origin', 'lat' => 8.4800, 'lng' => 124.6400],
+                    ['name' => 'Destination', 'lat' => 8.5400, 'lng' => 124.7500],
+                ],
+                'geometry' => [
+                    [8.4800, 124.6400],
+                    [8.6000, 124.6000],
+                    [8.5400, 124.7500],
+                ],
+            ]),
+            'created_by' => $this->admin->id,
+        ]);
+
+        $events = app(DispatchGpsTrackingService::class)->evaluateDispatch($dispatch, [
+            'locations' => [$this->device->imei => [
+                'lat' => 8.6000,
+                'lng' => 124.6000,
+                'speed' => 45.0,
+                'gpsTime' => $now->toDateTimeString(),
+            ]],
+            'failed_imeis' => [],
+            'status' => 'success',
+        ], $now);
+
+        $this->assertSame([], $events);
+        $this->assertSame(FleetDispatch::MONITORING_NORMAL, $dispatch->fresh()->monitoring_status);
     }
 
     public function test_detects_missed_departure_and_auto_departure_upon_movement(): void

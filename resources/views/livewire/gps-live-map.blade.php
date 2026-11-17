@@ -2,7 +2,10 @@
      x-data="gpsLiveMap({
         vehicles: @js($vehicles),
         selectedVehicleId: @entangle('selectedVehicleId'),
-        selectedImei: @entangle('selectedImei')
+        selectedImei: @entangle('selectedImei'),
+        reverseGeocodeUrl: @js(route('locations.reverseGeocode')),
+        csrfToken: @js(csrf_token()),
+        useWebSockets: @js($useWebSockets)
      })"
      x-init="initMap()"
      @if($autoRefresh) wire:poll.{{ $refreshInterval }}s="refreshLocations" @endif
@@ -63,6 +66,15 @@
 
         {{-- Refresh Controls & Timers --}}
         <div class="flex flex-wrap items-center gap-2">
+            {{-- WebSocket Streaming Indicator Pill (active when Reverb connected) --}}
+            <div x-cloak
+                 x-show="wsConnected"
+                 class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-indigo-200 bg-indigo-50 text-xs font-semibold text-indigo-800 shadow-xs dark:bg-indigo-950/60 dark:border-indigo-800 dark:text-indigo-300"
+                 title="Real-Time WebSocket Stream via Laravel Reverb">
+                <span class="h-2 w-2 rounded-full bg-indigo-500 animate-pulse"></span>
+                <span>Reverb Live Stream</span>
+            </div>
+
             {{-- Auto-refresh Pill --}}
             <button type="button"
                     wire:click="$toggle('autoRefresh')"
@@ -242,7 +254,7 @@
                 <span class="h-2 w-2 rounded-full bg-blue-600 animate-ping"></span>
                 <span>Active Map Pins: <strong x-text="visiblePinsCount">0</strong></span>
                 <span class="text-slate-300 dark:text-slate-700">|</span>
-                <span class="text-[11px] text-slate-500">Updated: {{ $lastRefreshedAt ?: 'Connecting...' }}</span>
+                <span class="text-[11px] text-slate-500">Updated: <span x-text="lastStreamedAt || '{{ $lastRefreshedAt ?: 'Connecting...' }}'"></span></span>
             </div>
 
             {{-- Leaflet Map Canvas (wire:ignore ensures DOM stays intact across Livewire refreshes) --}}
@@ -520,6 +532,7 @@
                                         @endif
                                     </div>
                                     <p class="text-[11px] text-slate-500 dark:text-slate-400 truncate">{{ $item['plate_number'] }} &bull; {{ $item['operator_driver'] }}</p>
+                                    <p class="text-[10px] text-slate-500 dark:text-slate-400 truncate" title="Nearest address to the latest GPS fix" x-text="addressFor({ has_coords: {{ $item['has_coords'] ? 'true' : 'false' }}, lat: {{ $item['lat'] ?? 'null' }}, lng: {{ $item['lng'] ?? 'null' }} })">{{ $item['has_coords'] ? 'Resolving nearby address...' : 'Current location unavailable' }}</p>
                                 </div>
                             </div>
 
@@ -577,6 +590,14 @@
             function gpsLiveMap(config) {
                 return {
                     vehicles: config.vehicles || [],
+                    reverseGeocodeUrl: config.reverseGeocodeUrl,
+                    csrfToken: config.csrfToken,
+                    useWebSockets: config.useWebSockets ?? true,
+                    wsConnected: false,
+                    wsState: 'connecting',
+                    lastStreamedAt: null,
+                    locationAddresses: {},
+                    locationAddressRequests: {},
                     map: null,
                     markers: {},
                     markerHeadings: {},
@@ -587,6 +608,8 @@
                     listenersBound: false,
 
                     initMap() {
+                        this.loadLocationAddresses();
+                        this.initEcho();
                         if (typeof L === 'undefined') {
                             setTimeout(() => this.initMap(), 100);
                             return;
@@ -669,6 +692,7 @@
                             window.addEventListener('gps-locations-refreshed', (event) => {
                                 if (event.detail && event.detail.vehicles) {
                                     this.vehicles = event.detail.vehicles;
+                                    this.loadLocationAddresses();
                                     this.renderMarkers(this.vehicles);
                                 }
                             });
@@ -686,6 +710,139 @@
                             window.addEventListener('focus-location-on-map', (event) => {
                                 this.focusCoords(event.detail.lat, event.detail.lng);
                             });
+                        }
+                    },
+
+                    initEcho() {
+                        if (!this.useWebSockets) {
+                            this.wsConnected = false;
+                            this.wsState = 'disabled';
+                            return;
+                        }
+
+                        if (!window.Echo) {
+                            console.warn('[GpsLiveMap] Laravel Echo not detected. HTTP polling fallback is active.');
+                            this.wsConnected = false;
+                            this.wsState = 'unavailable';
+                            return;
+                        }
+
+                        try {
+                            const pusher = window.Echo.connector?.pusher;
+                            if (pusher && pusher.connection) {
+                                if (pusher.connection.state === 'connected') {
+                                    this.wsConnected = true;
+                                    this.wsState = 'connected';
+                                }
+                                pusher.connection.bind('connected', () => {
+                                    this.wsConnected = true;
+                                    this.wsState = 'connected';
+                                });
+                                pusher.connection.bind('connecting', () => {
+                                    this.wsState = 'connecting';
+                                });
+                                pusher.connection.bind('disconnected', () => {
+                                    this.wsConnected = false;
+                                    this.wsState = 'disconnected';
+                                });
+                                pusher.connection.bind('failed', () => {
+                                    this.wsConnected = false;
+                                    this.wsState = 'failed';
+                                });
+                                pusher.connection.bind('unavailable', () => {
+                                    this.wsConnected = false;
+                                    this.wsState = 'unavailable';
+                                });
+                            }
+
+                            window.Echo.private('fleet-telematics')
+                                .listen('.telemetry.updated', (event) => {
+                                    this.handleRealtimeTelemetry(event);
+                                });
+                        } catch (err) {
+                            console.error('[GpsLiveMap] Reverb subscription error:', err);
+                            this.wsConnected = false;
+                            this.wsState = 'error';
+                        }
+                    },
+
+                    handleRealtimeTelemetry(event) {
+                        if (!event || !Array.isArray(event.vehicles)) return;
+
+                        this.lastStreamedAt = event.timestamp || (new Date()).toLocaleTimeString();
+                        this.wsConnected = true;
+
+                        const incomingMap = new Map();
+                        event.vehicles.forEach(v => {
+                            const key = v.id ? ('v-' + v.id) : ('d-' + v.imei);
+                            incomingMap.set(key, v);
+                        });
+
+                        this.vehicles = this.vehicles.map(v => {
+                            const key = v.id ? ('v-' + v.id) : ('d-' + v.imei);
+                            if (incomingMap.has(key)) {
+                                return Object.assign({}, v, incomingMap.get(key));
+                            }
+                            return v;
+                        });
+
+                        event.vehicles.forEach(v => {
+                            const key = v.id ? ('v-' + v.id) : ('d-' + v.imei);
+                            const exists = this.vehicles.some(item => (item.id ? ('v-' + item.id) : ('d-' + item.imei)) === key);
+                            if (!exists) {
+                                this.vehicles.push(v);
+                            }
+                        });
+
+                        this.renderMarkers(this.vehicles);
+                        this.loadLocationAddresses();
+                    },
+
+                    addressKey(item) {
+                        if (!item?.has_coords || item.lat === null || item.lng === null) return null;
+                        return `${Number(item.lat).toFixed(5)},${Number(item.lng).toFixed(5)}`;
+                    },
+
+                    addressFor(item) {
+                        const key = this.addressKey(item);
+                        if (!key) return 'Current location unavailable';
+                        const address = this.locationAddresses[key];
+                        if (!address) return 'Resolving nearby address...';
+                        return address === 'Address unavailable' ? address : `Near ${address}`;
+                    },
+
+                    async loadLocationAddresses() {
+                        const pendingItems = [];
+                        for (const item of this.vehicles) {
+                            const key = this.addressKey(item);
+                            if (!key || this.locationAddresses[key] || this.locationAddressRequests[key]) continue;
+
+                            this.locationAddressRequests[key] = true;
+                            pendingItems.push({ item, key });
+                        }
+
+                        for (let index = 0; index < pendingItems.length; index += 3) {
+                            await Promise.all(pendingItems.slice(index, index + 3).map(async ({ item, key }) => {
+                                try {
+                                    const response = await fetch(this.reverseGeocodeUrl, {
+                                        method: 'POST',
+                                        headers: {
+                                            'Content-Type': 'application/json',
+                                            'Accept': 'application/json',
+                                            'X-CSRF-TOKEN': this.csrfToken,
+                                        },
+                                        body: JSON.stringify({ latitude: item.lat, longitude: item.lng }),
+                                    });
+                                    const result = await response.json();
+                                    this.locationAddresses[key] = response.ok && result.success && result.result?.address
+                                        ? result.result.address
+                                        : 'Address unavailable';
+                                } catch (error) {
+                                    this.locationAddresses[key] = 'Address unavailable';
+                                } finally {
+                                    delete this.locationAddressRequests[key];
+                                }
+                            }));
                         }
                     },
 

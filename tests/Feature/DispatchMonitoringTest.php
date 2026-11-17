@@ -64,7 +64,11 @@ class DispatchMonitoringTest extends TestCase
             'driver_name' => 'Carlos Santos',
             'trip_date' => Carbon::today()->format('Y-m-d'),
             'starting_point' => 'Central Yard',
+            'origin_latitude' => 13.7563,
+            'origin_longitude' => 100.5018,
             'destination' => 'Batangas Port Facility',
+            'destination_latitude' => 13.7563,
+            'destination_longitude' => 120.9025,
             'planned_route' => 'Direct Expressway',
             'planned_distance_km' => 110.5,
             'planned_departure_time' => $plannedTime->format('Y-m-d\TH:i'),
@@ -88,6 +92,58 @@ class DispatchMonitoringTest extends TestCase
         $this->assertNotNull($dispatch->reconciliation);
         $this->assertEquals(110.5, $dispatch->reconciliation->planned_distance_km);
         $this->assertEquals(45000.0, $dispatch->reconciliation->starting_odometer);
+    }
+
+    public function test_create_dispatch_persists_full_route_geometry_larger_than_text_column_limit(): void
+    {
+        $geometry = array_fill(0, 12000, [8.4771422, 124.722511]);
+        $routeResult = json_encode([
+            'distance_km' => 110.5,
+            'geometry' => $geometry,
+            'source' => 'osrm',
+            'duration_minutes' => 75,
+        ], JSON_THROW_ON_ERROR);
+
+        $response = $this->actingAs($this->operator)->post(route('fleet-dispatches.store'), [
+            'vehicle_id' => $this->vehicle->id,
+            'driver_name' => 'Carlos Santos',
+            'trip_date' => Carbon::today()->format('Y-m-d'),
+            'starting_point' => 'Central Yard',
+            'origin_latitude' => 8.4771422,
+            'origin_longitude' => 124.722511,
+            'destination' => 'Batangas Port Facility',
+            'destination_latitude' => 13.7563,
+            'destination_longitude' => 120.9025,
+            'route_result' => $routeResult,
+            'planned_distance_km' => 110.5,
+            'planned_departure_time' => Carbon::now()->addHours(2)->format('Y-m-d\\TH:i'),
+            'create_reconciliation' => false,
+        ]);
+
+        $response->assertRedirect(route('fleet-dispatches.index'));
+        $dispatch = FleetDispatch::query()->sole();
+
+        $this->assertCount(12000, $dispatch->planned_route_data['geometry']);
+    }
+
+    public function test_create_dispatch_rejects_locations_without_coordinates(): void
+    {
+        $response = $this->actingAs($this->operator)->post(route('fleet-dispatches.store'), [
+            'vehicle_id' => $this->vehicle->id,
+            'trip_date' => Carbon::today()->format('Y-m-d'),
+            'starting_point' => 'Central Yard',
+            'destination' => 'Batangas Port Facility',
+            'planned_distance_km' => 110.5,
+            'planned_departure_time' => Carbon::now()->addHours(2)->format('Y-m-d\\TH:i'),
+        ]);
+
+        $response->assertSessionHasErrors([
+            'origin_latitude',
+            'origin_longitude',
+            'destination_latitude',
+            'destination_longitude',
+        ]);
+        $this->assertDatabaseCount('fleet_dispatches', 0);
     }
 
     public function test_manual_itinerary_generation_leaves_missing_measurements_pending(): void

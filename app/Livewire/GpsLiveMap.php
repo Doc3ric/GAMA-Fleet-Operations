@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Livewire;
 
+use App\Events\VehicleTelemetryStreamed;
 use App\Models\Device;
 use App\Models\Vehicle;
 use App\Services\TrackSolidApiService;
@@ -98,6 +99,12 @@ class GpsLiveMap extends Component
      * The user can toggle this with the "Auto-refresh" button on the page.
      */
     public bool $autoRefresh = true;
+
+    /**
+     * Whether real-time WebSockets streaming via Laravel Reverb is active.
+     * When enabled, live coordinates stream over WebSockets without requiring continuous HTTP polling.
+     */
+    public bool $useWebSockets = true;
 
     /**
      * How many seconds to wait between automatic GPS data refreshes.
@@ -231,9 +238,38 @@ class GpsLiveMap extends Component
             $this->lastRefreshedAt = now()->format('h:i:s A');
 
             // Notify the Leaflet map JavaScript to redraw all pins with the new positions.
-            // getFilteredVehicles() applies the user's current search and status filter
-            // so only the relevant vehicles are sent to the map.
             $this->dispatch('gps-locations-refreshed', vehicles: $this->getFilteredVehicles());
+
+            // Broadcast real-time telematics via Laravel Reverb if enabled and server is available
+            if ($this->useWebSockets) {
+                try {
+                    $canBroadcast = app()->environment('testing');
+                    if (! $canBroadcast && config('broadcasting.default') === 'reverb') {
+                        $socket = @fsockopen(
+                            (string) config('reverb.servers.reverb.hostname', '127.0.0.1'),
+                            (int) config('reverb.servers.reverb.port', 8080),
+                            $errno,
+                            $errstr,
+                            0.02
+                        );
+                        if ($socket) {
+                            fclose($socket);
+                            $canBroadcast = true;
+                        }
+                    }
+
+                    if ($canBroadcast) {
+                        $fleet = $this->getNormalizedFleetData();
+                        VehicleTelemetryStreamed::dispatch(
+                            array_merge($fleet['vehicles'], $fleet['unmapped']),
+                            $fleet['summary'],
+                            $this->lastRefreshedAt
+                        );
+                    }
+                } catch (\Throwable) {
+                    // Ignore broadcast exceptions to ensure Livewire refresh is never blocked
+                }
+            }
 
         } catch (Exception $e) {
             // Something went wrong (network timeout, bad API response, etc.).
@@ -608,13 +644,24 @@ class GpsLiveMap extends Component
                 $state = 'sync_failure';
                 $stateLabel = 'Synchronization Failed';
                 $stateColor = 'rose';
-                $movementState = 'unknown';
+                $movementState = 'offline';
                 $counts['sync_failure']++;
+                $counts['offline']++;
             } elseif (! $statusKnown) {
-                $state = 'unknown';
-                $stateLabel = 'Status Unknown';
-                $stateColor = 'slate';
-                $movementState = 'unknown';
+                if ($hasCoords) {
+                    $state = 'parked';
+                    $stateLabel = 'Parked (Last Known)';
+                    $stateColor = 'blue';
+                    $movementState = 'stationary';
+                    $counts['parked']++;
+                    $counts['stationary']++;
+                } else {
+                    $state = 'offline';
+                    $stateLabel = 'Offline';
+                    $stateColor = 'slate';
+                    $movementState = 'offline';
+                    $counts['offline']++;
+                }
                 $counts['unknown']++;
             } elseif (! $isOnline) {
                 $state = 'offline';
@@ -885,13 +932,24 @@ class GpsLiveMap extends Component
                 $state = 'sync_failure';
                 $stateLabel = 'Synchronization Failed';
                 $stateColor = 'rose';
-                $movementState = 'unknown';
+                $movementState = 'offline';
                 $counts['sync_failure']++;
+                $counts['offline']++;
             } elseif (! $statusKnown) {
-                $state = 'unknown';
-                $stateLabel = 'Status Unknown';
-                $stateColor = 'slate';
-                $movementState = 'unknown';
+                if ($hasCoords) {
+                    $state = 'parked';
+                    $stateLabel = 'Parked (Last Known)';
+                    $stateColor = 'blue';
+                    $movementState = 'stationary';
+                    $counts['parked']++;
+                    $counts['stationary']++;
+                } else {
+                    $state = 'offline';
+                    $stateLabel = 'Offline';
+                    $stateColor = 'slate';
+                    $movementState = 'offline';
+                    $counts['offline']++;
+                }
                 $counts['unknown']++;
             } elseif (! $isOnline) {
                 $state = 'offline';

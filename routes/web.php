@@ -86,6 +86,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Location Directory
     Route::get('locations/map', [LocationController::class, 'map'])->name('locations.map');
     Route::get('locations/search-places', [LocationController::class, 'searchPlaces'])->name('locations.searchPlaces');
+    Route::post('locations/reverse-geocode', [LocationController::class, 'reverseGeocode'])->name('locations.reverseGeocode');
     Route::post('locations/resolve-coordinates', [LocationController::class, 'resolveCoordinates'])->name('locations.resolveCoordinates');
     Route::get('locations/template/download', [LocationController::class, 'downloadTemplate'])->name('locations.downloadTemplate');
     Route::get('locations/export/excel', [LocationController::class, 'exportExcel'])->name('locations.exportExcel');

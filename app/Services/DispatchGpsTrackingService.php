@@ -333,7 +333,10 @@ class DispatchGpsTrackingService
         $lng = $point['lng'];
 
         $corridor = $this->deviationCorridorMeters;
-        $waypoints = $this->extractRouteWaypoints($dispatch);
+        $waypoints = $this->extractRouteGeometry($dispatch);
+        if (count($waypoints) < 2) {
+            $waypoints = $this->extractRouteWaypoints($dispatch);
+        }
 
         if (count($waypoints) < 2) {
             return $events;
@@ -723,6 +726,45 @@ class DispatchGpsTrackingService
         }
 
         return $waypoints;
+    }
+
+    /**
+     * Extract the detailed saved route line for corridor checks, falling back to stop coordinates.
+     *
+     * @return list<array{lat: float, lng: float}>
+     */
+    protected function extractRouteGeometry(FleetDispatch $dispatch): array
+    {
+        $data = $dispatch->planned_route_data;
+        $geometry = $data['geometry'] ?? [];
+
+        if (! is_array($geometry) || count($geometry) < 2) {
+            $coordinates = $data['geojson']['coordinates'] ?? [];
+            if (is_array($coordinates)) {
+                $geometry = array_map(
+                    fn (array $coordinate): array => [$coordinate[1] ?? null, $coordinate[0] ?? null],
+                    array_filter($coordinates, 'is_array'),
+                );
+            }
+        }
+
+        $points = [];
+        foreach ($geometry as $coordinate) {
+            if (! is_array($coordinate) || ! isset($coordinate[0], $coordinate[1])
+                || ! is_numeric($coordinate[0]) || ! is_numeric($coordinate[1])) {
+                continue;
+            }
+
+            $latitude = (float) $coordinate[0];
+            $longitude = (float) $coordinate[1];
+            if ($latitude < -90 || $latitude > 90 || $longitude < -180 || $longitude > 180) {
+                continue;
+            }
+
+            $points[] = ['lat' => $latitude, 'lng' => $longitude];
+        }
+
+        return $points;
     }
 
     /**

@@ -7,6 +7,7 @@ use App\Models\AdvancedItinerary;
 use App\Models\DispatchMonitorEvent;
 use App\Models\FleetDispatch;
 use App\Models\Location;
+use App\Models\MileageAuditLog;
 use App\Models\Vehicle;
 use App\Services\DispatchGpsTrackingService;
 use App\Services\DispatchMonitoringService;
@@ -18,6 +19,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\View\View;
 use Maatwebsite\Excel\Facades\Excel;
@@ -127,14 +129,19 @@ class FleetDispatchController extends Controller
             'driver_name' => ['nullable', 'string', 'max:100'],
             'trip_date' => ['required', 'date'],
             'starting_point' => ['required', 'string', 'max:200'],
-            'origin_latitude' => ['nullable', 'numeric', 'between:-90,90'],
-            'origin_longitude' => ['nullable', 'numeric', 'between:-180,180'],
+            'origin_latitude' => ['required', 'numeric', 'between:-90,90'],
+            'origin_longitude' => ['required', 'numeric', 'between:-180,180'],
             'destination' => ['required', 'string', 'max:255'],
-            'destination_latitude' => ['nullable', 'numeric', 'between:-90,90'],
-            'destination_longitude' => ['nullable', 'numeric', 'between:-180,180'],
+            'destination_latitude' => ['required', 'numeric', 'between:-90,90'],
+            'destination_longitude' => ['required', 'numeric', 'between:-180,180'],
             'planned_route' => ['nullable'],
-            'waypoints' => ['nullable', 'array'],
-            'planned_distance_km' => ['required', 'numeric', 'min:0'],
+            'waypoints' => ['nullable', 'array', 'max:20'],
+            'waypoints.*.name' => ['required', 'string', 'max:255'],
+            'waypoints.*.address' => ['nullable', 'string', 'max:255'],
+            'waypoints.*.lat' => ['required', 'numeric', 'between:-90,90'],
+            'waypoints.*.lng' => ['required', 'numeric', 'between:-180,180'],
+            'route_result' => ['nullable', 'json', 'max:500000'],
+            'planned_distance_km' => ['required', 'numeric', 'min:0.01'],
             'planned_departure_time' => ['required', 'date'],
             'actual_departure_time' => ['nullable', 'date'],
             'departure_source' => ['nullable', 'string', 'in:authorized_dispatch,driver_submitted,gps_movement'],
@@ -145,67 +152,116 @@ class FleetDispatchController extends Controller
             'ending_odometer' => ['nullable', 'numeric', 'min:0'],
         ]);
 
-        // Process structured multi-stop waypoints into planned_route JSON if provided
-        $waypoints = $request->input('waypoints', []);
-        $plannedRouteData = [];
+        $formattedWaypoints = collect($validated['waypoints'] ?? [])->map(fn (array $waypoint): array => [
+            'name' => $waypoint['name'],
+            'address' => $waypoint['address'] ?? $waypoint['name'],
+            'lat' => (float) $waypoint['lat'],
+            'lng' => (float) $waypoint['lng'],
+        ])->all();
+        $plannedRouteData = [
+            'version' => 2,
+            'origin' => [
+                'name' => $validated['starting_point'],
+                'lat' => (float) $validated['origin_latitude'],
+                'lng' => (float) $validated['origin_longitude'],
+            ],
+            'intermediate_destinations' => $formattedWaypoints,
+            'waypoints' => array_merge(
+                [[
+                    'name' => $validated['starting_point'],
+                    'lat' => (float) $validated['origin_latitude'],
+                    'lng' => (float) $validated['origin_longitude'],
+                ]],
+                $formattedWaypoints,
+                [[
+                    'name' => $validated['destination'],
+                    'lat' => (float) $validated['destination_latitude'],
+                    'lng' => (float) $validated['destination_longitude'],
+                ]],
+            ),
+            'destination' => [
+                'name' => $validated['destination'],
+                'lat' => (float) $validated['destination_latitude'],
+                'lng' => (float) $validated['destination_longitude'],
+            ],
+            'distance_km' => (float) $validated['planned_distance_km'],
+        ];
 
-        if (! empty($waypoints) && is_array($waypoints)) {
-            $formattedWaypoints = [];
-            foreach ($waypoints as $wp) {
-                if (! empty($wp['address']) || ! empty($wp['name'])) {
-                    $formattedWaypoints[] = [
-                        'name' => (string) ($wp['name'] ?? $wp['address']),
-                        'address' => (string) ($wp['address'] ?? ($wp['name'] ?? '')),
-                        'lat' => isset($wp['lat']) && is_numeric($wp['lat']) ? (float) $wp['lat'] : null,
-                        'lng' => isset($wp['lng']) && is_numeric($wp['lng']) ? (float) $wp['lng'] : null,
-                    ];
-                }
+        $routeResult = json_decode($validated['route_result'] ?? '{}', true);
+        if (is_array($routeResult)) {
+            if (isset($routeResult['distance_km']) && is_numeric($routeResult['distance_km']) && (float) $routeResult['distance_km'] > 0) {
+                $validated['planned_distance_km'] = (float) $routeResult['distance_km'];
+                $plannedRouteData['distance_km'] = (float) $routeResult['distance_km'];
             }
 
-            $plannedRouteData = [
-                'origin' => [
-                    'name' => $validated['starting_point'],
-                    'lat' => $validated['origin_latitude'] ?? null,
-                    'lng' => $validated['origin_longitude'] ?? null,
-                ],
-                'intermediate_destinations' => $formattedWaypoints,
-                'waypoints' => array_values(array_filter(array_merge(
-                    [[
-                        'name' => $validated['starting_point'],
-                        'lat' => $validated['origin_latitude'] ?? null,
-                        'lng' => $validated['origin_longitude'] ?? null,
-                    ]],
-                    $formattedWaypoints,
-                    [[
-                        'name' => $validated['destination'],
-                        'lat' => $validated['destination_latitude'] ?? null,
-                        'lng' => $validated['destination_longitude'] ?? null,
-                    ]]
-                ), fn ($pt) => $pt['lat'] !== null && $pt['lng'] !== null)),
-                'destination' => [
-                    'name' => $validated['destination'],
-                    'lat' => $validated['destination_latitude'] ?? null,
-                    'lng' => $validated['destination_longitude'] ?? null,
-                ],
-                'distance_km' => (float) $validated['planned_distance_km'],
-            ];
+            $geometry = [];
+            foreach ($routeResult['geometry'] ?? [] as $coordinate) {
+                if (! is_array($coordinate) || ! isset($coordinate[0], $coordinate[1])
+                    || ! is_numeric($coordinate[0]) || ! is_numeric($coordinate[1])) {
+                    $geometry = [];
+                    break;
+                }
 
-            $validated['planned_route'] = json_encode($plannedRouteData);
-        } elseif (is_array($request->input('planned_route'))) {
-            $validated['planned_route'] = json_encode($request->input('planned_route'));
+                $latitude = (float) $coordinate[0];
+                $longitude = (float) $coordinate[1];
+                if ($latitude < -90 || $latitude > 90 || $longitude < -180 || $longitude > 180) {
+                    $geometry = [];
+                    break;
+                }
+                $geometry[] = [$latitude, $longitude];
+            }
+
+            if (count($geometry) >= 2) {
+                $plannedRouteData['geometry'] = $geometry;
+                $plannedRouteData['geojson'] = [
+                    'type' => 'LineString',
+                    'coordinates' => array_map(fn (array $coordinate): array => [$coordinate[1], $coordinate[0]], $geometry),
+                ];
+            }
+
+            if (is_array($routeResult['legs'] ?? null)) {
+                $plannedRouteData['legs'] = array_slice($routeResult['legs'], 0, 21);
+            }
+            if (in_array($routeResult['source'] ?? null, [RoutingService::SOURCE_OSRM, 'haversine_estimate'], true)) {
+                $plannedRouteData['source'] = $routeResult['source'];
+            }
+            if (isset($routeResult['duration_minutes']) && is_numeric($routeResult['duration_minutes'])) {
+                $plannedRouteData['duration_minutes'] = (int) $routeResult['duration_minutes'];
+            }
+            if (isset($routeResult['id']) && is_string($routeResult['id'])) {
+                $plannedRouteData['selected_route_id'] = mb_substr($routeResult['id'], 0, 80);
+            }
         }
 
-        $dispatch = $this->dispatchService->createDispatch($validated, $request->user()->id);
-
-        // Automatically create associated Mileage Reconciliation in DRAFT
-        if ($request->boolean('create_reconciliation', true)) {
-            $this->reconciliationService->createReconciliation($dispatch, [
-                'planned_distance_km' => $dispatch->planned_distance_km,
-                'starting_odometer' => $validated['starting_odometer'] ?? null,
-                'ending_odometer' => $validated['ending_odometer'] ?? null,
-                'notes' => $dispatch->notes,
-            ], $request->user()->id);
+        if (is_string($request->input('planned_route')) && $request->input('planned_route') !== '') {
+            $plannedRouteData['route_description'] = $request->input('planned_route');
         }
+
+        $validated['planned_route'] = json_encode($plannedRouteData, JSON_THROW_ON_ERROR);
+
+        $dispatch = DB::transaction(function () use ($validated, $request, $plannedRouteData): FleetDispatch {
+            $dispatch = $this->dispatchService->createDispatch($validated, $request->user()->id);
+
+            MileageAuditLog::record(
+                action: MileageAuditLog::ACTION_ROUTE_CREATED,
+                dispatchId: $dispatch->id,
+                userId: $request->user()->id,
+                newValues: $plannedRouteData,
+                remarks: "Planned route created for dispatch {$dispatch->trip_number}.",
+                ipAddress: $request->ip(),
+            );
+
+            if ($request->boolean('create_reconciliation', true)) {
+                $this->reconciliationService->createReconciliation($dispatch, [
+                    'planned_distance_km' => $dispatch->planned_distance_km,
+                    'starting_odometer' => $validated['starting_odometer'] ?? null,
+                    'ending_odometer' => $validated['ending_odometer'] ?? null,
+                    'notes' => $dispatch->notes,
+                ], $request->user()->id);
+            }
+
+            return $dispatch;
+        });
 
         return redirect()->route('fleet-dispatches.index')
             ->with('status', "Dispatch trip {$dispatch->trip_number} created successfully.");
@@ -219,10 +275,10 @@ class FleetDispatchController extends Controller
         Gate::authorize('viewAny', FleetDispatch::class);
 
         $request->validate([
-            'points' => ['required', 'array', 'min:2'],
+            'points' => ['required', 'array', 'min:2', 'max:22'],
             'points.*.lat' => ['required', 'numeric', 'between:-90,90'],
             'points.*.lng' => ['required', 'numeric', 'between:-180,180'],
-            'points.*.name' => ['nullable', 'string'],
+            'points.*.name' => ['nullable', 'string', 'max:255'],
         ]);
 
         $points = $request->input('points', []);

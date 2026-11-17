@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Location;
 use Exception;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -20,6 +21,76 @@ class GeocodingService
         if ($query === '') {
             return [];
         }
+
+        return Cache::remember(
+            'geocoding:search:'.sha1(mb_strtolower($query)),
+            now()->addMinutes(15),
+            fn (): array => $this->searchUncached($query),
+        );
+    }
+
+    /**
+     * Reverse geocode a map pin using the existing free Photon/OpenStreetMap service.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function reverse(float $latitude, float $longitude): ?array
+    {
+        $cacheKey = 'geocoding:reverse:'.number_format($latitude, 5, '.', '').':'.number_format($longitude, 5, '.', '');
+
+        return Cache::remember($cacheKey, now()->addHours(12), function () use ($latitude, $longitude): ?array {
+            try {
+                $response = Http::connectTimeout(3)
+                    ->timeout(5)
+                    ->withHeaders(['User-Agent' => config('app.name').' fleet dispatch location search'])
+                    ->get('https://photon.komoot.io/reverse/', [
+                        'lat' => $latitude,
+                        'lon' => $longitude,
+                    ]);
+
+                if (! $response->successful()) {
+                    return null;
+                }
+
+                $feature = $response->json('features.0');
+                $coordinates = $feature['geometry']['coordinates'] ?? null;
+                $properties = $feature['properties'] ?? [];
+
+                if (! is_array($coordinates) || count($coordinates) < 2 || empty($properties)) {
+                    return null;
+                }
+
+                $name = $properties['name'] ?? $properties['street'] ?? $properties['district'] ?? $properties['city'] ?? 'Pinned location';
+                $subtitle = implode(', ', array_filter([
+                    $properties['street'] ?? null,
+                    $properties['district'] ?? null,
+                    $properties['city'] ?? $properties['town'] ?? null,
+                    $properties['state'] ?? null,
+                ]));
+
+                return [
+                    'title' => $name,
+                    'subtitle' => $subtitle,
+                    'latitude' => round((float) $coordinates[1], 7),
+                    'longitude' => round((float) $coordinates[0], 7),
+                    'address' => $subtitle !== '' ? $subtitle : $name,
+                    'source' => 'photon_reverse',
+                    'source_label' => 'OpenStreetMap address',
+                    'is_exact' => false,
+                ];
+            } catch (Exception $e) {
+                Log::warning('Photon reverse geocoding error: '.$e->getMessage());
+
+                return null;
+            }
+        });
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function searchUncached(string $query): array
+    {
 
         $results = [];
 
@@ -64,6 +135,8 @@ class GeocodingService
         // 3. Search local company locations directory
         try {
             $localLocations = Location::active()
+                ->whereNotNull('latitude')
+                ->whereNotNull('longitude')
                 ->where(function ($q) use ($query) {
                     $q->where('official_name', 'like', "%{$query}%")
                         ->orWhere('code', 'like', "%{$query}%")
@@ -179,6 +252,9 @@ class GeocodingService
             $response = Http::timeout(5)->get('https://photon.komoot.io/api/', [
                 'q' => $query,
                 'limit' => 5,
+                'lat' => 8.4822,
+                'lon' => 124.6472,
+                'zoom' => 12,
             ]);
 
             if (! $response->successful()) {

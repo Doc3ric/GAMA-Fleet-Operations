@@ -165,14 +165,18 @@ class RoutingServiceTest extends TestCase
                 'code' => 'Ok',
                 'routes' => [
                     [
-                        'distance' => 10000.0,
-                        'duration' => 600.0,
+                        'distance' => 20000.0,
+                        'duration' => 1200.0,
                         'geometry' => [
                             'coordinates' => [
                                 [124.6472, 8.4822],
                                 [124.7000, 8.5100],
                                 [124.7547, 8.5414],
                             ],
+                        ],
+                        'legs' => [
+                            ['distance' => 10000.0, 'duration' => 600.0],
+                            ['distance' => 10000.0, 'duration' => 600.0],
                         ],
                     ],
                 ],
@@ -191,5 +195,68 @@ class RoutingServiceTest extends TestCase
         $this->assertCount(2, $route['legs']);
         $this->assertEquals(20.0, $route['total_distance_km']); // 2 legs of 10.0km each
         $this->assertNotEmpty($route['geometry']);
+    }
+
+    public function test_uses_one_haversine_fallback_when_osrm_is_unavailable(): void
+    {
+        Http::preventStrayRequests();
+        Http::fake([
+            'router.project-osrm.org/route/v1/driving/*' => Http::response([], 503),
+        ]);
+
+        $route = $this->service->calculateMultiPointRoute([
+            ['name' => 'Fallback Origin', 'lat' => 7.1111, 'lng' => 124.1111],
+            ['name' => 'Fallback Destination', 'lat' => 7.2222, 'lng' => 124.2222],
+        ]);
+
+        $this->assertSame('haversine_estimate', $route['source']);
+        $this->assertSame('haversine_estimate', $route['alternatives'][0]['source']);
+        $this->assertSame(1, count($route['legs']));
+        $this->assertSame('haversine_estimate', $route['legs'][0]['source']);
+        Http::assertSentCount(1);
+    }
+
+    public function test_returns_osrm_route_alternatives_with_ordered_leg_details(): void
+    {
+        Http::preventStrayRequests();
+        Http::fake([
+            'router.project-osrm.org/route/v1/driving/*' => Http::response([
+                'code' => 'Ok',
+                'routes' => [
+                    [
+                        'distance' => 24000,
+                        'duration' => 1800,
+                        'geometry' => ['coordinates' => [[124.1, 8.1], [124.15, 8.15], [124.2, 8.2]]],
+                        'legs' => [
+                            ['distance' => 10000, 'duration' => 600],
+                            ['distance' => 14000, 'duration' => 1200],
+                        ],
+                    ],
+                    [
+                        'distance' => 27000,
+                        'duration' => 2100,
+                        'geometry' => ['coordinates' => [[124.1, 8.1], [124.12, 8.18], [124.2, 8.2]]],
+                        'legs' => [
+                            ['distance' => 12000, 'duration' => 900],
+                            ['distance' => 15000, 'duration' => 1200],
+                        ],
+                    ],
+                ],
+            ]),
+        ]);
+
+        $route = $this->service->calculateMultiPointRoute([
+            ['name' => 'Origin', 'lat' => 8.1, 'lng' => 124.1],
+            ['name' => 'Warehouse', 'lat' => 8.15, 'lng' => 124.15],
+            ['name' => 'Destination', 'lat' => 8.2, 'lng' => 124.2],
+        ]);
+
+        $this->assertTrue($route['success']);
+        $this->assertSame(2, count($route['alternatives']));
+        $this->assertSame(24.0, $route['total_distance_km']);
+        $this->assertSame('Origin', $route['legs'][0]['from_name']);
+        $this->assertSame('Warehouse', $route['legs'][0]['to_name']);
+        $this->assertSame([124.1, 8.1], $route['geojson']['coordinates'][0]);
+        $this->assertSame('osrm', $route['source']);
     }
 }

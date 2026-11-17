@@ -14,6 +14,8 @@ class MileageAuditLog extends Model
 
     public const ACTION_CREATED = 'CREATED';
 
+    public const ACTION_ROUTE_CREATED = 'ROUTE_CREATED';
+
     public const ACTION_UPDATED = 'UPDATED';
 
     public const ACTION_SUBMITTED = 'SUBMITTED';

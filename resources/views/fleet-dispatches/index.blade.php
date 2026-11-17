@@ -10,6 +10,17 @@
                 border-radius: 1rem;
                 z-index: 10;
             }
+            .dispatch-route-map {
+                height: 390px;
+            }
+            .dispatch-route-map-expanded {
+                height: 70vh;
+            }
+            @media (min-width: 1024px) {
+                .dispatch-route-map {
+                    height: 590px;
+                }
+            }
             .leaflet-popup-content-wrapper {
                 border-radius: 0.75rem;
                 padding: 4px;
@@ -23,6 +34,8 @@
         vehicles: {{ Js::from($vehicles) }},
         locations: {{ Js::from($locations) }},
         calculateRouteUrl: '{{ route('fleet-dispatches.calculate-route') }}',
+        searchPlacesUrl: '{{ route('locations.searchPlaces') }}',
+        reverseGeocodeUrl: '{{ route('locations.reverseGeocode') }}',
         csrfToken: '{{ csrf_token() }}'
     })">
 
@@ -430,7 +443,7 @@
         {{-- Exactly follows your attached Fleet Dispatch workflow diagram: --}}
         {{-- 1. Create -> 2. Choose Date & Vehicle -> 3. Origin (Manual + Map) -> 4. Intermediate Destinations (Add multiple times) -> 5. Final Dest (Manual + Map) -> 6. Calculate All Distance -> 7. Save --}}
         <div x-show="showCreateModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs">
-            <div class="w-full max-w-3xl rounded-2xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-800 p-6 space-y-5 max-h-[92vh] overflow-y-auto">
+            <div class="w-full max-w-7xl rounded-2xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-800 p-6 space-y-5 max-h-[92vh] overflow-y-auto">
                 <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
                     <div>
                         <h3 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
@@ -446,6 +459,7 @@
 
                 <form action="{{ route('fleet-dispatches.store') }}" method="POST" class="space-y-5" @submit="onFormSubmit($event)">
                     @csrf
+                    <input type="hidden" name="route_result" x-model="routeResultJson">
 
                     {{-- DIAGRAM STEP 1: CHOOSE DATE & CHOOSE VEHICLE --}}
                     <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/60 space-y-3">
@@ -514,8 +528,11 @@
                                 <span class="flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-[10px] font-bold text-white">2</span>
                                 <span>Multi-Stop Route Builder & Waypoints</span>
                             </div>
-                            <span class="text-[10px] text-slate-400">Manual address input & map pin</span>
+                                <span class="text-[10px] text-slate-400">Search, add stops, and pin locations on the map</span>
                         </div>
+
+                        <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] gap-4 items-start">
+                        <div class="space-y-4">
 
                         {{-- ORIGIN LOCATION (MANUAL INPUT AND POINT THE MAP) --}}
                         <div class="rounded-xl bg-white dark:bg-slate-900 p-3 border border-slate-200 dark:border-slate-700 space-y-2">
@@ -524,78 +541,90 @@
                                     <span class="h-2 w-2 rounded-full bg-emerald-500"></span>
                                     <span>Origin Location (Starting Point) *</span>
                                 </label>
-                                <button type="button" @click="openMapPicker('origin')"
+                                <button type="button" @click.stop="openMapPicker('origin')"
                                         class="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-700 dark:text-blue-400 cursor-pointer">
                                     <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
                                     </svg>
-                                    Point on Map
+                                    Pin origin
                                 </button>
                             </div>
-                            <div class="grid grid-cols-1 sm:grid-cols-12 gap-2">
-                                <div class="sm:col-span-7">
-                                    <input type="text" name="starting_point" x-model="origin.address" required placeholder="e.g. Cagayan de Oro Central Yard"
-                                           class="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-1.5 text-xs text-slate-800 dark:text-white outline-none">
-                                </div>
-                                <div class="sm:col-span-5 flex items-center gap-1">
-                                    <input type="number" step="0.000001" name="origin_latitude" x-model="origin.lat" placeholder="Lat"
-                                           class="w-1/2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-2 py-1.5 text-[11px] font-mono">
-                                    <input type="number" step="0.000001" name="origin_longitude" x-model="origin.lng" placeholder="Lng"
-                                           class="w-1/2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-2 py-1.5 text-[11px] font-mono">
+                            <div class="relative">
+                                <input type="text" name="starting_point" x-model="origin.address" @input="onAddressInput('origin', null, $event.target.value)" @keydown.enter.prevent="selectFirstSuggestion('origin')" required autocomplete="off" placeholder="Search a yard, address, or landmark"
+                                       class="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-xs text-slate-800 dark:text-white outline-none focus:border-blue-500">
+                                <div x-show="origin.suggestions.length > 0" x-cloak class="absolute left-0 right-0 top-full z-20 mt-1 max-h-56 overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl">
+                                    <template x-for="(suggestion, suggestionIndex) in origin.suggestions" :key="`${suggestion.source}-${suggestion.latitude}-${suggestionIndex}`">
+                                        <button type="button" @click="selectLocation('origin', suggestion)" class="block w-full border-b border-slate-100 dark:border-slate-800 px-3 py-2 text-left last:border-0 hover:bg-blue-50 dark:hover:bg-slate-800">
+                                            <span class="block text-xs font-semibold text-slate-800 dark:text-white" x-text="suggestion.title"></span>
+                                            <span class="block text-[10px] text-slate-500" x-text="suggestion.subtitle || suggestion.source_label"></span>
+                                        </button>
+                                    </template>
                                 </div>
                             </div>
+                            <input type="hidden" name="origin_latitude" x-model="origin.lat">
+                            <input type="hidden" name="origin_longitude" x-model="origin.lng">
+                            <div class="text-[10px] text-slate-500" x-text="origin.lat && origin.lng ? `Pinned ${Number(origin.lat).toFixed(5)}, ${Number(origin.lng).toFixed(5)}` : 'Choose a search result or pin this location on the map.'"></div>
                         </div>
 
                         {{-- INTERMEDIATE DESTINATIONS (ADD MULTIPLE TIMES) --}}
                         {{-- Matches the diagram's "Destination (MANUAL INPUT AND POINT THE MAP) THIS FUNCTION CAN BE ADD MULTIPLE TIMES" --}}
                         <div class="space-y-2">
                             <div class="flex items-center justify-between">
-                                <span class="text-xs font-bold text-slate-700 dark:text-slate-300">
-                                    Intermediate Destinations / Stops (<span x-text="intermediateStops.length"></span>)
-                                </span>
+                                <div>
+                                    <span class="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                                        Intermediate Destinations / Stops (<span x-text="intermediateStops.length"></span>)
+                                    </span>
+                                    <span class="text-[10px] text-slate-400">Drag a stop or use arrows to change its order.</span>
+                                </div>
                                 <button type="button" @click="addIntermediateStop()"
                                         class="inline-flex items-center gap-1 rounded-lg bg-blue-50 dark:bg-blue-900/40 border border-blue-200 px-2.5 py-1 text-[11px] font-bold text-blue-700 dark:text-blue-300 hover:bg-blue-100 cursor-pointer">
                                     <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                                     </svg>
-                                    Add Stop Multiple Times
+                                    Add stop
                                 </button>
                             </div>
 
                             <template x-for="(stop, index) in intermediateStops" :key="index">
-                                <div class="rounded-xl bg-white dark:bg-slate-900 p-3 border border-slate-200 dark:border-slate-700 space-y-2">
+                                <div draggable="true" @dragstart.stop="draggingStopIndex = index" @dragover.prevent @drop.stop.prevent="moveIntermediateStop(draggingStopIndex, index)" @dragend="draggingStopIndex = null" class="rounded-xl bg-white dark:bg-slate-900 p-3 border border-slate-200 dark:border-slate-700 space-y-2 cursor-grab active:cursor-grabbing">
                                     <div class="flex items-center justify-between">
                                         <span class="text-xs font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
                                             <span class="flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-[9px] font-bold text-white" x-text="index + 1"></span>
                                             <span>Intermediate Stop #<span x-text="index + 1"></span></span>
                                         </span>
                                         <div class="flex items-center gap-3">
-                                            <button type="button" @click="openMapPicker('intermediate', index)"
+                                            <button type="button" @click="moveIntermediateStop(index, index - 1)" :disabled="index === 0" class="text-[10px] font-bold text-slate-400 hover:text-blue-600 disabled:opacity-30" aria-label="Move stop up">↑</button>
+                                            <button type="button" @click="moveIntermediateStop(index, index + 1)" :disabled="index === intermediateStops.length - 1" class="text-[10px] font-bold text-slate-400 hover:text-blue-600 disabled:opacity-30" aria-label="Move stop down">↓</button>
+                                            <button type="button" @click.stop="openMapPicker('intermediate', index)"
                                                     class="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-700 cursor-pointer">
                                                 <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                                                     <path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
                                                     <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
                                                 </svg>
-                                                Point on Map
+                                                Pin stop
                                             </button>
                                             <button type="button" @click="removeIntermediateStop(index)" class="text-red-500 hover:text-red-700 text-xs font-bold cursor-pointer">
                                                 Remove &times;
                                             </button>
                                         </div>
                                     </div>
-                                    <div class="grid grid-cols-1 sm:grid-cols-12 gap-2">
-                                        <div class="sm:col-span-7">
-                                            <input type="text" :name="`waypoints[${index}][name]`" x-model="stop.address" required placeholder="Stop address or landmark"
-                                                   class="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-1.5 text-xs text-slate-800 dark:text-white outline-none">
-                                        </div>
-                                        <div class="sm:col-span-5 flex items-center gap-1">
-                                            <input type="number" step="0.000001" :name="`waypoints[${index}][lat]`" x-model="stop.lat" placeholder="Lat"
-                                                   class="w-1/2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-2 py-1.5 text-[11px] font-mono">
-                                            <input type="number" step="0.000001" :name="`waypoints[${index}][lng]`" x-model="stop.lng" placeholder="Lng"
-                                                   class="w-1/2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-2 py-1.5 text-[11px] font-mono">
+                                    <div class="relative">
+                                        <input type="text" :name="`waypoints[${index}][name]`" x-model="stop.address" @input="onAddressInput('intermediate', index, $event.target.value)" @keydown.enter.prevent="selectFirstSuggestion('intermediate', index)" required autocomplete="off" placeholder="Search for a stop or landmark"
+                                               class="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-xs text-slate-800 dark:text-white outline-none focus:border-blue-500">
+                                        <div x-show="stop.suggestions.length > 0" x-cloak class="absolute left-0 right-0 top-full z-20 mt-1 max-h-56 overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl">
+                                            <template x-for="(suggestion, suggestionIndex) in stop.suggestions" :key="`${suggestion.source}-${suggestion.latitude}-${suggestionIndex}`">
+                                                <button type="button" @click="selectLocation('intermediate', suggestion, index)" class="block w-full border-b border-slate-100 dark:border-slate-800 px-3 py-2 text-left last:border-0 hover:bg-blue-50 dark:hover:bg-slate-800">
+                                                    <span class="block text-xs font-semibold text-slate-800 dark:text-white" x-text="suggestion.title"></span>
+                                                    <span class="block text-[10px] text-slate-500" x-text="suggestion.subtitle || suggestion.source_label"></span>
+                                                </button>
+                                            </template>
                                         </div>
                                     </div>
+                                    <input type="hidden" :name="`waypoints[${index}][address]`" x-model="stop.address">
+                                    <input type="hidden" :name="`waypoints[${index}][lat]`" x-model="stop.lat">
+                                    <input type="hidden" :name="`waypoints[${index}][lng]`" x-model="stop.lng">
+                                    <div class="text-[10px] text-slate-500" x-text="stop.lat && stop.lng ? `Pinned ${Number(stop.lat).toFixed(5)}, ${Number(stop.lng).toFixed(5)}` : 'Select a result or pin the stop on the map.'"></div>
                                 </div>
                             </template>
                         </div>
@@ -607,27 +636,30 @@
                                     <span class="h-2 w-2 rounded-full bg-red-500"></span>
                                     <span>Final Destination *</span>
                                 </label>
-                                <button type="button" @click="openMapPicker('destination')"
+                                <button type="button" @click.stop="openMapPicker('destination')"
                                         class="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-700 dark:text-blue-400 cursor-pointer">
                                     <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
                                     </svg>
-                                    Point on Map
+                                    Pin destination
                                 </button>
                             </div>
-                            <div class="grid grid-cols-1 sm:grid-cols-12 gap-2">
-                                <div class="sm:col-span-7">
-                                    <input type="text" name="destination" x-model="destination.address" required placeholder="e.g. Iligan City Distribution Depot"
-                                           class="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-1.5 text-xs text-slate-800 dark:text-white outline-none">
-                                </div>
-                                <div class="sm:col-span-5 flex items-center gap-1">
-                                    <input type="number" step="0.000001" name="destination_latitude" x-model="destination.lat" placeholder="Lat"
-                                           class="w-1/2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-2 py-1.5 text-[11px] font-mono">
-                                    <input type="number" step="0.000001" name="destination_longitude" x-model="destination.lng" placeholder="Lng"
-                                           class="w-1/2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-2 py-1.5 text-[11px] font-mono">
+                            <div class="relative">
+                                <input type="text" name="destination" x-model="destination.address" @input="onAddressInput('destination', null, $event.target.value)" @keydown.enter.prevent="selectFirstSuggestion('destination')" required autocomplete="off" placeholder="Search for a customer, depot, or address"
+                                       class="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-xs text-slate-800 dark:text-white outline-none focus:border-blue-500">
+                                <div x-show="destination.suggestions.length > 0" x-cloak class="absolute left-0 right-0 top-full z-20 mt-1 max-h-56 overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl">
+                                    <template x-for="(suggestion, suggestionIndex) in destination.suggestions" :key="`${suggestion.source}-${suggestion.latitude}-${suggestionIndex}`">
+                                        <button type="button" @click="selectLocation('destination', suggestion)" class="block w-full border-b border-slate-100 dark:border-slate-800 px-3 py-2 text-left last:border-0 hover:bg-blue-50 dark:hover:bg-slate-800">
+                                            <span class="block text-xs font-semibold text-slate-800 dark:text-white" x-text="suggestion.title"></span>
+                                            <span class="block text-[10px] text-slate-500" x-text="suggestion.subtitle || suggestion.source_label"></span>
+                                        </button>
+                                    </template>
                                 </div>
                             </div>
+                            <input type="hidden" name="destination_latitude" x-model="destination.lat">
+                            <input type="hidden" name="destination_longitude" x-model="destination.lng">
+                            <div class="text-[10px] text-slate-500" x-text="destination.lat && destination.lng ? `Pinned ${Number(destination.lat).toFixed(5)}, ${Number(destination.lng).toFixed(5)}` : 'Choose a search result or pin this location on the map.'"></div>
                         </div>
 
                         {{-- DIAGRAM STEP 3: CALCULATE ALL THE DISTANCE --}}
@@ -653,7 +685,7 @@
                                 <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                                     Total Planned Distance (KM) *
                                 </label>
-                                <input type="number" step="0.01" name="planned_distance_km" x-model="plannedDistance" required
+                                <input type="number" step="0.01" name="planned_distance_km" x-model="plannedDistance" required readonly
                                        class="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm font-bold text-blue-600 dark:text-blue-400 outline-none">
                             </div>
                             <div class="rounded-xl bg-white dark:bg-slate-900 p-3 border border-slate-200 dark:border-slate-700">
@@ -662,6 +694,58 @@
                                 </label>
                                 <div class="px-3 py-2 text-sm font-bold text-slate-800 dark:text-slate-100" x-text="estimatedDuration || '—'"></div>
                             </div>
+                        </div>
+
+                        <div x-show="routeAlternatives.length > 0" x-cloak class="space-y-2">
+                            <div class="flex items-center justify-between">
+                                <h4 class="text-xs font-bold text-slate-800 dark:text-slate-100">Route options</h4>
+                                <span class="text-[10px] text-slate-500" x-text="routeSourceLabel"></span>
+                            </div>
+                            <template x-for="(route, index) in routeAlternatives" :key="route.id || index">
+                                <button type="button" @click="selectRoute(index)"
+                                        class="w-full rounded-xl border p-3 text-left transition-colors"
+                                        :class="selectedRouteIndex === index ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/40' : 'border-slate-200 bg-white dark:bg-slate-900 dark:border-slate-700 hover:border-blue-300'">
+                                    <div class="flex items-center justify-between gap-3 text-xs">
+                                        <span class="font-bold text-slate-800 dark:text-white" x-text="`Route ${index + 1}`"></span>
+                                        <span class="font-semibold text-blue-700 dark:text-blue-300" x-text="`${route.distance_km} km · ${route.formatted_duration || formatDuration(route.duration_minutes)}`"></span>
+                                    </div>
+                                </button>
+                            </template>
+                        </div>
+
+                        <div x-show="selectedRoute && selectedRoute.legs?.length" x-cloak class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 divide-y divide-slate-100 dark:divide-slate-800">
+                            <template x-for="(leg, index) in selectedRoute?.legs || []" :key="`${leg.from_name}-${index}`">
+                                <div class="flex items-center justify-between gap-3 px-3 py-2 text-[11px]">
+                                    <span class="min-w-0 truncate text-slate-600 dark:text-slate-300" x-text="`${leg.from_name} → ${leg.to_name}`"></span>
+                                    <span class="shrink-0 font-semibold text-slate-800 dark:text-white" x-text="`${leg.distance_km} km · ${leg.formatted_duration}`"></span>
+                                </div>
+                            </template>
+                        </div>
+                        </div>
+
+                        <aside class="space-y-3 lg:sticky lg:top-0">
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                <div>
+                                    <h3 class="text-xs font-bold text-slate-800 dark:text-white">Route map</h3>
+                                    <p class="text-[10px] text-slate-500" x-text="activeLocationLabel ? `Click the map to set ${activeLocationLabel}` : 'Choose a stop, then click the map to pin it.'"></p>
+                                </div>
+                                <div class="inline-flex rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-0.5" role="group" aria-label="Map style">
+                                    <button type="button" @click="setRouteMapLayer('street')" :aria-pressed="mapBaseLayer === 'street'" :class="mapBaseLayer === 'street' ? 'bg-blue-600 text-white' : 'text-slate-600 dark:text-slate-300'" class="rounded-md px-2.5 py-1.5 text-[10px] font-semibold">Street</button>
+                                    <button type="button" @click="setRouteMapLayer('satellite')" :aria-pressed="mapBaseLayer === 'satellite'" :class="mapBaseLayer === 'satellite' ? 'bg-blue-600 text-white' : 'text-slate-600 dark:text-slate-300'" class="rounded-md px-2.5 py-1.5 text-[10px] font-semibold">Satellite</button>
+                                </div>
+                                <button type="button" @click="swapRouteEndpoints()" class="rounded-lg border border-slate-200 dark:border-slate-700 px-2.5 py-1.5 text-[10px] font-semibold text-slate-600 dark:text-slate-300 hover:border-blue-300">
+                                    Swap start and finish
+                                </button>
+                                <button type="button" @click="toggleMapExpanded()" class="rounded-lg border border-slate-200 dark:border-slate-700 px-2.5 py-1.5 text-[10px] font-semibold text-slate-600 dark:text-slate-300 hover:border-blue-300" x-text="mapExpanded ? 'Reduce map' : 'Expand map'"></button>
+                            </div>
+                            <div id="dispatch-route-map" :class="mapExpanded ? 'dispatch-route-map-expanded' : ''" class="dispatch-route-map map-container border border-slate-200 dark:border-slate-700"></div>
+                            <div class="flex flex-wrap gap-2 text-[10px] text-slate-500">
+                                <span class="inline-flex items-center gap-1"><i class="h-2 w-2 rounded-full bg-emerald-500"></i>Origin</span>
+                                <span class="inline-flex items-center gap-1"><i class="h-2 w-2 rounded-full bg-amber-500"></i>Stop</span>
+                                <span class="inline-flex items-center gap-1"><i class="h-2 w-2 rounded-full bg-rose-500"></i>Destination</span>
+                                <span x-show="selectedRoute?.source === 'haversine_estimate'" class="font-semibold text-amber-600">Estimated distance · Haversine fallback, not road routed</span>
+                            </div>
+                        </aside>
                         </div>
                     </div>
 
@@ -697,50 +781,6 @@
                         </button>
                     </div>
                 </form>
-            </div>
-        </div>
-
-        {{-- POINT ON MAP MODAL (Interactive Leaflet Map Coordinate Picker) --}}
-        <div x-show="showMapPickerModal" x-cloak class="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs"
-             @click.self="closeMapPicker()">
-            <div class="w-full max-w-2xl rounded-2xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-800 p-5 space-y-4">
-                <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
-                    <div>
-                        <h4 class="text-sm font-bold text-slate-900 dark:text-white">Point on Map: Select Location</h4>
-                        <p class="text-[11px] text-slate-500">Click anywhere on the map or drag the marker to pin exact coordinates.</p>
-                    </div>
-                    <button type="button" @click="closeMapPicker()" class="text-slate-400 hover:text-slate-600 text-lg font-bold cursor-pointer">&times;</button>
-                </div>
-
-                {{-- Quick Directory Dropdown --}}
-                <div class="flex items-center gap-2">
-                    <select x-model="selectedDirectoryLocation" @change="onDirectoryLocationPick()"
-                            class="flex-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-1.5 text-xs text-slate-800 dark:text-slate-200">
-                        <option value="">-- Choose from Registered Company Locations --</option>
-                        <template x-for="loc in locations" :key="loc.id">
-                            <option :value="loc.id" x-text="loc.official_name"></option>
-                        </template>
-                    </select>
-                </div>
-
-                {{-- Map Div --}}
-                <div id="route-picker-map" class="map-container border border-slate-200 dark:border-slate-700"></div>
-
-                <div class="flex items-center justify-between text-xs pt-1">
-                    <div class="font-mono text-slate-500">
-                        Selected: <span class="font-bold text-blue-600" x-text="pickerCoords.lat"></span>, <span class="font-bold text-blue-600" x-text="pickerCoords.lng"></span>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <button type="button" @click="closeMapPicker()"
-                                class="rounded-xl border border-slate-300 dark:border-slate-700 px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer">
-                            Cancel
-                        </button>
-                        <button type="button" @click="confirmMapPicker()"
-                                class="rounded-xl bg-blue-600 hover:bg-blue-700 px-4 py-2 text-xs font-bold text-white cursor-pointer shadow-xs">
-                            Confirm Coordinates
-                        </button>
-                    </div>
-                </div>
             </div>
         </div>
 
@@ -855,7 +895,6 @@
             return {
                 showCreateModal: false,
                 showDepartureModal: false,
-                showMapPickerModal: false,
                 showLiveTrackModal: false,
                 calculatingDistance: false,
                 selectedDispatch: null,
@@ -873,19 +912,38 @@
                 plannedDistance: 0,
                 estimatedDuration: '',
                 calculatedGeometry: [],
-                origin: { address: 'Cagayan de Oro Main Yard', lat: 8.4822, lng: 124.6472 },
+                routeAlternatives: [],
+                selectedRoute: null,
+                selectedRouteIndex: -1,
+                routeResultJson: '',
+                routeSourceLabel: '',
+                routeMap: null,
+                routeStreetLayer: null,
+                routeSatelliteLayer: null,
+                routeBaseLayer: null,
+                mapBaseLayer: 'street',
+                mapExpanded: false,
+                routeMarkerLayer: null,
+                routeLine: null,
+                routeRequestToken: 0,
+                autoRouteTimer: null,
+                draggingStopIndex: null,
+                origin: { address: 'Cagayan de Oro Main Yard', lat: 8.4822, lng: 124.6472, suggestions: [], searchToken: 0, reverseToken: 0, manualAddress: false },
                 intermediateStops: [],
-                destination: { address: '', lat: null, lng: null },
-                activePickerTarget: null, // 'origin', 'destination', or { type: 'intermediate', index: 0 }
-                pickerCoords: { lat: 8.4822, lng: 124.6472 },
-                pickerAddress: '',
-                selectedDirectoryLocation: '',
-                pickerMap: null,
-                pickerMarker: null,
+                destination: { address: '', lat: null, lng: null, suggestions: [], searchToken: 0, reverseToken: 0, manualAddress: false },
+                activePickerTarget: 'origin',
                 liveMap: null,
+
+                get activeLocationLabel() {
+                    const target = this.getLocationTarget();
+                    if (this.activePickerTarget === 'origin') return 'the origin';
+                    if (this.activePickerTarget === 'destination') return 'the destination';
+                    return `stop ${this.activePickerTarget.index + 1}`;
+                },
 
                 openCreateModal() {
                     this.showCreateModal = true;
+                    this.$nextTick(() => this.initRouteMap());
                 },
 
                 onVehicleChange() {
@@ -896,149 +954,355 @@
                 },
 
                 addIntermediateStop() {
+                    if (this.intermediateStops.length >= 20) {
+                        alert('A dispatch can include up to 20 intermediate stops.');
+                        return;
+                    }
+
                     this.intermediateStops.push({
                         address: '',
                         lat: null,
-                        lng: null
+                        lng: null,
+                        suggestions: [],
+                        searchToken: 0,
+                        reverseToken: 0,
+                        manualAddress: false,
                     });
+                    this.clearCalculatedRoute();
                 },
 
                 removeIntermediateStop(index) {
                     this.intermediateStops.splice(index, 1);
+                    this.clearCalculatedRoute();
+                    if (this.activePickerTarget?.type === 'intermediate' && this.activePickerTarget.index === index) {
+                        this.activePickerTarget = 'origin';
+                    } else if (this.activePickerTarget?.type === 'intermediate' && this.activePickerTarget.index > index) {
+                        this.activePickerTarget.index--;
+                    }
+                    this.syncRouteMap();
+                    this.scheduleAutoRouteCalculation();
                 },
 
                 openMapPicker(type, index = null) {
                     this.activePickerTarget = index !== null ? { type: 'intermediate', index: index } : type;
-                    this.pickerAddress = '';
-                    this.selectedDirectoryLocation = '';
-                    let targetLat = 8.4822, targetLng = 124.6472;
-
-                    if (type === 'origin' && this.origin.lat) {
-                        targetLat = parseFloat(this.origin.lat);
-                        targetLng = parseFloat(this.origin.lng);
-                    } else if (type === 'destination' && this.destination.lat) {
-                        targetLat = parseFloat(this.destination.lat);
-                        targetLng = parseFloat(this.destination.lng);
-                    } else if (index !== null && this.intermediateStops[index] && this.intermediateStops[index].lat) {
-                        targetLat = parseFloat(this.intermediateStops[index].lat);
-                        targetLng = parseFloat(this.intermediateStops[index].lng);
-                    }
-
-                    this.pickerCoords = { lat: targetLat.toFixed(6), lng: targetLng.toFixed(6) };
-                    this.showMapPickerModal = true;
-
+                    const target = this.getLocationTarget();
                     this.$nextTick(() => {
-                        this.initPickerMap(targetLat, targetLng);
+                        this.initRouteMap();
+                        if (target?.lat && target?.lng && this.routeMap) {
+                            this.routeMap.setView([Number(target.lat), Number(target.lng)], 15);
+                        }
+                        document.getElementById('dispatch-route-map')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
                     });
                 },
 
-                closeMapPicker() {
-                    this.showMapPickerModal = false;
-                    this.showCreateModal = true;
+                toggleMapExpanded() {
+                    this.mapExpanded = !this.mapExpanded;
+                    this.$nextTick(() => this.routeMap?.invalidateSize());
                 },
 
-                initPickerMap(lat, lng) {
-                    if (this.pickerMap) {
-                        this.pickerMap.remove();
-                        this.pickerMap = null;
+                getLocationTarget(type = null, index = null) {
+                    const targetType = type ?? this.activePickerTarget;
+                    if (targetType === 'origin') return this.origin;
+                    if (targetType === 'destination') return this.destination;
+                    const stopIndex = index ?? targetType?.index;
+                    return (targetType === 'intermediate' || targetType?.type === 'intermediate') && this.intermediateStops[stopIndex]
+                        ? this.intermediateStops[stopIndex]
+                        : null;
+                },
+
+                onAddressInput(type, index = null, value = null) {
+                    const target = this.getLocationTarget(type, index);
+                    if (!target) return;
+
+                    if (value !== null) target.address = value;
+                    target.lat = null;
+                    target.lng = null;
+                    target.manualAddress = true;
+                    target.reverseToken++;
+                    this.activePickerTarget = index !== null ? { type: 'intermediate', index } : type;
+                    this.clearCalculatedRoute();
+                    this.searchLocationSuggestions(type, index);
+                    this.syncRouteMap();
+                },
+
+                selectFirstSuggestion(type, index = null) {
+                    const target = this.getLocationTarget(type, index);
+                    if (target?.suggestions?.[0]) {
+                        this.selectLocation(type, target.suggestions[0], index);
                     }
+                },
 
-                    const mapDiv = document.getElementById('route-picker-map');
-                    if (!mapDiv) return;
+                searchLocationSuggestions(type, index = null) {
+                    const target = this.getLocationTarget(type, index);
+                    if (!target) return;
+                    const query = target.address.trim();
+                    const token = ++target.searchToken;
+                    clearTimeout(target.searchTimer);
+                    target.suggestions = [];
 
-                    this.pickerMap = L.map('route-picker-map').setView([lat, lng], 13);
-                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                        maxZoom: 19,
-                        attribution: '&copy; OpenStreetMap'
-                    }).addTo(this.pickerMap);
+                    if (query.length < 3) return;
 
-                    this.pickerMarker = L.marker([lat, lng], { draggable: true }).addTo(this.pickerMap);
+                    target.searchTimer = setTimeout(async () => {
+                        try {
+                            const response = await fetch(`${config.searchPlacesUrl}?q=${encodeURIComponent(query)}`, {
+                                headers: { 'Accept': 'application/json' }
+                            });
+                            const data = await response.json();
+                            if (token === target.searchToken) {
+                                target.suggestions = response.ok && data.success ? (data.results || []) : [];
+                            }
+                        } catch (error) {
+                            if (token === target.searchToken) target.suggestions = [];
+                            console.error('Location search failed:', error);
+                        }
+                    }, 450);
+                },
 
-                    this.pickerMarker.on('dragend', (e) => {
-                        const pos = e.target.getLatLng();
-                        this.pickerCoords.lat = pos.lat.toFixed(6);
-                        this.pickerCoords.lng = pos.lng.toFixed(6);
-                    });
+                selectLocation(type, suggestion, index = null) {
+                    const target = this.getLocationTarget(type, index);
+                    if (!target) return;
+                    target.address = suggestion.address || suggestion.title || suggestion.subtitle || '';
+                    if (!target.address.trim()) target.address = suggestion.title || '';
+                    target.lat = Number(suggestion.latitude);
+                    target.lng = Number(suggestion.longitude);
+                    target.manualAddress = false;
+                    target.suggestions = [];
+                    target.searchToken++;
+                    target.reverseToken++;
+                    this.activePickerTarget = index !== null ? { type: 'intermediate', index } : type;
+                    this.clearCalculatedRoute();
+                    this.syncRouteMap();
+                    if (this.routeMap) this.routeMap.setView([target.lat, target.lng], 14);
+                    this.scheduleAutoRouteCalculation();
+                },
 
-                    this.pickerMap.on('click', (e) => {
-                        this.pickerMarker.setLatLng(e.latlng);
-                        this.pickerCoords.lat = e.latlng.lat.toFixed(6);
-                        this.pickerCoords.lng = e.latlng.lng.toFixed(6);
-                    });
+                initRouteMap() {
+                    const mapDiv = document.getElementById('dispatch-route-map');
+                    if (!mapDiv || typeof L === 'undefined') return;
+
+                    if (!this.routeMap) {
+                        this.routeMap = L.map(mapDiv).setView([8.4822, 124.6472], 12);
+                        this.routeStreetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                            maxZoom: 19,
+                            attribution: '&copy; OpenStreetMap'
+                        });
+                        this.routeSatelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                            maxZoom: 19,
+                            attribution: 'Tiles &copy; Esri — Sources: Esri, Maxar, Earthstar Geographics, and the GIS User Community'
+                        });
+                        this.routeBaseLayer = this.routeStreetLayer.addTo(this.routeMap);
+                        this.routeMarkerLayer = L.layerGroup().addTo(this.routeMap);
+                        this.routeMap.on('click', (event) => this.applyMapPoint(event.latlng.lat, event.latlng.lng));
+                    }
 
                     setTimeout(() => {
-                        if (this.pickerMap) {
-                            this.pickerMap.invalidateSize();
-                        }
-                    }, 250);
+                        if (this.routeMap) this.routeMap.invalidateSize();
+                        this.syncRouteMap();
+                    }, 150);
                 },
 
-                onDirectoryLocationPick() {
-                    if (!this.selectedDirectoryLocation) return;
-                    const loc = this.locations.find(l => l.id == this.selectedDirectoryLocation);
-                    if (loc && loc.latitude && loc.longitude) {
-                        const lat = parseFloat(loc.latitude);
-                        const lng = parseFloat(loc.longitude);
-                        this.pickerCoords.lat = lat.toFixed(6);
-                        this.pickerCoords.lng = lng.toFixed(6);
-                        this.pickerAddress = loc.official_name || loc.name || '';
-                        if (this.pickerMarker && this.pickerMap) {
-                            this.pickerMarker.setLatLng([lat, lng]);
-                            this.pickerMap.setView([lat, lng], 14);
+                setRouteMapLayer(layerName) {
+                    if (!this.routeMap || !['street', 'satellite'].includes(layerName)) return;
+                    const nextLayer = layerName === 'satellite' ? this.routeSatelliteLayer : this.routeStreetLayer;
+                    if (!nextLayer || nextLayer === this.routeBaseLayer) {
+                        this.mapBaseLayer = layerName;
+                        return;
+                    }
+                    if (this.routeBaseLayer && this.routeMap.hasLayer(this.routeBaseLayer)) {
+                        this.routeMap.removeLayer(this.routeBaseLayer);
+                    }
+                    this.routeBaseLayer = nextLayer.addTo(this.routeMap);
+                    this.mapBaseLayer = layerName;
+                },
+
+                applyMapPoint(latitude, longitude) {
+                    const target = this.getLocationTarget();
+                    if (!target) return;
+                    target.lat = Number(latitude.toFixed(6));
+                    target.lng = Number(longitude.toFixed(6));
+                    target.suggestions = [];
+                    target.reverseToken++;
+                    this.clearCalculatedRoute();
+                    this.syncRouteMap();
+                    if (!target.manualAddress) {
+                        target.address = '';
+                        this.reverseGeocodeLocation(target, target.reverseToken);
+                    }
+                    this.scheduleAutoRouteCalculation();
+                },
+
+                async reverseGeocodeLocation(target, token) {
+                    try {
+                        const response = await fetch(config.reverseGeocodeUrl, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRF-TOKEN': config.csrfToken,
+                                'Accept': 'application/json'
+                            },
+                            body: JSON.stringify({ latitude: target.lat, longitude: target.lng })
+                        });
+                        const data = await response.json();
+                        if (response.ok && token === target.reverseToken && data.result?.address) {
+                            target.address = data.result.address;
+                            target.suggestions = [];
+                            this.scheduleAutoRouteCalculation();
                         }
+                    } catch (error) {
+                        console.error('Reverse geocoding failed:', error);
                     }
                 },
 
-                confirmMapPicker() {
-                    const lat = parseFloat(this.pickerCoords.lat);
-                    const lng = parseFloat(this.pickerCoords.lng);
-
-                    if (this.activePickerTarget === 'origin') {
-                        this.origin.lat = lat;
-                        this.origin.lng = lng;
-                        if (this.pickerAddress && (!this.origin.address || this.origin.address === 'Cagayan de Oro Main Yard')) {
-                            this.origin.address = this.pickerAddress;
-                        }
-                    } else if (this.activePickerTarget === 'destination') {
-                        this.destination.lat = lat;
-                        this.destination.lng = lng;
-                        if (this.pickerAddress && !this.destination.address) {
-                            this.destination.address = this.pickerAddress;
-                        }
-                    } else if (typeof this.activePickerTarget === 'object' && this.activePickerTarget.type === 'intermediate') {
-                        const idx = this.activePickerTarget.index;
-                        if (this.intermediateStops[idx]) {
-                            this.intermediateStops[idx].lat = lat;
-                            this.intermediateStops[idx].lng = lng;
-                            if (this.pickerAddress && !this.intermediateStops[idx].address) {
-                                this.intermediateStops[idx].address = this.pickerAddress;
-                            }
-                        }
+                syncRouteMap() {
+                    if (!this.routeMap || !this.routeMarkerLayer || typeof L === 'undefined') return;
+                    this.routeMarkerLayer.clearLayers();
+                    if (this.routeLine) {
+                        this.routeMap.removeLayer(this.routeLine);
+                        this.routeLine = null;
                     }
 
-                    this.showMapPickerModal = false;
-                    this.showCreateModal = true;
+                    const markers = [
+                        { target: this.origin, type: 'origin', label: 'A', color: '#059669', name: 'Origin' },
+                        ...this.intermediateStops.map((target, index) => ({ target, type: 'intermediate', index, label: String(index + 1), color: '#d97706', name: `Stop ${index + 1}` })),
+                        { target: this.destination, type: 'destination', label: 'B', color: '#e11d48', name: 'Destination' },
+                    ];
+                    const bounds = [];
+
+                    markers.forEach((entry) => {
+                        if (entry.target.lat === null || entry.target.lat === '' || entry.target.lng === null || entry.target.lng === '') return;
+                        if (!Number.isFinite(Number(entry.target.lat)) || !Number.isFinite(Number(entry.target.lng))) return;
+                        const position = [Number(entry.target.lat), Number(entry.target.lng)];
+                        const icon = L.divIcon({
+                            className: '',
+                            html: `<span style="display:flex;width:28px;height:28px;align-items:center;justify-content:center;border:2px solid #fff;border-radius:50%;background:${entry.color};box-shadow:0 2px 8px #0004;color:#fff;font-size:11px;font-weight:700">${entry.label}</span>`,
+                            iconSize: [28, 28],
+                            iconAnchor: [14, 14],
+                        });
+                        const marker = L.marker(position, { icon, draggable: true }).addTo(this.routeMarkerLayer);
+                        const popup = document.createElement('div');
+                        popup.textContent = `${entry.name}: ${entry.target.address || 'Pinned location'}`;
+                        marker.bindPopup(popup);
+                        marker.on('dragend', (event) => {
+                            const location = event.target.getLatLng();
+                            this.activePickerTarget = entry.type === 'intermediate' ? { type: entry.type, index: entry.index } : entry.type;
+                            this.applyMapPoint(location.lat, location.lng);
+                        });
+                        marker.on('click', () => {
+                            this.activePickerTarget = entry.type === 'intermediate' ? { type: entry.type, index: entry.index } : entry.type;
+                        });
+                        bounds.push(position);
+                    });
+
+                    if (this.selectedRoute?.geometry?.length > 1) {
+                        const fallback = this.selectedRoute.source === 'haversine_estimate';
+                        this.routeLine = L.polyline(this.selectedRoute.geometry, {
+                            color: fallback ? '#d97706' : '#2563eb',
+                            weight: 5,
+                            opacity: 0.85,
+                            dashArray: fallback ? '8 8' : null,
+                        }).addTo(this.routeMap);
+                        bounds.push(...this.selectedRoute.geometry);
+                    }
+
+                    if (bounds.length > 1) this.routeMap.fitBounds(bounds, { padding: [28, 28], maxZoom: 15 });
+                },
+
+                clearCalculatedRoute() {
+                    this.routeRequestToken++;
+                    clearTimeout(this.autoRouteTimer);
+                    this.calculatingDistance = false;
+                    this.routeAlternatives = [];
+                    this.selectedRoute = null;
+                    this.selectedRouteIndex = -1;
+                    this.routeResultJson = '';
+                    this.routeSourceLabel = '';
+                    this.plannedDistance = 0;
+                    this.estimatedDuration = '';
+                    this.calculatedGeometry = [];
+                    if (this.routeMap) this.syncRouteMap();
+                },
+
+                moveIntermediateStop(fromIndex, toIndex) {
+                    if (!Number.isInteger(fromIndex) || !Number.isInteger(toIndex)
+                        || fromIndex < 0 || toIndex < 0
+                        || fromIndex >= this.intermediateStops.length || toIndex >= this.intermediateStops.length
+                        || fromIndex === toIndex) return;
+                    const activeTarget = this.activePickerTarget?.type === 'intermediate'
+                        ? this.intermediateStops[this.activePickerTarget.index]
+                        : null;
+                    const [stop] = this.intermediateStops.splice(fromIndex, 1);
+                    this.intermediateStops.splice(toIndex, 0, stop);
+                    this.draggingStopIndex = null;
+                    if (activeTarget) {
+                        this.activePickerTarget.index = this.intermediateStops.indexOf(activeTarget);
+                    }
+                    this.clearCalculatedRoute();
+                    this.syncRouteMap();
+                    this.scheduleAutoRouteCalculation();
+                },
+
+                swapRouteEndpoints() {
+                    [this.origin, this.destination] = [this.destination, this.origin];
+                    this.intermediateStops.reverse();
+                    this.activePickerTarget = 'origin';
+                    this.clearCalculatedRoute();
+                    this.syncRouteMap();
+                    this.scheduleAutoRouteCalculation();
+                },
+
+                getRoutePoints() {
+                    const locations = [this.origin, ...this.intermediateStops, this.destination];
+                    if (locations.some((location) => !location.address.trim()
+                        || location.lat === null || location.lat === ''
+                        || location.lng === null || location.lng === ''
+                        || !Number.isFinite(Number(location.lat))
+                        || !Number.isFinite(Number(location.lng))
+                        || Number(location.lat) < -90 || Number(location.lat) > 90
+                        || Number(location.lng) < -180 || Number(location.lng) > 180)) return [];
+                    return locations.map((location) => ({
+                        name: location.address,
+                        lat: Number(location.lat),
+                        lng: Number(location.lng),
+                    }));
+                },
+
+                scheduleAutoRouteCalculation() {
+                    clearTimeout(this.autoRouteTimer);
+                    if (this.getRoutePoints().length < 2) return;
+                    this.autoRouteTimer = setTimeout(() => this.calculateRouteDistance(), 500);
+                },
+
+                selectRoute(index) {
+                    const route = this.routeAlternatives[index];
+                    if (!route) return;
+                    this.selectedRouteIndex = index;
+                    this.selectedRoute = route;
+                    this.plannedDistance = route.distance_km;
+                    this.estimatedDuration = route.formatted_duration || this.formatDuration(route.duration_minutes);
+                    this.calculatedGeometry = route.geometry || [];
+                    this.routeSourceLabel = route.source === 'haversine_estimate'
+                        ? 'Estimated distance · Haversine fallback (not road routed)'
+                        : 'Road route · OSRM';
+                    this.routeResultJson = JSON.stringify(route);
+                    this.syncRouteMap();
+                },
+
+                formatDuration(minutes) {
+                    const value = Number(minutes || 0);
+                    const hours = Math.floor(value / 60);
+                    const remainingMinutes = value % 60;
+                    return hours ? `${hours}h${remainingMinutes ? ` ${remainingMinutes}m` : ''}` : `${remainingMinutes}m`;
                 },
 
                 async calculateRouteDistance() {
-                    const points = [];
-                    if (this.origin.lat && this.origin.lng) {
-                        points.push({ name: this.origin.address || 'Origin', lat: parseFloat(this.origin.lat), lng: parseFloat(this.origin.lng) });
-                    }
-                    this.intermediateStops.forEach((stop, i) => {
-                        if (stop.lat && stop.lng) {
-                            points.push({ name: stop.address || `Stop #${i+1}`, lat: parseFloat(stop.lat), lng: parseFloat(stop.lng) });
-                        }
-                    });
-                    if (this.destination.lat && this.destination.lng) {
-                        points.push({ name: this.destination.address || 'Destination', lat: parseFloat(this.destination.lat), lng: parseFloat(this.destination.lng) });
-                    }
-
-                    if (points.length < 2) {
-                        alert('Please enter and pin coordinates for at least the Origin and Final Destination before calculating route distance.');
+                    clearTimeout(this.autoRouteTimer);
+                    const points = this.getRoutePoints();
+                    if (points.length !== this.intermediateStops.length + 2) {
+                        alert('Choose an address suggestion or pin every stop on the map before calculating the route.');
                         return;
                     }
 
+                    const requestToken = ++this.routeRequestToken;
                     this.calculatingDistance = true;
                     try {
                         const res = await fetch(config.calculateRouteUrl, {
@@ -1051,26 +1315,35 @@
                             body: JSON.stringify({ points: points })
                         });
                         const data = await res.json();
-                        if (data.success) {
-                            this.plannedDistance = data.total_distance_km;
-                            this.estimatedDuration = data.formatted_total_duration;
-                            this.calculatedGeometry = data.geometry;
+                        if (requestToken !== this.routeRequestToken) return;
+                        if (data.success && (data.alternatives || []).length > 0) {
+                            this.routeAlternatives = data.alternatives;
+                            this.selectRoute(0);
                         } else {
-                            alert('Distance calculation was unable to find road network for the selected points. You can enter distance manually.');
+                            alert('Unable to calculate a usable route. Check the locations and try again.');
                         }
                     } catch (e) {
                         console.error('Route calculation error:', e);
+                        alert('Route calculation is temporarily unavailable. Please try again.');
                     } finally {
-                        this.calculatingDistance = false;
+                        if (requestToken === this.routeRequestToken) this.calculatingDistance = false;
                     }
                 },
 
                 onFormSubmit(e) {
-                    // Ensures that distance is present
+                    if (this.getRoutePoints().length !== this.intermediateStops.length + 2) {
+                        e.preventDefault();
+                        alert('Each stop needs a selected address or valid map pin before saving.');
+                        return;
+                    }
+                    if (!this.selectedRoute || !this.routeResultJson) {
+                        e.preventDefault();
+                        alert('Calculate the route and choose a route option before saving the dispatch.');
+                        return;
+                    }
                     if (!this.plannedDistance || this.plannedDistance <= 0) {
-                        if (!confirm('Planned distance is currently 0 km. Do you want to continue anyway?')) {
-                            e.preventDefault();
-                        }
+                        e.preventDefault();
+                        alert('The planned route must have a distance greater than zero.');
                     }
                 },
 

@@ -38,13 +38,10 @@ class LocationController extends Controller
     {
         Gate::authorize('viewAny', Location::class);
 
-        $query = (string) $request->input('q', '');
-        if (trim($query) === '') {
-            return response()->json([
-                'success' => true,
-                'results' => [],
-            ]);
-        }
+        $validated = $request->validate([
+            'q' => ['required', 'string', 'min:3', 'max:160'],
+        ]);
+        $query = trim($validated['q']);
 
         $results = $this->geocodingService->search($query);
 
@@ -53,6 +50,29 @@ class LocationController extends Controller
             'query' => $query,
             'results' => $results,
         ]);
+    }
+
+    /**
+     * Resolve a pinned map coordinate to its nearest readable address.
+     */
+    public function reverseGeocode(Request $request): JsonResponse
+    {
+        Gate::authorize('viewAny', Location::class);
+
+        $validated = $request->validate([
+            'latitude' => ['required', 'numeric', 'between:-90,90'],
+            'longitude' => ['required', 'numeric', 'between:-180,180'],
+        ]);
+
+        $place = $this->geocodingService->reverse(
+            (float) $validated['latitude'],
+            (float) $validated['longitude'],
+        );
+
+        return response()->json([
+            'success' => $place !== null,
+            'result' => $place,
+        ], $place !== null ? 200 : 503);
     }
 
     /**

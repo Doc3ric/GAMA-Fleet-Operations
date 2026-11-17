@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Location;
 use Exception;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -229,11 +230,113 @@ class RoutingService
             ];
         }
 
+        $coordinates = implode(';', array_map(
+            fn (array $point): string => ((float) $point['lng']).','.((float) $point['lat']),
+            $validPoints,
+        ));
+        $cacheKey = 'routing:osrm:'.sha1(json_encode(array_map(
+            fn (array $point): array => [(float) $point['lat'], (float) $point['lng']],
+            $validPoints,
+        ), JSON_THROW_ON_ERROR));
+        $cachedRoutes = Cache::remember($cacheKey, now()->addMinutes(15), function () use ($coordinates): ?array {
+            $baseUrl = rtrim((string) config('services.osrm.base_url', 'https://router.project-osrm.org'), '/');
+
+            try {
+                $response = Http::connectTimeout(3)
+                    ->timeout(8)
+                    ->get("{$baseUrl}/route/v1/driving/{$coordinates}", [
+                        'alternatives' => 'true',
+                        'overview' => 'full',
+                        'geometries' => 'geojson',
+                        'steps' => 'false',
+                    ]);
+
+                $routes = $response->successful() && $response->json('code') === 'Ok'
+                    ? $response->json('routes', [])
+                    : null;
+
+                return is_array($routes) && $routes !== [] ? $routes : null;
+            } catch (Exception $e) {
+                return null;
+            }
+        });
+        $osrmRoutes = is_array($cachedRoutes) ? $cachedRoutes : [];
+
+        $alternatives = [];
+        foreach ($osrmRoutes as $routeIndex => $route) {
+            $rawGeometry = $route['geometry']['coordinates'] ?? [];
+            $rawLegs = $route['legs'] ?? [];
+            if (count($rawGeometry) < 2 || count($rawLegs) !== count($validPoints) - 1) {
+                continue;
+            }
+
+            $geometry = [];
+            foreach ($rawGeometry as $coordinate) {
+                if (is_array($coordinate) && count($coordinate) >= 2) {
+                    $geometry[] = [(float) $coordinate[1], (float) $coordinate[0]];
+                }
+            }
+
+            if (count($geometry) < 2) {
+                continue;
+            }
+
+            $legs = [];
+            foreach ($rawLegs as $legIndex => $leg) {
+                $from = $validPoints[$legIndex];
+                $to = $validPoints[$legIndex + 1];
+                $distanceKm = round((float) ($leg['distance'] ?? 0) / 1000, 2);
+                $durationMinutes = (int) round((float) ($leg['duration'] ?? 0) / 60);
+                $legs[] = [
+                    'from_name' => $from['name'] ?? $from['address'] ?? 'Origin',
+                    'to_name' => $to['name'] ?? $to['address'] ?? 'Destination',
+                    'from_lat' => (float) $from['lat'],
+                    'from_lng' => (float) $from['lng'],
+                    'to_lat' => (float) $to['lat'],
+                    'to_lng' => (float) $to['lng'],
+                    'distance_km' => $distanceKm,
+                    'duration_minutes' => $durationMinutes,
+                    'formatted_duration' => self::formatDuration($durationMinutes),
+                    'source' => self::SOURCE_OSRM,
+                ];
+            }
+
+            $alternatives[] = [
+                'id' => 'osrm-'.$routeIndex,
+                'distance_km' => round((float) ($route['distance'] ?? 0) / 1000, 2),
+                'duration_minutes' => (int) round((float) ($route['duration'] ?? 0) / 60),
+                'formatted_duration' => self::formatDuration((int) round((float) ($route['duration'] ?? 0) / 60)),
+                'legs' => $legs,
+                'geometry' => $geometry,
+                'geojson' => [
+                    'type' => 'LineString',
+                    'coordinates' => array_map(fn (array $coordinate): array => [$coordinate[1], $coordinate[0]], $geometry),
+                ],
+                'source' => self::SOURCE_OSRM,
+            ];
+        }
+
+        if ($alternatives !== []) {
+            $preferredRoute = $alternatives[0];
+
+            return [
+                'success' => true,
+                'total_distance_km' => $preferredRoute['distance_km'],
+                'total_duration_minutes' => $preferredRoute['duration_minutes'],
+                'formatted_total_duration' => $preferredRoute['formatted_duration'],
+                'legs' => $preferredRoute['legs'],
+                'geometry' => $preferredRoute['geometry'],
+                'geojson' => $preferredRoute['geojson'],
+                'source' => self::SOURCE_OSRM,
+                'alternatives' => $alternatives,
+            ];
+        }
+
         $legs = [];
         $totalDistance = 0.0;
         $totalDuration = 0;
         $fullGeometry = [];
-        $overallSource = self::SOURCE_OSRM;
+        $overallSource = 'haversine_estimate';
 
         for ($i = 0; $i < count($validPoints) - 1; $i++) {
             $from = $validPoints[$i];
@@ -244,26 +347,12 @@ class RoutingService
             $toLat = (float) $to['lat'];
             $toLng = (float) $to['lng'];
 
-            $segment = $this->getRouteSegmentWithGeometry($fromLat, $fromLng, $toLat, $toLng);
-
-            if ($segment !== null) {
-                $legDist = $segment['distance_km'];
-                $legDur = $segment['duration_minutes'];
-                $legGeom = $segment['geometry'];
-                $legSource = self::SOURCE_OSRM;
-            } else {
-                $overallSource = 'haversine_estimate';
-                // Estimate driving distance via Haversine multiplied by 1.25 road curvature factor
-                $straightDist = self::calculateHaversineDistanceKm($fromLat, $fromLng, $toLat, $toLng);
-                $legDist = round($straightDist * 1.25, 2);
-                // Estimate driving duration assuming ~40 km/h average local commercial vehicle speed
-                $legDur = max(2, (int) round(($legDist / 40.0) * 60));
-                $legGeom = [
-                    [$fromLat, $fromLng],
-                    [$toLat, $toLng],
-                ];
-                $legSource = 'haversine_estimate';
-            }
+            // Preserve the existing Haversine road estimate without retrying a failed OSRM request per leg.
+            $straightDistance = self::calculateHaversineDistanceKm($fromLat, $fromLng, $toLat, $toLng);
+            $legDist = round($straightDistance * 1.25, 2);
+            $legDur = max(2, (int) round(($legDist / 40.0) * 60));
+            $legGeom = [[$fromLat, $fromLng], [$toLat, $toLng]];
+            $legSource = 'haversine_estimate';
 
             $totalDistance += $legDist;
             $totalDuration += $legDur;
@@ -298,66 +387,24 @@ class RoutingService
             'formatted_total_duration' => self::formatDuration($totalDuration),
             'legs' => $legs,
             'geometry' => $fullGeometry,
+            'geojson' => [
+                'type' => 'LineString',
+                'coordinates' => array_map(fn (array $coordinate): array => [$coordinate[1], $coordinate[0]], $fullGeometry),
+            ],
             'source' => $overallSource,
+            'alternatives' => [[
+                'id' => 'fallback',
+                'distance_km' => round($totalDistance, 2),
+                'duration_minutes' => $totalDuration,
+                'formatted_duration' => self::formatDuration($totalDuration),
+                'legs' => $legs,
+                'geometry' => $fullGeometry,
+                'geojson' => [
+                    'type' => 'LineString',
+                    'coordinates' => array_map(fn (array $coordinate): array => [$coordinate[1], $coordinate[0]], $fullGeometry),
+                ],
+                'source' => $overallSource,
+            ]],
         ];
-    }
-
-    /**
-     * Fetch route segment from OSRM including full GeoJSON geometry coordinates.
-     *
-     * @return array{distance_km: float, duration_minutes: int, geometry: list<array{0: float, 1: float}>}|null
-     */
-    protected function getRouteSegmentWithGeometry(float $fromLat, float $fromLng, float $toLat, float $toLng): ?array
-    {
-        $baseUrl = rtrim((string) config('services.osrm.base_url', 'https://router.project-osrm.org'), '/');
-        $coordinates = "{$fromLng},{$fromLat};{$toLng},{$toLat}";
-        $url = "{$baseUrl}/route/v1/driving/{$coordinates}";
-
-        try {
-            $response = Http::timeout(8)->get($url, [
-                'overview' => 'full',
-                'geometries' => 'geojson',
-                'steps' => 'false',
-            ]);
-
-            if (! $response->successful() || $response->json('code') !== 'Ok') {
-                return null;
-            }
-
-            $distanceMeters = $response->json('routes.0.distance');
-            if ($distanceMeters === null) {
-                return null;
-            }
-
-            $distanceKm = round((float) $distanceMeters / 1000, 2);
-            $durationSeconds = $response->json('routes.0.duration') ?? 0;
-            $durationMinutes = (int) round((float) $durationSeconds / 60);
-
-            // GeoJSON coordinates are [longitude, latitude] -> convert to [latitude, longitude] for Leaflet
-            $rawCoords = $response->json('routes.0.geometry.coordinates') ?? [];
-            $leafletCoords = [];
-            if (is_array($rawCoords)) {
-                foreach ($rawCoords as $c) {
-                    if (is_array($c) && count($c) >= 2) {
-                        $leafletCoords[] = [(float) $c[1], (float) $c[0]];
-                    }
-                }
-            }
-
-            if (empty($leafletCoords)) {
-                $leafletCoords = [
-                    [$fromLat, $fromLng],
-                    [$toLat, $toLng],
-                ];
-            }
-
-            return [
-                'distance_km' => $distanceKm,
-                'duration_minutes' => $durationMinutes,
-                'geometry' => $leafletCoords,
-            ];
-        } catch (Exception $e) {
-            return null;
-        }
     }
 }

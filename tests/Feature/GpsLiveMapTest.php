@@ -47,6 +47,31 @@ class GpsLiveMapTest extends TestCase
         $response->assertSee('Live GPS Fleet Map');
     }
 
+    public function test_vehicle_rows_include_the_reverse_geocoded_current_location_display(): void
+    {
+        $vehicle = Vehicle::factory()->create(['equipment_code' => 'LOCATION-UNIT']);
+        Device::factory()->create(['vehicle_id' => $vehicle->id, 'imei' => '865100000099999']);
+
+        Cache::put('tracksolid_live_device_locations', [
+            'locations' => [
+                '865100000099999' => [
+                    'imei' => '865100000099999',
+                    'lat' => 8.47645,
+                    'lng' => 124.71772,
+                    'speed' => 0,
+                    'status' => 1,
+                    'accStatus' => 0,
+                ],
+            ],
+            'status' => 'success',
+        ], 25);
+
+        Livewire::actingAs($this->user)
+            ->test(GpsLiveMap::class)
+            ->assertSee('LOCATION-UNIT')
+            ->assertSee('Resolving nearby address...');
+    }
+
     public function test_gps_data_normalization_and_state_classification(): void
     {
         Cache::flush();
