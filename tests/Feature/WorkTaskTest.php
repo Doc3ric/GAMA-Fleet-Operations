@@ -45,6 +45,39 @@ class WorkTaskTest extends TestCase
         $response->assertForbidden();
     }
 
+    public function test_unscheduled_filter_shows_only_own_active_tasks_without_due_dates(): void
+    {
+        WorkTask::factory()->pending()->create([
+            'user_id' => $this->user->id,
+            'title' => 'Schedule GPS retest',
+            'due_date' => null,
+        ]);
+        WorkTask::factory()->completed()->create([
+            'user_id' => $this->user->id,
+            'title' => 'Completed undated task',
+            'due_date' => null,
+        ]);
+        WorkTask::factory()->pending()->create([
+            'user_id' => $this->user->id,
+            'title' => 'Scheduled inspection',
+            'due_date' => '2026-12-01',
+        ]);
+        WorkTask::factory()->pending()->create([
+            'user_id' => $this->otherUser->id,
+            'title' => 'Other user undated task',
+            'due_date' => null,
+        ]);
+
+        $response = $this->actingAs($this->user)->get(route('work-tasks.index', ['status' => 'unscheduled']));
+
+        $response->assertViewHas('unscheduledCount', 1);
+        $response->assertSee('Unscheduled (1)');
+        $response->assertSee('Schedule GPS retest');
+        $response->assertDontSee('Completed undated task');
+        $response->assertDontSee('Scheduled inspection');
+        $response->assertDontSee('Other user undated task');
+    }
+
     // ─── Task Creation ────────────────────────────────────────────────────────
 
     public function test_operator_can_create_a_task(): void

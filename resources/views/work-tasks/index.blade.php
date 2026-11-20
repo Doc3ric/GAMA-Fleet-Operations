@@ -90,7 +90,7 @@
         </div>
 
         {{-- Operations Metric Summary Strip --}}
-        <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             {{-- All Tasks --}}
             <a href="{{ route('work-tasks.index') }}"
                class="bg-white rounded-xl border p-3 shadow-xs transition-colors hover:border-slate-300 {{ !request('status') ? 'border-blue-400 bg-blue-50/20' : 'border-slate-200' }}">
@@ -129,6 +129,13 @@
                class="bg-white rounded-xl border p-3 shadow-xs transition-colors hover:border-emerald-300 {{ request('status') === 'completed' ? 'border-emerald-400 bg-emerald-50/30' : 'border-slate-200' }}">
                 <div class="text-[11px] font-semibold text-emerald-700 uppercase tracking-wider">Completed</div>
                 <div class="text-xl font-bold text-emerald-700 mt-1">{{ $completedCount }}</div>
+            </a>
+
+            {{-- Unscheduled --}}
+            <a href="{{ route('work-tasks.index', ['status' => 'unscheduled']) }}"
+               class="bg-white rounded-xl border p-3 shadow-xs transition-colors hover:border-amber-300 {{ request('status') === 'unscheduled' ? 'border-amber-400 bg-amber-50/30' : 'border-slate-200' }}">
+                <div class="text-[11px] font-semibold text-amber-700 uppercase tracking-wider">Unscheduled</div>
+                <div class="text-xl font-bold text-amber-700 mt-1">{{ $unscheduledCount }}</div>
             </a>
         </div>
 
@@ -173,6 +180,7 @@
                             <option value="">All Statuses</option>
                             <option value="overdue"     @selected(request('status') === 'overdue')>Overdue ({{ $overdueCount }})</option>
                             <option value="due_today"   @selected(request('status') === 'due_today')>Due Today ({{ $dueTodayCount }})</option>
+                            <option value="unscheduled" @selected(request('status') === 'unscheduled')>Unscheduled ({{ $unscheduledCount }})</option>
                             <option value="in_progress" @selected(request('status') === 'in_progress')>In Progress ({{ $inProgressCount }})</option>
                             <option value="pending"     @selected(request('status') === 'pending')>Pending</option>
                             <option value="on_hold"     @selected(request('status') === 'on_hold')>On Hold</option>

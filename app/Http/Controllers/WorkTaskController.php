@@ -39,6 +39,9 @@ class WorkTaskController extends Controller
                 $query->dueToday();
             } elseif ($status === 'upcoming') {
                 $query->upcoming();
+            } elseif ($status === 'unscheduled') {
+                $query->whereNull('due_date')
+                    ->whereNotIn('status', [WorkTask::STATUS_COMPLETED, WorkTask::STATUS_CANCELLED]);
             } else {
                 $query->where('status', $status);
             }
@@ -90,6 +93,10 @@ class WorkTaskController extends Controller
         $dueTodayCount = (clone $baseMetrics())->dueToday()->count();
         $inProgressCount = (clone $baseMetrics())->inProgress()->count();
         $completedCount = (clone $baseMetrics())->completed()->count();
+        $unscheduledCount = (clone $baseMetrics())
+            ->whereNull('due_date')
+            ->whereNotIn('status', [WorkTask::STATUS_COMPLETED, WorkTask::STATUS_CANCELLED])
+            ->count();
 
         // Available user categories with task counts
         $categories = WorkTask::where('user_id', $userId)
@@ -105,7 +112,8 @@ class WorkTaskController extends Controller
             'overdueCount',
             'dueTodayCount',
             'inProgressCount',
-            'completedCount'
+            'completedCount',
+            'unscheduledCount'
         ));
     }
 
