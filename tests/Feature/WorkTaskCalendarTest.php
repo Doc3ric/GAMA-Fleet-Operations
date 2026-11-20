@@ -181,6 +181,17 @@ class WorkTaskCalendarTest extends TestCase
         $response->assertSee('month=2027-01');
     }
 
+    public function test_calendar_displays_selected_february_when_today_is_january_31(): void
+    {
+        $this->travelTo(Carbon::parse('2026-01-31 10:00:00'));
+
+        $response = $this->actingAs($this->user)->get(route('work-tasks.calendar', ['month' => '2026-02']));
+
+        $response->assertViewHas('monthTitle', 'February 2026');
+        $response->assertSee('month=2026-01');
+        $response->assertSee('month=2026-03');
+    }
+
     /** 9. Form respects query parameter due_date when opened via Full Form link */
     public function test_create_form_prefills_due_date_from_query_parameter(): void
     {
