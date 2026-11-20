@@ -38,7 +38,14 @@
                 <p class="text-xs text-slate-500 mt-0.5">Track all vehicle GPS trackers, SIM accounts, and monitor upcoming subscription expirations</p>
             </div>
 
-            <div class="flex items-center gap-2 shrink-0">
+            <div class="flex flex-wrap items-center gap-2">
+                <a href="{{ route('devices.monitoring.index') }}"
+                   class="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800 hover:bg-emerald-100 transition-colors">
+                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M8 3v3m8-3v3M4 10h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Zm3 9 2 2 5-5" />
+                    </svg>
+                    <span>Daily checklist</span>
+                </a>
                 {{-- Live GPS Map Button --}}
                 <a href="{{ route('gps-map.index') }}"
                    class="inline-flex items-center gap-1.5 rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 shadow-xs hover:bg-blue-100 hover:text-blue-900 transition-colors"
@@ -60,15 +67,103 @@
                     <span>Template</span>
                 </a>
 
-                {{-- Export Excel Button --}}
-                <a href="{{ route('devices.export', request()->query()) }}"
-                   class="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 hover:text-slate-900 transition-colors"
-                   title="Export devices list to Excel">
-                    <svg class="h-4 w-4 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
-                    </svg>
-                    <span>Excel</span>
-                </a>
+                {{-- Export Excel Dropdown --}}
+                <div class="relative" x-data="{ openExport: false }" @click.outside="openExport = false">
+                    <button type="button" @click="openExport = !openExport"
+                            class="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 hover:text-slate-900 transition-colors cursor-pointer"
+                            title="Export GPS devices report to Excel">
+                        <svg class="h-4 w-4 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+                        </svg>
+                        <span>Export Excel</span>
+                        <svg class="h-3 w-3 text-slate-400 transition-transform" :class="openExport ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+                        </svg>
+                    </button>
+
+                    <div x-show="openExport"
+                         x-transition:enter="transition ease-out duration-100"
+                         x-transition:enter-start="transform opacity-0 scale-95"
+                         x-transition:enter-end="transform opacity-100 scale-100"
+                         x-transition:leave="transition ease-in duration-75"
+                         x-transition:leave-start="transform opacity-100 scale-100"
+                         x-transition:leave-end="transform opacity-0 scale-95"
+                         class="absolute right-0 mt-1.5 w-72 rounded-xl bg-white shadow-xl border border-slate-200 z-50 py-1.5 text-xs divide-y divide-slate-100"
+                         style="display: none;">
+
+                        <div class="px-3 py-2 bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                            Download Excel Reports
+                        </div>
+
+                        <div class="py-1">
+                            {{-- Expired Excel --}}
+                            <a href="{{ route('devices.export', array_merge(request()->query(), ['status' => 'expired'])) }}"
+                               class="flex items-center justify-between px-3.5 py-2 hover:bg-red-50 text-slate-700 hover:text-red-800 transition-colors">
+                                <div class="flex items-center gap-2">
+                                    <span class="h-2 w-2 rounded-full bg-red-600"></span>
+                                    <span class="font-semibold">Already Expired</span>
+                                </div>
+                                <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-800 border border-red-200">{{ $expiredCount }}</span>
+                            </a>
+
+                            {{-- Expiring Soon (<30 Days) Excel --}}
+                            <a href="{{ route('devices.export', array_merge(request()->query(), ['status' => 'expiring_soon'])) }}"
+                               class="flex items-center justify-between px-3.5 py-2 hover:bg-amber-50 text-slate-700 hover:text-amber-800 transition-colors">
+                                <div class="flex items-center gap-2">
+                                    <span class="h-2 w-2 rounded-full bg-amber-500"></span>
+                                    <span class="font-semibold">Expiring in &le; 30 Days</span>
+                                </div>
+                                <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200">{{ $expiringSoonCount }}</span>
+                            </a>
+
+                            {{-- Active (>30 Days) Excel --}}
+                            <a href="{{ route('devices.export', array_merge(request()->query(), ['status' => 'active'])) }}"
+                               class="flex items-center justify-between px-3.5 py-2 hover:bg-emerald-50 text-slate-700 hover:text-emerald-800 transition-colors">
+                                <div class="flex items-center gap-2">
+                                    <span class="h-2 w-2 rounded-full bg-emerald-500"></span>
+                                    <span class="font-semibold">Active (> 30 Days)</span>
+                                </div>
+                                <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-200">{{ $activeCount }}</span>
+                            </a>
+                        </div>
+
+                        <div class="py-1">
+                            {{-- All Devices Single Sheet --}}
+                            <a href="{{ route('devices.export', request()->except('status')) }}"
+                               class="flex items-center justify-between px-3.5 py-2 hover:bg-slate-50 text-slate-700 hover:text-slate-900 transition-colors">
+                                <div class="flex items-center gap-2">
+                                    <svg class="h-3.5 w-3.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 0 1 0 3.75H5.625a1.875 1.875 0 0 1 0-3.75Z" />
+                                    </svg>
+                                    <span class="font-semibold">All Devices</span>
+                                </div>
+                                <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">{{ $totalCount }}</span>
+                            </a>
+
+                            {{-- Multi-sheet Workbook --}}
+                            <a href="{{ route('devices.export', array_merge(request()->query(), ['multi_sheet' => 1])) }}"
+                               class="flex items-center justify-between px-3.5 py-2 hover:bg-blue-50 text-slate-700 hover:text-blue-800 transition-colors">
+                                <div class="flex items-center gap-2">
+                                    <svg class="h-3.5 w-3.5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                                    </svg>
+                                    <span class="font-bold text-blue-900">All-in-One (3 Sheets)</span>
+                                </div>
+                                <span class="text-[9px] uppercase tracking-wide font-extrabold text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded">Multi-Tab</span>
+                            </a>
+
+                            @if(request()->hasAny(['search', 'group', 'model', 'status']))
+                                <a href="{{ route('devices.export', request()->query()) }}"
+                                   class="flex items-center gap-2 px-3.5 py-2 hover:bg-emerald-50 text-emerald-800 font-semibold transition-colors border-t border-slate-100">
+                                    <svg class="h-3.5 w-3.5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 0 1-.659 1.591l-5.432 5.432a2.25 2.25 0 0 0-.659 1.591v2.927a2.25 2.25 0 0 1-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 0 0-.659-1.591L3.659 7.409A2.25 2.25 0 0 1 3 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0 1 12 3Z" />
+                                    </svg>
+                                    <span>Export Current Filtered View</span>
+                                </a>
+                            @endif
+                        </div>
+                    </div>
+                </div>
 
                 {{-- Export PDF Report Button --}}
                 <a href="{{ route('devices.pdf', request()->query()) }}"
@@ -114,6 +209,12 @@
             </div>
         </div>
 
+        <a href="{{ route('devices.monitoring.index', ['date' => $monitoringDate]) }}"
+           class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm hover:bg-blue-100">
+            <span class="font-semibold text-blue-900">Today’s manual GPS checks · {{ \Carbon\Carbon::parse($monitoringDate)->format('M j, Y') }}</span>
+            <span class="font-bold text-blue-800">{{ $todayCompletedCount }} completed · {{ max(0, $totalCount - $todayCompletedCount) }} remaining →</span>
+        </a>
+
         {{-- Expiration Alert Banner (30-day budget reminder) --}}
         @if($expiringSoonCount > 0 || $expiredCount > 0)
             <div class="rounded-xl border border-red-200 bg-gradient-to-r from-red-50 via-amber-50/40 to-white p-4 shadow-xs">
@@ -140,11 +241,19 @@
                             </p>
                         </div>
                     </div>
-                    <div class="flex items-center gap-2 shrink-0">
+                    <div class="flex flex-wrap items-center gap-2 shrink-0">
                         @if($expiringSoonCount > 0)
                             <a href="{{ route('devices.index', ['status' => 'expiring_soon']) }}"
                                class="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-red-700 transition-colors">
                                 View Expiring Units ({{ $expiringSoonCount }})
+                            </a>
+                            <a href="{{ route('devices.export', ['status' => 'expiring_soon']) }}"
+                               class="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-amber-700 transition-colors inline-flex items-center gap-1.5"
+                               title="Download Excel report for GPS devices expiring in ≤ 30 days">
+                                <svg class="h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+                                </svg>
+                                <span>Export Expiring (&le;30d) Excel</span>
                             </a>
                         @endif
                         @if($expiredCount > 0)
@@ -152,9 +261,18 @@
                                class="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-slate-900 transition-colors">
                                 View Expired ({{ $expiredCount }})
                             </a>
+                            <a href="{{ route('devices.export', ['status' => 'expired']) }}"
+                               class="rounded-lg bg-red-700 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-red-800 transition-colors inline-flex items-center gap-1.5"
+                               title="Download Excel report for already expired GPS devices">
+                                <svg class="h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+                                </svg>
+                                <span>Export Expired Excel</span>
+                            </a>
                         @endif
                         <a href="{{ route('devices.pdf', ['status' => 'expiring_soon']) }}"
-                           class="rounded-lg bg-white border border-red-300 px-3 py-1.5 text-xs font-bold text-red-700 shadow-xs hover:bg-red-50 transition-colors inline-flex items-center gap-1.5">
+                           class="rounded-lg bg-white border border-red-300 px-3 py-1.5 text-xs font-bold text-red-700 shadow-xs hover:bg-red-50 transition-colors inline-flex items-center gap-1.5"
+                           title="Download printable Budget PDF Report">
                             <svg class="h-3.5 w-3.5 text-red-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
                             </svg>
@@ -183,44 +301,74 @@
             </a>
 
             {{-- Card 2: Expiring Soon (≤ 30 Days) --}}
-            <a href="{{ route('devices.index', ['status' => 'expiring_soon']) }}"
-               class="rounded-xl border {{ $expiringSoonCount > 0 ? 'border-amber-300 bg-amber-50/40 ring-1 ring-amber-300/60' : 'border-slate-200 bg-white' }} p-4 shadow-xs hover:border-amber-400 transition-all">
+            <div class="rounded-xl border {{ $expiringSoonCount > 0 ? 'border-amber-300 bg-amber-50/40 ring-1 ring-amber-300/60' : 'border-slate-200 bg-white' }} p-4 shadow-xs hover:border-amber-400 transition-all">
                 <div class="flex items-center justify-between">
-                    <span class="text-[11px] font-bold uppercase tracking-wider text-amber-700">Expires ≤ 30 Days</span>
-                    <div class="rounded-lg bg-amber-100 p-1.5 text-amber-700">
-                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                        </svg>
+                    <a href="{{ route('devices.index', ['status' => 'expiring_soon']) }}" class="text-[11px] font-bold uppercase tracking-wider text-amber-700 hover:underline">
+                        Expires &le; 30 Days
+                    </a>
+                    <div class="flex items-center gap-1.5">
+                        @if($expiringSoonCount > 0)
+                            <a href="{{ route('devices.export', ['status' => 'expiring_soon']) }}"
+                               class="rounded-md bg-amber-100 hover:bg-amber-200 text-amber-800 px-2 py-0.5 text-[10px] font-bold transition-colors inline-flex items-center gap-1 shadow-2xs"
+                               title="Export devices expiring in ≤ 30 days to Excel">
+                                <svg class="h-3 w-3 text-emerald-700" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+                                </svg>
+                                <span>Excel</span>
+                            </a>
+                        @endif
+                        <div class="rounded-lg bg-amber-100 p-1.5 text-amber-700">
+                            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                            </svg>
+                        </div>
                     </div>
                 </div>
-                <div class="mt-2 flex items-baseline gap-2">
-                    <span class="text-2xl font-black text-amber-900">{{ number_format($expiringSoonCount) }}</span>
-                    @if($expiringSoonCount > 0)
-                        <span class="text-[10px] font-bold uppercase text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded">Budget Soon</span>
-                    @endif
-                </div>
-                <div class="mt-0.5 text-[11px] text-amber-700 font-medium">Requires budget for renewal</div>
-            </a>
+                <a href="{{ route('devices.index', ['status' => 'expiring_soon']) }}" class="block">
+                    <div class="mt-2 flex items-baseline gap-2">
+                        <span class="text-2xl font-black text-amber-900">{{ number_format($expiringSoonCount) }}</span>
+                        @if($expiringSoonCount > 0)
+                            <span class="text-[10px] font-bold uppercase text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded">Budget Soon</span>
+                        @endif
+                    </div>
+                    <div class="mt-0.5 text-[11px] text-amber-700 font-medium">Requires budget for renewal</div>
+                </a>
+            </div>
 
             {{-- Card 3: Already Expired --}}
-            <a href="{{ route('devices.index', ['status' => 'expired']) }}"
-               class="rounded-xl border {{ $expiredCount > 0 ? 'border-red-300 bg-red-50/40 ring-1 ring-red-300/60' : 'border-slate-200 bg-white' }} p-4 shadow-xs hover:border-red-400 transition-all">
+            <div class="rounded-xl border {{ $expiredCount > 0 ? 'border-red-300 bg-red-50/40 ring-1 ring-red-300/60' : 'border-slate-200 bg-white' }} p-4 shadow-xs hover:border-red-400 transition-all">
                 <div class="flex items-center justify-between">
-                    <span class="text-[11px] font-bold uppercase tracking-wider text-red-700">Already Expired</span>
-                    <div class="rounded-lg bg-red-100 p-1.5 text-red-700">
-                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
-                        </svg>
+                    <a href="{{ route('devices.index', ['status' => 'expired']) }}" class="text-[11px] font-bold uppercase tracking-wider text-red-700 hover:underline">
+                        Already Expired
+                    </a>
+                    <div class="flex items-center gap-1.5">
+                        @if($expiredCount > 0)
+                            <a href="{{ route('devices.export', ['status' => 'expired']) }}"
+                               class="rounded-md bg-red-100 hover:bg-red-200 text-red-800 px-2 py-0.5 text-[10px] font-bold transition-colors inline-flex items-center gap-1 shadow-2xs"
+                               title="Export already expired devices to Excel">
+                                <svg class="h-3 w-3 text-emerald-700" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+                                </svg>
+                                <span>Excel</span>
+                            </a>
+                        @endif
+                        <div class="rounded-lg bg-red-100 p-1.5 text-red-700">
+                            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
+                            </svg>
+                        </div>
                     </div>
                 </div>
-                <div class="mt-2 flex items-baseline gap-2">
-                    <span class="text-2xl font-black text-red-900">{{ number_format($expiredCount) }}</span>
-                    @if($expiredCount > 0)
-                        <span class="text-[10px] font-bold uppercase text-red-600 bg-red-100 px-1.5 py-0.5 rounded">Urgent</span>
-                    @endif
-                </div>
-                <div class="mt-0.5 text-[11px] text-red-700 font-medium">Subscription inactive</div>
-            </a>
+                <a href="{{ route('devices.index', ['status' => 'expired']) }}" class="block">
+                    <div class="mt-2 flex items-baseline gap-2">
+                        <span class="text-2xl font-black text-red-900">{{ number_format($expiredCount) }}</span>
+                        @if($expiredCount > 0)
+                            <span class="text-[10px] font-bold uppercase text-red-600 bg-red-100 px-1.5 py-0.5 rounded">Urgent</span>
+                        @endif
+                    </div>
+                    <div class="mt-0.5 text-[11px] text-red-700 font-medium">Subscription inactive</div>
+                </a>
+            </div>
 
             {{-- Card 4: Active / Safe (> 30 Days) --}}
             <a href="{{ route('devices.index', ['status' => 'active']) }}"
@@ -262,6 +410,26 @@
                        class="px-2.5 py-1 rounded-lg font-semibold transition-colors {{ request('status') === 'active' ? 'bg-emerald-600 text-white' : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200' }}">
                         Active ({{ $activeCount }})
                     </a>
+
+                    @if(request('status') === 'expiring_soon')
+                        <a href="{{ route('devices.export', request()->query()) }}"
+                           class="ml-auto inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-600 text-white hover:bg-amber-700 transition-colors shrink-0 shadow-2xs"
+                           title="Export expiring soon list to Excel">
+                            <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+                            </svg>
+                            <span>Export Expiring (Excel)</span>
+                        </a>
+                    @elseif(request('status') === 'expired')
+                        <a href="{{ route('devices.export', request()->query()) }}"
+                           class="ml-auto inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-red-700 text-white hover:bg-red-800 transition-colors shrink-0 shadow-2xs"
+                           title="Export expired list to Excel">
+                            <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+                            </svg>
+                            <span>Export Expired (Excel)</span>
+                        </a>
+                    @endif
                 </div>
 
                 {{-- Search & Dropdowns --}}
@@ -374,6 +542,7 @@
                             <div class="grid grid-cols-12 gap-3 items-center">
                                 {{-- Vehicle & Device --}}
                                 <div class="col-span-12 sm:col-span-4 flex items-center gap-3">
+                                    @include('devices._monitoring-checkbox', ['check' => $todayChecks->get($device->id), 'timezone' => $monitoringTimezone, 'returnTo' => 'devices'])
                                     <div class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600 border border-blue-100 shadow-xs">
                                         <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                                             <path stroke-linecap="round" stroke-linejoin="round" d="M9.348 14.652a3.75 3.75 0 0 1 0-5.304m5.304 0a3.75 3.75 0 0 1 0 5.304m-7.425 2.122a6.75 6.75 0 0 1 0-9.546m9.546 0a6.75 6.75 0 0 1 0 9.546M5.106 18.894c-3.808-3.808-3.808-9.98 0-13.789m13.788 0c3.808 3.808 3.808 9.98 0 13.788M12 12h.008v.008H12V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
@@ -549,6 +718,7 @@
                                 {{-- Sticky Device Name --}}
                                 <td class="sticky left-0 z-10 {{ $isExpiring ? 'bg-amber-50/40' : ($isExpired ? 'bg-red-50/40' : 'bg-white') }} px-4 py-3.5 font-bold text-slate-900 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] border-r border-slate-100 whitespace-nowrap">
                                     <div class="flex items-center gap-2">
+                                        @include('devices._monitoring-checkbox', ['check' => $todayChecks->get($device->id), 'timezone' => $monitoringTimezone, 'returnTo' => 'devices'])
                                         <div class="h-7 w-7 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center font-bold text-xs shrink-0">
                                             {{ strtoupper(substr($device->device_name, 0, 2)) }}
                                         </div>

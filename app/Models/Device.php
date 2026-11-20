@@ -8,11 +8,15 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Device extends Model
 {
     /** @use HasFactory<DeviceFactory> */
     use HasFactory;
+
+    use SoftDeletes;
 
     /** @var list<string> */
     protected $fillable = [
@@ -49,6 +53,11 @@ class Device extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function monitoringChecks(): HasMany
+    {
+        return $this->hasMany(DeviceMonitoringCheck::class);
     }
 
     /**

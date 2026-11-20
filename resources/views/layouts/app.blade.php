@@ -72,7 +72,7 @@
             @endphp
             <a href="{{ route('devices.index') }}"
                class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150
-                      {{ request()->routeIs('devices.*') ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:bg-slate-800 hover:text-white' }}">
+                      {{ request()->routeIs('devices.*') && ! request()->routeIs('devices.monitoring.*') ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:bg-slate-800 hover:text-white' }}">
                 <svg class="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M9.348 14.652a3.75 3.75 0 0 1 0-5.304m5.304 0a3.75 3.75 0 0 1 0 5.304m-7.425 2.122a6.75 6.75 0 0 1 0-9.546m9.546 0a6.75 6.75 0 0 1 0 9.546M5.106 18.894c-3.808-3.808-3.808-9.98 0-13.789m13.788 0c3.808 3.808 3.808 9.98 0 13.788M12 12h.008v.008H12V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
                 </svg>
@@ -82,6 +82,16 @@
                         {{ $sidebarAlertCount }}
                     </span>
                 @endif
+            </a>
+
+            {{-- Manual GPS Monitoring Checklist --}}
+            <a href="{{ route('devices.monitoring.index') }}"
+               class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150
+                      {{ request()->routeIs('devices.monitoring.*') ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:bg-slate-800 hover:text-white' }}">
+                <svg class="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M8 3v3m8-3v3M4 10h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Zm3 9 2 2 5-5" />
+                </svg>
+                Daily GPS Checklist
             </a>
 
             {{-- Live GPS Map --}}

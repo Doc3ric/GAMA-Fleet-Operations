@@ -4,6 +4,7 @@ use App\Http\Controllers\AdvancedItineraryController;
 use App\Http\Controllers\AverageFuelConsumptionController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DeviceController;
+use App\Http\Controllers\DeviceMonitoringController;
 use App\Http\Controllers\DriverItineraryController;
 use App\Http\Controllers\ExcelViewerController;
 use App\Http\Controllers\FleetDispatchController;
@@ -79,8 +80,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('devices/template/download', [DeviceController::class, 'downloadTemplate'])->name('devices.downloadTemplate');
     Route::get('devices/pdf', [DeviceController::class, 'generatePdf'])->name('devices.pdf');
     Route::get('devices/export', [DeviceController::class, 'export'])->name('devices.export');
+    Route::get('devices/export/expired', [DeviceController::class, 'exportExpired'])->name('devices.export.expired');
+    Route::get('devices/export/expiring-soon', [DeviceController::class, 'exportExpiringSoon'])->name('devices.export.expiringSoon');
     Route::post('devices/import', [DeviceController::class, 'importData'])->name('devices.importData');
     Route::post('devices/sync-vehicles', [DeviceController::class, 'syncVehicles'])->name('devices.syncVehicles');
+    Route::get('devices/monitoring', [DeviceMonitoringController::class, 'index'])->name('devices.monitoring.index');
+    Route::post('devices/{device}/monitoring', [DeviceMonitoringController::class, 'store'])->name('devices.monitoring.store');
+    Route::patch('devices/{device}/monitoring', [DeviceMonitoringController::class, 'reopen'])->name('devices.monitoring.reopen');
     Route::resource('devices', DeviceController::class);
 
     // Location Directory

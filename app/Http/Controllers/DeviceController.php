@@ -3,10 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Exports\DeviceExport;
+use App\Exports\DeviceMultiSheetExport;
 use App\Exports\DeviceTemplateExport;
 use App\Http\Requests\StoreDeviceRequest;
 use App\Http\Requests\UpdateDeviceRequest;
 use App\Models\Device;
+use App\Models\DeviceMonitoringCheck;
 use App\Services\DeviceImportService;
 use App\Services\VehicleDeviceLinkService;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -78,6 +80,20 @@ class DeviceController extends Controller
 
         $devices = $query->paginate(25)->withQueryString();
 
+        $monitoringTimezone = (string) config('fleet_reconciliation.tracksolid.source_timezone', 'Asia/Manila');
+        $monitoringDate = Carbon::now($monitoringTimezone)->toDateString();
+        $todayChecks = DeviceMonitoringCheck::where('owner_id', $userId)
+            ->where('monitored_on', $monitoringDate)
+            ->where('is_completed', true)
+            ->whereIn('device_id', $devices->pluck('id'))
+            ->get()
+            ->keyBy('device_id');
+        $todayCompletedCount = DeviceMonitoringCheck::where('owner_id', $userId)
+            ->where('monitored_on', $monitoringDate)
+            ->where('is_completed', true)
+            ->whereIn('device_id', Device::where('created_by', $userId)->select('id'))
+            ->count();
+
         $groups = Device::where('created_by', $userId)->whereNotNull('group_name')->distinct()->orderBy('group_name')->pluck('group_name');
         $models = Device::where('created_by', $userId)->whereNotNull('model')->distinct()->orderBy('model')->pluck('model');
 
@@ -88,7 +104,11 @@ class DeviceController extends Controller
             'expiredCount',
             'activeCount',
             'groups',
-            'models'
+            'models',
+            'monitoringDate',
+            'monitoringTimezone',
+            'todayChecks',
+            'todayCompletedCount'
         ));
     }
 
@@ -227,7 +247,19 @@ class DeviceController extends Controller
     public function export(Request $request): BinaryFileResponse
     {
         $userId = auth()->id();
-        $query = Device::where('created_by', $userId);
+
+        if ($request->boolean('multi_sheet') || $request->input('report') === 'complete') {
+            $filename = 'GPS-Devices-Comprehensive-Report-'.now()->format('Y-m-d').'.xlsx';
+
+            return Excel::download(new DeviceMultiSheetExport(
+                userId: $userId,
+                search: $request->input('search'),
+                group: $request->input('group'),
+                model: $request->input('model'),
+            ), $filename);
+        }
+
+        $query = Device::where('created_by', $userId)->with('vehicle');
 
         if ($search = $request->input('search')) {
             $query->where(function ($q) use ($search) {
@@ -235,26 +267,62 @@ class DeviceController extends Controller
                     ->orWhere('imei', 'like', "%{$search}%")
                     ->orWhere('model', 'like', "%{$search}%")
                     ->orWhere('sim', 'like', "%{$search}%")
-                    ->orWhere('group_name', 'like', "%{$search}%");
+                    ->orWhere('group_name', 'like', "%{$search}%")
+                    ->orWhere('iccid', 'like', "%{$search}%")
+                    ->orWhere('imsi', 'like', "%{$search}%");
             });
         }
 
         $status = $request->input('status');
+        $filenamePrefix = 'GPS-Devices-Report-';
+        $sheetTitle = 'GPS Devices';
+
         if ($status === 'expiring_soon') {
-            $query->expiringSoon(30);
+            $query->expiringSoon(30)->orderBy('expiration_date', 'asc');
+            $filenamePrefix = 'GPS-Devices-Expiring-Soon-Report-';
+            $sheetTitle = 'Expiring in ≤ 30 Days';
         } elseif ($status === 'expired') {
-            $query->expired();
+            $query->expired()->orderBy('expiration_date', 'desc');
+            $filenamePrefix = 'GPS-Devices-Expired-Report-';
+            $sheetTitle = 'Already Expired';
         } elseif ($status === 'active') {
-            $query->active(30);
+            $query->active(30)->orderBy('expiration_date', 'asc');
+            $filenamePrefix = 'GPS-Devices-Active-Report-';
+            $sheetTitle = 'Active Devices';
+        } else {
+            $threshold = Carbon::today()->addDays(30)->toDateString();
+            $query->orderByRaw('CASE WHEN expiration_date IS NOT NULL AND expiration_date <= ? THEN 0 ELSE 1 END', [$threshold])
+                ->orderBy('expiration_date', 'asc')
+                ->orderBy('device_name', 'asc');
+            $filenamePrefix = 'GPS-Devices-All-Report-';
+            $sheetTitle = 'All GPS Devices';
         }
 
         if ($group = $request->input('group')) {
             $query->where('group_name', $group);
         }
 
-        $filename = 'GPS-Devices-Export-'.now()->format('Y-m-d').'.xlsx';
+        if ($model = $request->input('model')) {
+            $query->where('model', $model);
+        }
 
-        return Excel::download(new DeviceExport($query), $filename);
+        $filename = $filenamePrefix.now()->format('Y-m-d').'.xlsx';
+
+        return Excel::download(new DeviceExport($query, $sheetTitle), $filename);
+    }
+
+    public function exportExpired(Request $request): BinaryFileResponse
+    {
+        $request->merge(['status' => 'expired']);
+
+        return $this->export($request);
+    }
+
+    public function exportExpiringSoon(Request $request): BinaryFileResponse
+    {
+        $request->merge(['status' => 'expiring_soon']);
+
+        return $this->export($request);
     }
 
     public function importData(Request $request, DeviceImportService $importService): RedirectResponse

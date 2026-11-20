@@ -2,12 +2,15 @@
 
 namespace Tests\Feature;
 
+use App\Exports\DeviceExport;
+use App\Exports\DeviceMultiSheetExport;
 use App\Models\Device;
 use App\Models\User;
 use App\Models\Vehicle;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Maatwebsite\Excel\Facades\Excel;
 use Tests\TestCase;
 
 class DeviceManagementTest extends TestCase
@@ -127,7 +130,7 @@ class DeviceManagementTest extends TestCase
 
         $response = $this->actingAs($this->user)->delete(route('devices.destroy', $device));
         $response->assertRedirect(route('devices.index'));
-        $this->assertDatabaseMissing('devices', ['id' => $device->id]);
+        $this->assertSoftDeleted($device);
     }
 
     public function test_user_can_download_device_template(): void
@@ -183,11 +186,107 @@ class DeviceManagementTest extends TestCase
 
     public function test_user_can_export_devices_excel(): void
     {
+        Excel::fake();
         Device::factory()->count(3)->create(['created_by' => $this->user->id]);
 
         $response = $this->actingAs($this->user)->get(route('devices.export'));
         $response->assertOk();
-        $this->assertTrue(str_contains($response->headers->get('content-disposition'), '.xlsx'));
+        Excel::assertDownloaded('GPS-Devices-All-Report-'.now()->format('Y-m-d').'.xlsx');
+    }
+
+    public function test_user_can_export_expired_devices_excel(): void
+    {
+        Excel::fake();
+        Device::factory()->create([
+            'device_name' => 'EXPIRED-GPS',
+            'expiration_date' => Carbon::yesterday(),
+            'created_by' => $this->user->id,
+        ]);
+
+        $response = $this->actingAs($this->user)->get(route('devices.export', ['status' => 'expired']));
+        $response->assertOk();
+        Excel::assertDownloaded('GPS-Devices-Expired-Report-'.now()->format('Y-m-d').'.xlsx', function (DeviceExport $export) {
+            return $export->title() === 'Already Expired';
+        });
+
+        // Test convenience route
+        $response2 = $this->actingAs($this->user)->get(route('devices.export.expired'));
+        $response2->assertOk();
+    }
+
+    public function test_user_can_export_expiring_soon_devices_excel(): void
+    {
+        Excel::fake();
+        Device::factory()->create([
+            'device_name' => 'EXPIRING-SOON-GPS',
+            'expiration_date' => Carbon::today()->addDays(15),
+            'created_by' => $this->user->id,
+        ]);
+
+        $response = $this->actingAs($this->user)->get(route('devices.export', ['status' => 'expiring_soon']));
+        $response->assertOk();
+        Excel::assertDownloaded('GPS-Devices-Expiring-Soon-Report-'.now()->format('Y-m-d').'.xlsx', function (DeviceExport $export) {
+            return $export->title() === 'Expiring in ≤ 30 Days';
+        });
+
+        // Test convenience route
+        $response2 = $this->actingAs($this->user)->get(route('devices.export.expiringSoon'));
+        $response2->assertOk();
+    }
+
+    public function test_user_can_export_multi_sheet_excel_report(): void
+    {
+        Excel::fake();
+        Device::factory()->create([
+            'device_name' => 'MULTI-GPS',
+            'created_by' => $this->user->id,
+        ]);
+
+        $response = $this->actingAs($this->user)->get(route('devices.export', ['multi_sheet' => 1]));
+        $response->assertOk();
+        Excel::assertDownloaded('GPS-Devices-Comprehensive-Report-'.now()->format('Y-m-d').'.xlsx', function (DeviceMultiSheetExport $export) {
+            $sheets = $export->sheets();
+
+            return count($sheets) === 3
+                && $sheets[0]->title() === 'Already Expired'
+                && $sheets[1]->title() === 'Expiring in ≤ 30 Days'
+                && $sheets[2]->title() === 'All Devices';
+        });
+    }
+
+    public function test_device_export_collection_maps_linked_vehicle_and_statuses(): void
+    {
+        $vehicle = Vehicle::create([
+            'equipment_code' => 'TK-99',
+            'plate_number' => 'XYZ-1234',
+            'operator_driver' => 'John Doe',
+            'gps_status' => 'YES',
+            'created_by' => $this->user->id,
+        ]);
+
+        $expiredDevice = Device::factory()->create([
+            'device_name' => 'EXP-DEV',
+            'vehicle_id' => $vehicle->id,
+            'expiration_date' => Carbon::today()->subDays(5),
+            'created_by' => $this->user->id,
+            'imei' => '865135060611001',
+            'sim' => '09171234567',
+        ]);
+
+        $export = new DeviceExport(Device::where('id', $expiredDevice->id));
+        $collection = $export->collection();
+
+        $this->assertCount(1, $collection);
+        $row = $collection->first();
+
+        $this->assertEquals('EXP-DEV', $row['device_name']);
+        $this->assertEquals('TK-99', $row['vehicle_code']);
+        $this->assertEquals('XYZ-1234', $row['plate_number']);
+        $this->assertEquals('John Doe', $row['driver']);
+        $this->assertEquals('865135060611001', $row['imei']);
+        $this->assertEquals('09171234567', $row['sim']);
+        $this->assertStringContainsString('Expired 5 days ago', $row['status']);
+        $this->assertEquals(-5, $row['days_left']);
     }
 
     public function test_import_devices_auto_links_with_vehicles_and_syncs_gps_status(): void
