@@ -122,7 +122,7 @@ class WorkTaskController extends Controller
         $monthParam = $request->input('month');
         try {
             $currentDate = $monthParam
-                ? Carbon::createFromFormat('Y-m', $monthParam)->startOfMonth()
+                ? Carbon::createFromFormat('Y-m-d', $monthParam.'-01')->startOfMonth()
                 : Carbon::now()->startOfMonth();
         } catch (\Exception $e) {
             $currentDate = Carbon::now()->startOfMonth();
